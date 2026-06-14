@@ -109,7 +109,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 color: isOnline ? '#34d399' : '#f87171',
                 transition: 'all 0.4s'
             }}>
-                {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+                {isOnline ? <Wifi size={5} /> : <WifiOff size={14} />}
                 <span>{isOnline ? 'متصل بالإنترنت' : 'وضع بدون إنترنت'}</span>
                 <div style={{
                     marginRight: 'auto', width: '7px', height: '7px', borderRadius: '50%',
