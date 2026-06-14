@@ -157,7 +157,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     }
                                 }}
                                 className="btn-primary"
-                                style={{ width: '65%', background: 'var(--danger)' }}
+                                style={{ width: '55%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
                                 <span>إغلاق الوردية</span>
@@ -200,7 +200,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
                     >
                         <LogOut size={18} />
-                        <span>تسجيل الخروج</span>
+                        <span>تبديل المستخدم</span>
                     </button>
 
                     {userRole === 'admin' && (

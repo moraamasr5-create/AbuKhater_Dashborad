@@ -357,14 +357,55 @@ export const AppProvider = ({ children }) => {
    * إغلاق الوردية: يحفظ التقرير ويُرسله لـ Supabase
    * يعمل بشكل كامل offline ويتزامن لاحقاً
    */
-  const closeShift = (force = false) => {
+  const closeShift = async (force = false) => {
     if (!currentShift) return false;
+
+    // --- Time Check Logic ---
+    try {
+      // Get Server Time from Supabase Header
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || import.meta.env.REACT_APP_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_KEY || import.meta.env.REACT_APP_SUPABASE_KEY;
+      
+      const res = await fetch(`${supabaseUrl}/rest/v1/`, { method: 'HEAD', headers: { apikey: supabaseKey } });
+      const serverDateStr = res.headers.get('Date');
+      const serverTime = serverDateStr ? new Date(serverDateStr) : new Date();
+
+      // Get settings from DB
+      const { data: settingsData } = await supabase.from('restaurant_settings').select('key, value').in('key', ['working_hours_end']);
+      let endHour = 4;
+      if (settingsData) {
+        const endSetting = settingsData.find(s => s.key === 'working_hours_end');
+        if (endSetting && endSetting.value) {
+          endHour = parseInt(endSetting.value.split(':')[0], 10);
+        }
+      }
+
+      // Calculate Target Close Time based on shift start
+      const shiftStart = new Date(currentShift.timestamp);
+      const targetCloseTime = new Date(shiftStart);
+      targetCloseTime.setHours(endHour, 0, 0, 0);
+      
+      // If shift started after today's endHour, the target close time is tomorrow's endHour
+      if (targetCloseTime <= shiftStart) {
+        targetCloseTime.setDate(targetCloseTime.getDate() + 1);
+      }
+
+      if (serverTime < targetCloseTime) {
+        alert(`لا يمكن إغلاق الوردية! الوقت الحالي غير مسموح. يمكن إغلاق الوردية بعد الساعة ${endHour}:00 صباحاً.`);
+        return false;
+      }
+    } catch (e) {
+      console.error('Failed to validate server time for closing shift', e);
+      alert('حدث خطأ أثناء التحقق من وقت السيرفر. برجاء التأكد من اتصال الإنترنت.');
+      return false;
+    }
+    // --- End Time Check Logic ---
 
     const activeOrderStatuses = ['active', 'waiting_driver', 'driver_assigned', 'pending', 'pending_timer'];
     const hasActiveOrders = orders.some(o => activeOrderStatuses.includes(o.status));
     const hasOpenPilotShifts = pilots.some(p => p.shiftStatus === 'open');
 
-    // If forced (4 AM), we allow closing even if pilots are open (they will be auto-closed by reset)
+    // If forced, we allow closing even if pilots are open (they will be auto-closed by reset)
     // But we still block if there are active orders (safety)
     if (hasActiveOrders || (!force && hasOpenPilotShifts)) {
       const msg = hasActiveOrders
