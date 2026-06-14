@@ -157,7 +157,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     }
                                 }}
                                 className="btn-primary"
-                                style={{ width: '50%', background: 'var(--danger)' }}
+                                style={{ width: '75%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
                                 <span>إغلاق الوردية</span>
