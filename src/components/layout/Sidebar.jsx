@@ -109,7 +109,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 color: isOnline ? '#34d399' : '#f87171',
                 transition: 'all 0.4s'
             }}>
-                {isOnline ? <Wifi size={5} /> : <WifiOff size={14} />}
+                {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
                 <span>{isOnline ? 'متصل بالإنترنت' : 'وضع بدون إنترنت'}</span>
                 <div style={{
                     marginRight: 'auto', width: '7px', height: '7px', borderRadius: '50%',
@@ -157,9 +157,9 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     }
                                 }}
                                 className="btn-primary"
-                                style={{ width: '100%', background: 'var(--danger)' }}
+                                style={{ width: '35%', background: 'var(--danger)' }}
                             >
-                                <Square size={5} />
+                                <Square size={18} />
                                 <span>إغلاق الوردية اليومية</span>
                             </button>
                         )}
