@@ -142,22 +142,42 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                             </button>
                         ) : (
                             <button
-                                onClick={() => {
-                                    if (isAutoCloseTime()) {
-                                        closeShift(true);
-                                        closeSidebar();
-                                    } else {
+                                onClick={async () => {
+                                    try {
+                                        if (!isShiftOpen) return;
+
+                                        const now = new Date();
+                                        const hour = now.getHours();
+
+                                        // ⛔ منع الإغلاق قبل 4 صباحًا
+                                        if (hour < 4) {
+                                            alert('لا يمكن إغلاق الوردية قبل الساعة 4:00 صباحًا');
+                                            return;
+                                        }
+
+                                        // 🤖 إغلاق تلقائي
+                                        if (isAutoCloseTime()) {
+                                            await closeShift(true);
+                                            closeSidebar();
+                                            return;
+                                        }
+
+                                        // 🔐 كلمة المرور
                                         const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';
                                         const pwd = prompt('أدخل كلمة المرور لإغلاق الوردية:');
+
                                         if (pwd === correctPwd) {
-                                            closeShift(false);
+                                            await closeShift(false);
                                             closeSidebar();
+                                        } else if (pwd !== null) {
+                                            alert('كلمة مرور خاطئة');
                                         }
-                                        else if (pwd !== null) alert('كلمة مرور خاطئة');
+
+                                    } catch (error) {
+                                        console.error('Close shift error:', error);
+                                        alert('حدث خطأ أثناء إغلاق الوردية');
                                     }
                                 }}
-                                className="btn-primary"
-                                style={{ width: '55%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
                                 <span>إغلاق الوردية</span>
