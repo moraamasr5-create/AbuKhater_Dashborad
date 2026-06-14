@@ -178,6 +178,8 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                         alert('حدث خطأ أثناء إغلاق الوردية');
                                     }
                                 }}
+                                className="btn-primary"
+                                style={{ width: '55%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
                                 <span>إغلاق الوردية</span>
