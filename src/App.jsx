@@ -1195,9 +1195,9 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 disabled={isCompressing}
                 style={{ fontSize: '0.8rem', color: 'white', cursor: 'pointer' }}
               />
-              {formData.paymentProof && (
+              {formData.payment_proof_url && (
                 <img
-                  src={formData.paymentProof}
+                  src={formData.payment_proof_url}
                   alt="Success"
                   style={{ marginTop: '12px', width: '100%', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '2px solid var(--accent)' }}
                 />
@@ -1213,13 +1213,13 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 isOutsideRadius ||
                 !formData.receiptNo ||
                 !formData.area ||
-                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)
+                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)
               }
               className="btn-primary"
               style={{
                 flex: 2, justifyContent: 'center', height: '50px', fontSize: '1.1rem',
-                opacity: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)) ? 0.5 : 1,
-                cursor: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)) ? 'not-allowed' : 'pointer'
+                opacity: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)) ? 0.5 : 1,
+                cursor: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)) ? 'not-allowed' : 'pointer'
               }}
             >
               {isCompressing ? "جاري المعالجة..." : "حفظ الأوردر"}
@@ -1404,14 +1404,15 @@ const ReservationModal = ({ onClose }) => {
 const ConfirmPaymentModal = ({ res, onClose }) => {
   const { confirmReservation } = useApp();
   const [isCompressing, setIsCompressing] = useState(false);
-  const [refNum, setRefNum] = useState('');
-  const [proof, setProof] = useState(null);
+  const [refNum, setRefNum] = useState(res.ref_number || '');
+  const existingProof = res.payment_proof_url || res.paymentProof;
+  const [proof, setProof] = useState(existingProof || null);
 
   const handleFile = async (e) => {
     const file = e.target.files[0];
     if (file) {
       setIsCompressing(true);
-      const processed = await processImageUpload(file);
+      const processed = await processImageUpload(file, 'payment-screenshots', 'reservations');
       if (processed) {
         setProof(processed);
       }
@@ -1432,17 +1433,19 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>رقم التحويل / المرجع</label>
-            <input required className="glass-card" style={{ width: '100%', padding: '12px', color: 'white' }} placeholder="أدخل الرقم هنا..." value={refNum} onChange={e => setRefNum(e.target.value)} />
+            <input required={!existingProof} className="glass-card" style={{ width: '100%', padding: '12px', color: 'white' }} placeholder="أدخل الرقم هنا..." value={refNum} onChange={e => setRefNum(e.target.value)} />
           </div>
 
           <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px dashed var(--border)', textAlign: 'center' }}>
             <p style={{ fontSize: '0.85rem', marginBottom: '10px' }}>📸 صورة إيصال التحويل</p>
-            <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
+            {!existingProof && (
+              <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
+            )}
             {proof && <img src={proof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button type="submit" disabled={isCompressing} className="btn-primary" style={{ flex: 2, background: 'var(--success)', justifyContent: 'center', opacity: isCompressing ? 0.5 : 1 }}>{isCompressing ? "جاري المعالجة..." : "تأكيد نهائي"}</button>
+            <button type="submit" disabled={isCompressing || (!proof && !existingProof)} className="btn-primary" style={{ flex: 2, background: 'var(--success)', justifyContent: 'center', opacity: (isCompressing || (!proof && !existingProof)) ? 0.5 : 1 }}>{isCompressing ? "جاري المعالجة..." : "تأكيد نهائي"}</button>
             <button type="button" onClick={onClose} disabled={isCompressing} style={{ flex: 1, background: 'transparent', border: '1px solid var(--border)', color: 'white', cursor: 'pointer', borderRadius: '8px', opacity: isCompressing ? 0.5 : 1 }}>رجوع</button>
           </div>
         </form>
