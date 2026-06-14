@@ -157,10 +157,10 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     }
                                 }}
                                 className="btn-primary"
-                                style={{ width: '35%', background: 'var(--danger)' }}
+                                style={{ width: '50%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
-                                <span>إغلاق الوردية اليومية</span>
+                                <span>إغلاق الوردية</span>
                             </button>
                         )}
                     </div>

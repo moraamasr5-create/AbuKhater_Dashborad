@@ -9,7 +9,7 @@ import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
 
-export const processImageUpload = async (file) => {
+export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
   if (file.size > 5 * 1024 * 1024) {
     alert("حجم الصورة كبير جداً (أقصى حجم 5MB).");
     return null;
@@ -60,15 +60,15 @@ export const processImageUpload = async (file) => {
           try {
             const res = await fetch(dataUrl);
             const blob = await res.blob();
-            const fileName = `receipts/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+            const fileName = `${folderPath}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
             
             const { data, error } = await supabase.storage
-              .from('payments')
+              .from(bucketName)
               .upload(fileName, blob, { contentType: 'image/jpeg' });
 
             if (!error && data) {
               const { data: publicUrlData } = supabase.storage
-                .from('payments')
+                .from(bucketName)
                 .getPublicUrl(fileName);
               
               if (publicUrlData && publicUrlData.publicUrl) {
@@ -976,7 +976,14 @@ const ManualOrderForm = ({ onClose, initialData }) => {
       calculated_by: formData.calculated_by,
       itemsDescription: itemsList.map(i => `${i.count}x ${i.name}`).join(', ') + (formData.itemsDescription ? ` (${formData.itemsDescription})` : ''),
       items: itemsList, itemsCount: itemsList.reduce((acc, curr) => acc + curr.count, 0),
-      paymentMethod: formData.paymentMethod, paymentProof: formData.paymentProof
+      paymentMethod: formData.paymentMethod, 
+      payment_proof_url: formData.payment_proof_url,
+      status: formData.status || 'pending',
+      reservation_date: formData.reservation_date || null,
+      reservation_time: formData.reservation_time || null,
+      guests_count: formData.guests_count || null,
+      location_type: formData.location_type || null,
+      notes: formData.notes || null,
     });
     onClose();
   };
