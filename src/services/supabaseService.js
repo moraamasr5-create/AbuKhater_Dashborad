@@ -89,7 +89,23 @@ const withOfflineSupport = async (actionName, promiseFn, queuePayload, skipQueue
     if (!navigator.onLine) throw new Error('Offline');
     return await promiseFn();
   } catch (err) {
-    console.warn(`⚠️ [${actionName}] offline fallback:`, err?.message || err);
+    console.warn(`⚠️ [${actionName}] error:`, err?.message || err);
+    
+    // Do NOT queue if it is a Postgres validation exception (code 'P0001')
+    const isValidationError = err && (
+      err.code === 'P0001' || 
+      (err.message && (
+        err.message.includes('Too early') || 
+        err.message.includes('Active orders') || 
+        err.message.includes('نشطة') || 
+        err.message.includes('الوردية')
+      ))
+    );
+    
+    if (isValidationError) {
+      throw err;
+    }
+
     if (!skipQueue && queuePayload) queueSync(actionName, queuePayload);
     return null;
   }
@@ -437,15 +453,10 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async saveShiftReport(reportData, skipQueue = false) {
     return withOfflineSupport('saveShiftReport', async () => {
-      const { error } = await supabase
-        .from('shifts')
-        .update({
-          status: 'closed',
-          end_time: reportData.endTime,
-          total_orders: reportData.ordersCount,
-          stats: reportData
-        })
-        .eq('id', reportData.id);
+      const { error } = await supabase.rpc('close_shift', {
+        p_shift_id: reportData.id,
+        p_stats: reportData
+      });
 
       if (error) throw error;
     }, reportData, skipQueue);

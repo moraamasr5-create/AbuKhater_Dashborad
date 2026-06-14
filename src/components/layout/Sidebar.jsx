@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Inbox, Users, BarChart3, Settings, Play, Square, PlusCircle, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isAutoCloseTime } from '../../utils/shiftLogic';
 import { safeGetItem } from '../../utils/safeStorage';
 
 
@@ -145,22 +144,6 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                 onClick={async () => {
                                     try {
                                         if (!isShiftOpen) return;
-
-                                        const now = new Date();
-                                        const hour = now.getHours();
-
-                                        // ⛔ منع الإغلاق قبل 4 صباحًا
-                                        if (hour < 4) {
-                                            alert('لا يمكن إغلاق الوردية قبل الساعة 4:00 صباحًا');
-                                            return;
-                                        }
-
-                                        // 🤖 إغلاق تلقائي
-                                        if (isAutoCloseTime()) {
-                                            await closeShift(true);
-                                            closeSidebar();
-                                            return;
-                                        }
 
                                         // 🔐 كلمة المرور
                                         const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';

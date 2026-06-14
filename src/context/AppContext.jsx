@@ -357,20 +357,14 @@ export const AppProvider = ({ children }) => {
    * إغلاق الوردية: يحفظ التقرير ويُرسله لـ Supabase
    * يعمل بشكل كامل offline ويتزامن لاحقاً
    */
-  const closeShift = (force = false) => {
+  const closeShift = async (force = false) => {
     if (!currentShift) return false;
 
-    const activeOrderStatuses = ['active', 'waiting_driver', 'driver_assigned', 'pending', 'pending_timer'];
-    const hasActiveOrders = orders.some(o => activeOrderStatuses.includes(o.status));
     const hasOpenPilotShifts = pilots.some(p => p.shiftStatus === 'open');
 
-    // If forced (4 AM), we allow closing even if pilots are open (they will be auto-closed by reset)
-    // But we still block if there are active orders (safety)
-    if (hasActiveOrders || (!force && hasOpenPilotShifts)) {
-      const msg = hasActiveOrders
-        ? '⚠️ لا يمكن إغلاق الوردية! يوجد طلبات نشطة.'
-        : '⚠️ لا يمكن إغلاق الوردية! يوجد طيارين لم يغلقوا شفتاتهم بعد.';
-      alert(msg);
+    // منع الإغلاق إذا كان هناك طيارين مفتوحين (إلا إذا تم الإجبار)
+    if (!force && hasOpenPilotShifts) {
+      alert('⚠️ لا يمكن إغلاق الوردية! يوجد طيارين لم يغلقوا شفتاتهم بعد.');
       return false;
     }
 
@@ -388,24 +382,40 @@ export const AppProvider = ({ children }) => {
       archivedOrders: orders
     };
 
-    setDailyReports(prev => [snapshot, ...prev]);
+    try {
+      // استدعاء RPC close_shift من خلال saveShiftReport
+      await supabaseService.saveShiftReport(snapshot);
 
-    // Automatic JSON Download removed to prevent browser errors
+      setDailyReports(prev => [snapshot, ...prev]);
 
+      logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
+      sendToN8N(snapshot, 'SHIFT_CLOSE');
 
-    logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}. File Generated.`, 'Manager');
-    sendToN8N(snapshot, 'SHIFT_CLOSE');
+      // Bulk reset all pilots in the Supabase delivery table
+      const allPilotIds = pilots.map(p => p.id);
+      if (allPilotIds.length > 0) {
+        supabaseService.resetAllPilots(allPilotIds);
+      }
 
-    // Bulk reset all pilots in the Supabase delivery table
-    const allPilotIds = pilots.map(p => p.id);
-    if (allPilotIds.length > 0) {
-      supabaseService.resetAllPilots(allPilotIds);
+      setOrders([]);
+      setCurrentShift(null);
+      setPilots(prev => prev.map(p => ({ ...p, shiftStatus: 'closed', state: 'available', balance: 0, totalMinutes: 0, ordersCount: 0, shiftUsed: false, lastOpenedAt: null })));
+      alert('✅ تم إغلاق الوردية بنجاح.');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Failed to close shift:', error);
+      let errorMsg = 'حدث خطأ أثناء إغلاق الوردية.';
+      if (error.message && (error.message.includes('Too early') || error.message.includes('قبل الساعة 4:00'))) {
+        errorMsg = '⚠️ لا يمكن إغلاق الوردية قبل الساعة 4:00 صباحًا نهائيًا!';
+      } else if (error.message && (error.message.includes('Active orders') || error.message.includes('طلبات نشطة'))) {
+        errorMsg = '⚠️ لا يمكن إغلاق الوردية! يوجد طلبات نشطة.';
+      } else if (error.message) {
+        errorMsg = `❌ خطأ من السيرفر: ${error.message}`;
+      }
+      alert(errorMsg);
+      return false;
     }
-
-    setOrders([]);
-    setCurrentShift(null);
-    setPilots(prev => prev.map(p => ({ ...p, shiftStatus: 'closed', state: 'available', balance: 0, totalMinutes: 0, ordersCount: 0, shiftUsed: false, lastOpenedAt: null })));
-    return true;
   };
 
   /**

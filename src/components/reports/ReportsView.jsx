@@ -161,18 +161,11 @@ const ReportsView = () => {
   }, []);
 
   const handleCloseShift = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    if (currentHour >= 4 && currentHour < 12) {
-      closeShift(true);
-    } else {
-      const password = prompt('برجاء إدخال كلمة المرور لإغلاق اليوم:');
-      if (password === '8080') {
-        closeShift(false);
-      } else if (password !== null) {
-        alert('كلمة المرور غير صحيحة');
-      }
+    const password = prompt('برجاء إدخال كلمة المرور لإغلاق اليوم:');
+    if (password === '8080') {
+      closeShift(false);
+    } else if (password !== null) {
+      alert('كلمة المرور غير صحيحة');
     }
   };
 
