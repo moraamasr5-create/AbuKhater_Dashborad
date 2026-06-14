@@ -31,7 +31,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
             id: 'inbox', label: 'صندوق الوارد', icon: Inbox, roles: ['admin', 'casher', 'driver']
         },
         { id: 'pilots', label: 'الطيارين', icon: Users, roles: ['admin', 'casher'] },
-{ id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
+        { id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
         { id: 'feedback', label: 'الشكاوى والمقترحات', icon: MessageSquare, roles: ['admin'] },
         { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin'] },
     ];
@@ -159,7 +159,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                 className="btn-primary"
                                 style={{ width: '100%', background: 'var(--danger)' }}
                             >
-                                <Square size={18} />
+                                <Square size={5} />
                                 <span>إغلاق الوردية اليومية</span>
                             </button>
                         )}
@@ -167,7 +167,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 )}
 
                 {/* 🖨️ زر تبديل وضع الطباعة الحرارية */}
-                <button
+                {/* <button
                     onClick={() => setIsThermalPrintMode(!isThermalPrintMode)}
                     className="btn-primary"
                     style={{
@@ -185,7 +185,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 >
                     <span style={{ filter: isThermalPrintMode ? 'none' : 'grayscale(100%)' }}>🖨️</span>
                     <span>{isThermalPrintMode ? 'وضع الطباعة: حراري 80مم' : 'وضع الطباعة: الشاشة العادي'}</span>
-                </button>
+                </button> */}
 
                 {/* 🚪 صف الأزرار السفلية (تسجيل الخروج + مفتاح الأمان الصغير للأدمن) */}
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
