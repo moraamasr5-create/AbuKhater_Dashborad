@@ -562,12 +562,13 @@ export const AppProvider = ({ children }) => {
       updateExternalOrderStatus(order.supabaseId, 'confirmed');
     }
 
-    try {
-      await printerService.printKitchenReceipt(updatedOrder);
-      await printerService.printCashierReceipt(updatedOrder);
-    } catch (err) {
-      console.error('❌ فشل الطباعة التلقائية:', err);
-    }
+    // الطباعة التلقائية معطّلة — الطباعة متاحة فقط عبر زر الطباعة اليدوي
+    // try {
+    //   await printerService.printKitchenReceipt(updatedOrder);
+    //   await printerService.printCashierReceipt(updatedOrder);
+    // } catch (err) {
+    //   console.error('❌ فشل الطباعة التلقائية:', err);
+    // }
   };
 
   // Step 2: Assign Driver (Locks Order, Ready to Print)
