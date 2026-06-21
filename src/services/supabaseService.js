@@ -64,6 +64,10 @@ export const processPendingSync = async () => {
         await supabaseService.deleteReservation(item.payload.id, true);
       } else if (item.action === 'resetAllPilots') {
         await supabaseService.resetAllPilots(item.payload.pilotIds, true);
+      } else if (item.action === 'createManualOrder') {
+        await supabaseService.createManualOrder(item.payload, true);
+      } else if (item.action === 'updateOrderPaymentScreenshot') {
+        await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
       }
     } catch (e) {
       console.warn('⚠️ Offline sync item failed, keeping in queue:', item);
@@ -257,6 +261,108 @@ export const supabaseService = {
         };
       });
     }, null);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 1.5 createManualOrder
+  //    ينشئ صف الطلب أولاً بدون صورة إيصال (لتجنب تضارب الـ payload)
+  // ─────────────────────────────────────────────────────────
+  async createManualOrder(orderData, skipQueue = false) {
+    return withOfflineSupport('createManualOrder', async () => {
+      const items = orderData.items || [];
+      const itemsTotal = items.reduce((sum, item) => {
+        const price = Number(item.price || item.unit_price || 0);
+        const count = Number(item.count || item.quantity || 1);
+        return sum + (price * count);
+      }, 0);
+
+      const deliveryFee = Number(orderData.deliveryFee || orderData.delivery_fee || 0);
+      const serviceFee = Number(orderData.serviceFee || orderData.service_fee || 0);
+      const totalAmount = itemsTotal + deliveryFee + serviceFee;
+
+      const paymentMethod = orderData.paymentMethod || 'Cash';
+      const isCashOnDelivery = (!paymentMethod || paymentMethod === 'Cash' || String(paymentMethod).toLowerCase().includes('cash'));
+      const paidNow = isCashOnDelivery ? 0 : Number(orderData.paidNow || orderData.paid_now || 0);
+      const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
+
+      const rawPayload = {
+        order_id: String(orderData.id),
+        items: items.map(item => ({
+          name: item.name,
+          quantity: item.count || item.quantity || 1,
+          price: item.price || 0
+        })),
+        customer: {
+          full_name: orderData.customerName,
+          phone_1: orderData.phone,
+          delivery_info: {
+            address: orderData.area,
+            coordinates: {
+              lat: orderData.lat || orderData.latitude || null,
+              lon: orderData.lng || orderData.longitude || null
+            }
+          },
+          payment_method: paymentMethod
+        },
+        totals: {
+          delivery_fee: deliveryFee,
+          service_fee: serviceFee,
+          paid_now: paidNow,
+          remaining_amount: remainingAmount
+        },
+        route_distance_km: orderData.route_distance_km || null,
+        route_duration_minutes: orderData.route_duration_minutes || null,
+        calculated_by: orderData.calculated_by || null,
+        items_description: orderData.itemsDescription || null,
+        timestamp: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: orderData.customerName || 'عميل غير معروف',
+          customer_phone: orderData.phone || null,
+          customer_phone_2: orderData.phone2 || null,
+          order_type: orderData.type || 'delivery',
+          total_amount: totalAmount,
+          delivery_fee: deliveryFee,
+          service_fee: serviceFee,
+          paid_now: paidNow,
+          remaining_amount: remainingAmount,
+          status: 'pending',
+          delivery_address: orderData.area || null,
+          payment_method: paymentMethod,
+          payment_screenshot: null,
+          latitude: orderData.lat || orderData.latitude || null,
+          longitude: orderData.lng || orderData.longitude || null,
+          raw_payload: rawPayload,
+          source: orderData.source || 'manual',
+          original_id: String(orderData.id),
+          shift_id: orderData.shiftId || null
+        }])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return data;
+    }, orderData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 1.6 updateOrderPaymentScreenshot
+  //    يحدّث رابط صورة الإيصال بعد رفعها بنجاح إلى Storage
+  // ─────────────────────────────────────────────────────────
+  async updateOrderPaymentScreenshot(supabaseId, screenshotUrl, skipQueue = false) {
+    if (!supabaseId) return;
+
+    return withOfflineSupport('updateOrderPaymentScreenshot', async () => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ payment_screenshot: screenshotUrl })
+        .eq('id', supabaseId);
+
+      if (error) throw error;
+    }, { supabaseId, screenshotUrl }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────

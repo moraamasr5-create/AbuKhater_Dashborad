@@ -8,6 +8,7 @@ import Login from './components/auth/Login';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
+import { uploadReservationReceipt } from './services/storageService';
 
 export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
   if (file.size > 5 * 1024 * 1024) {
@@ -15,85 +16,28 @@ export const processImageUpload = async (file, bucketName = 'payment-screenshots
     return null;
   }
 
-  const originalSize = (file.size / 1024).toFixed(2);
-  console.log(`[Image] Original Size: ${originalSize} KB`);
+  if (!navigator.onLine || !supabase) {
+    alert("لا يوجد اتصال بالإنترنت لرفع الصورة. يرجى التحقق من اتصالك.");
+    return null;
+  }
 
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = async () => {
-        let width = img.width;
-        let height = img.height;
-        const maxDim = 1200;
+  try {
+    const publicUrl = folderPath === 'reservations'
+      ? await uploadReservationReceipt(file)
+      : null;
 
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
+    if (publicUrl) {
+      console.log("[Image] Uploaded to Supabase Storage");
+      return publicUrl;
+    }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-
-        let quality = 0.6;
-        let dataUrl = canvas.toDataURL('image/jpeg', quality);
-        let getKbSize = (base64String) => (base64String.length * 0.75) / 1024;
-
-        while (getKbSize(dataUrl) > 300 && quality > 0.1) {
-          quality -= 0.1;
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
-        }
-
-        const compressedSize = getKbSize(dataUrl).toFixed(2);
-        console.log(`[Image] Compressed Size: ${compressedSize} KB`);
-        console.log(`[Image] Compression Ratio: ${((1 - (compressedSize / originalSize)) * 100).toFixed(2)}% reduction`);
-
-        if (navigator.onLine && supabase) {
-          try {
-            const res = await fetch(dataUrl);
-            const blob = await res.blob();
-            const fileName = `${folderPath}/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-            
-            const { data, error } = await supabase.storage
-              .from(bucketName)
-              .upload(fileName, blob, { contentType: 'image/jpeg' });
-
-            if (!error && data) {
-              const { data: publicUrlData } = supabase.storage
-                .from(bucketName)
-                .getPublicUrl(fileName);
-              
-              if (publicUrlData && publicUrlData.publicUrl) {
-                console.log("[Image] Uploaded to Supabase Storage");
-                return resolve(publicUrlData.publicUrl);
-              }
-            }
-            
-            console.error("[Image] Supabase upload failed", error);
-            alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
-            return resolve(null);
-          } catch (err) {
-            console.error("[Image] Error uploading to Supabase:", err);
-            alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
-            return resolve(null);
-          }
-        } else {
-          alert("لا يوجد اتصال بالإنترنت لرفع الصورة. يرجى التحقق من اتصالك.");
-          return resolve(null);
-        }
-      };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
+    alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
+    return null;
+  } catch (err) {
+    console.error("[Image] Error uploading to Supabase:", err);
+    alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
+    return null;
+  }
 };
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
@@ -751,7 +695,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
     lat: null, lng: null, zone: null, distance: 0,
     route_distance_km: null, route_duration_minutes: null, calculated_by: 'manual',
     customArea: '', total: 0, deliveryFee: 20, itemsDescription: '',
-    paymentMethod: 'Cash', paymentProof: null
+    paymentMethod: 'Cash', paymentReceiptFile: null, paymentProofPreview: null
   });
   const [selectedItems, setSelectedItems] = useState(initialData?.selectedItems || {});
   const [activeCategory, setActiveCategory] = useState('سندوتشات');
@@ -976,8 +920,8 @@ const ManualOrderForm = ({ onClose, initialData }) => {
       calculated_by: formData.calculated_by,
       itemsDescription: itemsList.map(i => `${i.count}x ${i.name}`).join(', ') + (formData.itemsDescription ? ` (${formData.itemsDescription})` : ''),
       items: itemsList, itemsCount: itemsList.reduce((acc, curr) => acc + curr.count, 0),
-      paymentMethod: formData.paymentMethod, 
-      payment_proof_url: formData.payment_proof_url,
+      paymentMethod: formData.paymentMethod,
+      paymentReceiptFile: formData.paymentReceiptFile,
       status: formData.status || 'pending',
       reservation_date: formData.reservation_date || null,
       reservation_time: formData.reservation_time || null,
@@ -1181,27 +1125,32 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 required
                 type="file"
                 accept="image/*"
-                onChange={async (e) => {
+                onChange={(e) => {
                   const file = e.target.files[0];
                   if (file) {
-                    setIsCompressing(true);
-                    const processed = await processImageUpload(file);
-                    if (processed) {
-                      setFormData({ ...formData, paymentProof: processed });
+                    if (formData.paymentProofPreview) {
+                      URL.revokeObjectURL(formData.paymentProofPreview);
                     }
-                    setIsCompressing(false);
+                    setFormData({
+                      ...formData,
+                      paymentReceiptFile: file,
+                      paymentProofPreview: URL.createObjectURL(file)
+                    });
                   }
                 }}
                 disabled={isCompressing}
                 style={{ fontSize: '0.8rem', color: 'white', cursor: 'pointer' }}
               />
-              {formData.payment_proof_url && (
+              {formData.paymentProofPreview && (
                 <img
-                  src={formData.payment_proof_url}
-                  alt="Success"
+                  src={formData.paymentProofPreview}
+                  alt="معاينة الإيصال"
                   style={{ marginTop: '12px', width: '100%', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '2px solid var(--accent)' }}
                 />
               )}
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                سيتم رفع الصورة تلقائياً بعد حفظ الطلب
+              </p>
             </div>
           )}
 
@@ -1213,13 +1162,13 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 isOutsideRadius ||
                 !formData.receiptNo ||
                 !formData.area ||
-                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)
+                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)
               }
               className="btn-primary"
               style={{
                 flex: 2, justifyContent: 'center', height: '50px', fontSize: '1.1rem',
-                opacity: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)) ? 0.5 : 1,
-                cursor: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.payment_proof_url)) ? 'not-allowed' : 'pointer'
+                opacity: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)) ? 0.5 : 1,
+                cursor: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)) ? 'not-allowed' : 'pointer'
               }}
             >
               {isCompressing ? "جاري المعالجة..." : "حفظ الأوردر"}

@@ -2,6 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { API_CONFIG } from '../config/apiConfig';
 import { supabaseService, processPendingSync } from '../services/supabaseService';
+import { attachReceiptToOrder } from '../services/storageService';
 import { printerService } from '../services/printerService';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
@@ -131,6 +132,7 @@ export const AppProvider = ({ children }) => {
   // 🔥 3. Real-time Dashboard (Supabase Live System)
   const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
+  const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
 
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
@@ -419,6 +421,67 @@ export const AppProvider = ({ children }) => {
   };
 
   /**
+   * يرفع صورة الإيصال بعد إنشاء صف الطلب في Supabase
+   */
+  const uploadOrderReceipt = async (localOrderId, supabaseId) => {
+    const file = pendingReceiptFilesRef.current.get(localOrderId);
+    if (!file || !supabaseId) return;
+
+    setOrders(prev => prev.map(o =>
+      o.id === localOrderId ? { ...o, receiptUploadStatus: 'uploading' } : o
+    ));
+
+    try {
+      const url = await attachReceiptToOrder(supabaseId, file);
+      pendingReceiptFilesRef.current.delete(localOrderId);
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId
+          ? { ...o, paymentScreenshot: url, paymentProof: url, receiptUploadStatus: 'done' }
+          : o
+      ));
+    } catch (err) {
+      console.error('❌ Receipt upload failed:', err);
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId ? { ...o, receiptUploadStatus: 'failed' } : o
+      ));
+    }
+  };
+
+  const retryReceiptUpload = (localOrderId) => {
+    const order = orders.find(o => o.id === localOrderId);
+    if (order?.supabaseId) {
+      uploadOrderReceipt(localOrderId, order.supabaseId);
+    }
+  };
+
+  /**
+   * يحفظ طلب الكول سنتر/التابلت في Supabase أولاً ثم يرفع الإيصال بشكل غير متزامن
+   */
+  const persistManualOrderToSupabase = async (localOrderId, orderPayload) => {
+    const persistableSources = ['manual', 'talabat'];
+    if (!persistableSources.includes(orderPayload.source)) return;
+
+    try {
+      const row = await supabaseService.createManualOrder({
+        ...orderPayload,
+        shiftId: currentShift?.id
+      });
+
+      if (!row?.id) return;
+
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId ? { ...o, supabaseId: row.id } : o
+      ));
+
+      if (pendingReceiptFilesRef.current.has(localOrderId)) {
+        uploadOrderReceipt(localOrderId, row.id);
+      }
+    } catch (err) {
+      console.error('❌ Failed to persist manual order to Supabase:', err);
+    }
+  };
+
+  /**
    * إضافة طلب جديد: يحفظ محلياً أولاً ثم يرسل لـ Supabase
    * يتحقق من التكرارات ورقم البون
    */
@@ -458,8 +521,10 @@ export const AppProvider = ({ children }) => {
     const paidNow = isCashOnDelivery ? 0 : Number(orderData.paidNow || orderData.paid_now || 0);
     const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
 
+    const { paymentReceiptFile, ...orderFields } = orderData;
+
     const newOrder = {
-      ...orderData,
+      ...orderFields,
       id: finalId,
       originalId: orderData.id, // Store original receipt No for display
       source: orderData.source || 'manual',
@@ -471,11 +536,19 @@ export const AppProvider = ({ children }) => {
       deliveryFee,
       serviceFee,
       paidNow,
-      remainingAmount
+      remainingAmount,
+      receiptUploadStatus: paymentReceiptFile ? 'pending' : null
     };
+
+    if (paymentReceiptFile instanceof File) {
+      pendingReceiptFilesRef.current.set(finalId, paymentReceiptFile);
+    }
+
     setOrders(prev => [newOrder, ...prev]);
     logAction('ORDER_CREATE', `Order #${orderData.id} created`, 'Operator');
     sendToN8N(newOrder, 'ORDER_CREATE');
+
+    persistManualOrderToSupabase(finalId, { ...orderFields, id: orderData.id });
 
     setTimeout(() => {
       setOrders(currentOrders => currentOrders.map(o =>
@@ -1035,6 +1108,7 @@ export const AppProvider = ({ children }) => {
       userRole, setUserRole, // 🔐 تصدير بيانات الدور لباقي السيستم
       isThermalPrintMode, setIsThermalPrintMode,
       openShift, closeShift, addOrder, deleteOrder, cancelOrder, confirmOrder, completeOrder, failDelivery, togglePilotShift, updateOrder, addNewPilot, deletePilot,
+      retryReceiptUpload,
       addReservation, confirmReservation, deleteReservation,
       isShiftOpen: currentShift?.status === 'open',
       activeStats: computedStats,
