@@ -636,7 +636,7 @@ export const AppProvider = ({ children }) => {
     }
 
     try {
-      // await printerService.printKitchenReceipt(updatedOrder);
+      await printerService.printKitchenReceipt(updatedOrder);
       await printerService.printCashierReceipt(updatedOrder);
     } catch (err) {
       console.error('❌ فشل الطباعة التلقائية:', err);
