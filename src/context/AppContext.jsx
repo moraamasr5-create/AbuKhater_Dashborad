@@ -495,7 +495,7 @@ export const AppProvider = ({ children }) => {
     const existingCount = orders.filter(o => (o.originalId || o.id) === orderData.id).length;
 
     if (existingCount >= 2) {
-      alert(`رقم البون ${orderData.id} مكرر أكثر من الحد المسموح (مرتين فقط)!`);
+      alert(`رقم البون ${orderData.id} مكرر أكثر من الحد المسموح (مرتين كاحد أقصي)!`);
       return;
     }
 
