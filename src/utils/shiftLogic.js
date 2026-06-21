@@ -3,7 +3,16 @@
 /**
  * Utility functions for precise business logic and time normalization.
  * Fixes the 20-hour shift bug (8:00 AM to 4:00 AM) and delay latency issues.
+ * MAX_SHIFT_MINUTES: أقصي وقت شيفت طيار = 12 ساعة (720 دقيقة)
  */
+
+// أقصي مدة شيفت طيار = 12 ساعة = 720 دقيقة
+export const MAX_SHIFT_MINUTES = 12 * 60; // 720
+
+// Cap total pilot minutes to the maximum allowed shift duration
+export const capShiftMinutes = (minutes) => {
+  return Math.min(minutes, MAX_SHIFT_MINUTES);
+};
 
 // Normalize all current times to avoid client-server discrepancies
 export const getNormalizedDate = (dateString) => {
@@ -25,7 +34,10 @@ export const getLogicalShiftDateString = () => {
     shiftDate.setDate(shiftDate.getDate() - 1);
   }
   
-  return shiftDate.toLocaleDateString('ar-EG');
+  const year = shiftDate.getFullYear();
+  const month = String(shiftDate.getMonth() + 1).padStart(2, '0');
+  const day = String(shiftDate.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 // Calculate Delay in Minutes Safely (Latency Bug Fix)
@@ -59,4 +71,11 @@ export const generateSafeId = (prefix) => {
     // Adding random to ensure uniqueness in fast clicks
     const randomSuffix = Math.floor(Math.random() * 10000);
     return `${prefix}-${getNormalizedNow().getTime()}-${randomSuffix}`;
+};
+
+export const generateUUID = () => {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+    });
 };

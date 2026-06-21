@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, KeyRound, User, Delete, Check } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { safeGetItem } from '../../utils/safeStorage';
 
 const Login = ({ onLoginSuccess }) => {
   const { setUserRole } = useApp();
@@ -37,7 +38,7 @@ const Login = ({ onLoginSuccess }) => {
 
     // Get correct password from localStorage, fallback to '8080'
     const storageKey = `b_delivery_password_${selectedUser}`;
-    const correctPassword = localStorage.getItem(storageKey) || '8080';
+    const correctPassword = safeGetItem(storageKey) || '8080';
 
     if (pin === correctPassword) {
       // Save session in sessionStorage

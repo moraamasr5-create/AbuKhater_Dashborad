@@ -1,9 +1,10 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 // Cache to prevent duplicate printing across app re-renders
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 const printedCacheKey = 'PRINTED_ORDERS_CACHE';
 const getPrintedCache = () => {
   try {
-    return JSON.parse(localStorage.getItem(printedCacheKey)) || {};
+    return JSON.parse(safeGetItem(printedCacheKey)) || {};
   } catch (err) {
     console.warn('Cache read error:', err);
     return {};
@@ -11,7 +12,7 @@ const getPrintedCache = () => {
 };
 const setPrintedCache = (cache) => {
   try {
-    localStorage.setItem(printedCacheKey, JSON.stringify(cache));
+    safeSetItem(printedCacheKey, JSON.stringify(cache));
   } catch (err) {
     console.warn('Cache write error:', err);
   }

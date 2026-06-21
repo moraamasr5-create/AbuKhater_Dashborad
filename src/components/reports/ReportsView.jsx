@@ -2,6 +2,18 @@ import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FileText, Download, Trash2, Calendar, Clock, DollarSign, Bike, TrendingUp, Home, Globe, Printer, UtensilsCrossed } from 'lucide-react';
 
+const displayDate = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const cleanDate = String(dateStr).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d));
+    const d = new Date(cleanDate);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('ar-EG');
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const ReportsView = () => {
   const { currentShift, dailyReports, activeStats, closeShift, openShift, isShiftOpen, orders, reservations } = useApp();
   const [selectedPilotDetails, setSelectedPilotDetails] = React.useState(null);
@@ -11,6 +23,7 @@ const ReportsView = () => {
   const handlePrintShiftReport = (report) => {
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) return;
+    const formattedDate = displayDate(report.date);
 
     const pilotSummaryHtml = (report.pilotStats || []).map(p => `
             <tr style="border-bottom: 1px solid #eee;">
@@ -28,7 +41,7 @@ const ReportsView = () => {
             <html dir="rtl">
             <head>
                 <meta charset="utf-8">
-                <title>تقرير وردية - ${report.date}</title>
+                <title>تقرير وردية - ${formattedDate}</title>
                 <style>
                     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;850;900&display=swap');
                     @page {
@@ -82,7 +95,7 @@ const ReportsView = () => {
             <body>
                 <div class="header">
                     <div class="title">تقرير ختامي للوردية</div>
-                    <div class="subtitle">التاريخ: ${report.date}</div>
+                    <div class="subtitle">التاريخ: ${formattedDate}</div>
                     <div class="subtitle">من: ${new Date(report.startTime).toLocaleTimeString('ar-EG')} | إلى: ${new Date(report.endTime).toLocaleTimeString('ar-EG')}</div>
                 </div>
 
@@ -148,18 +161,11 @@ const ReportsView = () => {
   }, []);
 
   const handleCloseShift = () => {
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    if (currentHour >= 4 && currentHour < 12) {
-      closeShift(true);
-    } else {
-      const password = prompt('برجاء إدخال كلمة المرور لإغلاق اليوم:');
-      if (password === '8080') {
-        closeShift(false);
-      } else if (password !== null) {
-        alert('كلمة المرور غير صحيحة');
-      }
+    const password = prompt('برجاء إدخال كلمة المرور لإغلاق اليوم:');
+    if (password === '8080') {
+      closeShift(false);
+    } else if (password !== null) {
+      alert('كلمة المرور غير صحيحة');
     }
   };
 
@@ -173,9 +179,9 @@ const ReportsView = () => {
   };
 
   const getPilotOrders = (pilotId) => {
-    // Filter orders for the current shift and specific pilot (Only completed or failed)
+    // Filter orders for the current shift and specific pilot (Only completed, delivered or failed)
     return orders
-      .filter(o => String(o.pilotId) === String(pilotId) && (o.status === 'completed' || o.status === 'failed_delivery'))
+      .filter(o => String(o.pilotId) === String(pilotId) && (o.status === 'completed' || o.status === 'delivered' || o.status === 'failed_delivery'))
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   };
 
@@ -736,7 +742,7 @@ const ReportsView = () => {
               dailyReports.map(report => (
                 <div key={report.id} className="glass-card report-card-grid" style={{ padding: '20px', alignItems: 'center' }}>
                   <div>
-                    <p style={{ fontWeight: '600' }}>تقرير يوم {report.date}</p>
+                    <p style={{ fontWeight: '600' }}>تقرير يوم {displayDate(report.date)}</p>
                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       {new Date(report.startTime).toLocaleTimeString('ar-EG')} - {new Date(report.endTime).toLocaleTimeString('ar-EG')}
                     </p>

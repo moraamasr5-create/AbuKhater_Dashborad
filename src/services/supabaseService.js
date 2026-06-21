@@ -1,5 +1,6 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import { supabase } from './supabase/supabaseClient';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
 // ============================================================
 // OFFLINE SYNC QUEUE
@@ -11,7 +12,7 @@ const QUEUE_KEY = 'delivery_pending_sync';
  * يقرأ قائمة العمليات المنتظرة من localStorage
  */
 const getPendingQueue = () => {
-  try { return JSON.parse(localStorage.getItem(QUEUE_KEY)) || []; }
+  try { return JSON.parse(safeGetItem(QUEUE_KEY)) || []; }
   catch { return []; }
 };
 
@@ -19,7 +20,7 @@ const getPendingQueue = () => {
  * يحفظ قائمة العمليات المنتظرة في localStorage
  */
 const savePendingQueue = (queue) => {
-  localStorage.setItem(QUEUE_KEY, JSON.stringify(queue));
+  safeSetItem(QUEUE_KEY, JSON.stringify(queue));
 };
 
 /**
@@ -61,6 +62,14 @@ export const processPendingSync = async () => {
         await supabaseService.updateReservationStatus(item.payload.id, item.payload.newStatus, item.payload.refNum, item.payload.paymentProof, true);
       } else if (item.action === 'deleteReservation') {
         await supabaseService.deleteReservation(item.payload.id, true);
+done
+      } else if (item.action === 'resetAllPilots') {
+        await supabaseService.resetAllPilots(item.payload.pilotIds, true);
+      } else if (item.action === 'createManualOrder') {
+        await supabaseService.createManualOrder(item.payload, true);
+      } else if (item.action === 'updateOrderPaymentScreenshot') {
+        await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
+main
       }
     } catch (e) {
       console.warn('⚠️ Offline sync item failed, keeping in queue:', item);
@@ -86,7 +95,23 @@ const withOfflineSupport = async (actionName, promiseFn, queuePayload, skipQueue
     if (!navigator.onLine) throw new Error('Offline');
     return await promiseFn();
   } catch (err) {
-    console.warn(`⚠️ [${actionName}] offline fallback:`, err?.message || err);
+    console.warn(`⚠️ [${actionName}] error:`, err?.message || err);
+    
+    // Do NOT queue if it is a Postgres validation exception (code 'P0001')
+    const isValidationError = err && (
+      err.code === 'P0001' || 
+      (err.message && (
+        err.message.includes('Too early') || 
+        err.message.includes('Active orders') || 
+        err.message.includes('نشطة') || 
+        err.message.includes('الوردية')
+      ))
+    );
+    
+    if (isValidationError) {
+      throw err;
+    }
+
     if (!skipQueue && queuePayload) queueSync(actionName, queuePayload);
     return null;
   }
@@ -112,19 +137,44 @@ const withOfflineSupport = async (actionName, promiseFn, queuePayload, skipQueue
 // status, payment_proof_url, deposit_amount, ref_number, created_at
 
 // ============================================================
+// TIME HELPERS
+// ============================================================
+
+/**
+ * Converts a 24-h time string ("HH:MM:SS" or "HH:MM") → 12-h short format
+ * e.g. "08:00:00" → "8:00A"  |  "22:00:00" → "10:00P"
+ */
+const formatTime = (t) => {
+  if (!t) return null;
+  const [hourStr, minuteStr] = t.split(':');
+  let hour = parseInt(hourStr, 10);
+  const minute = minuteStr || '00';
+  const ampm = hour >= 12 ? 'P' : 'A';
+  hour = hour % 12 || 12;
+  return `${hour}:${minute}${ampm}`;
+};
+
+// ============================================================
 export const supabaseService = {
 
   // ─────────────────────────────────────────────────────────
   // 1. fetchOrders
   //    يجلب الطلبات من جدول orders ويحوّلها لشكل الـ UI
   // ─────────────────────────────────────────────────────────
-  async fetchOrders() {
+  async fetchOrders(shiftId = null) {
     return withOfflineSupport('fetchOrders', async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('orders')
-        .select('*, order_items(*)')
-        .order('created_at', { ascending: false })
-        .limit(100);
+        .select('*, order_items(*), delivery:delivery_id(id, name, phone, state)')
+        .order('created_at', { ascending: false });
+
+      if (shiftId) {
+        query = query.eq('shift_id', shiftId);
+      } else {
+        query = query.limit(50);
+      }
+
+      const { data, error } = await query;
 
       if (error) { console.error('❌ fetchOrders:', error); return []; }
       if (!data) return [];
@@ -139,14 +189,16 @@ export const supabaseService = {
               count: Number(i.quantity || 1),
               price: Number(i.unit_price || 0),
               category: 'عام',
-              total: Number(i.total_price || 0)
+              total: Number(i.total_price || 0),
+              menuItemId: i.item_id || i.menu_item_id || null
             }))
           : (rawPayload.items || []).map(item => ({
               name: item.name || item.item_name || 'صنف غير معروف',
               count: Number(item.quantity || item.count || 1),
               price: Number(item.price || item.unit_price || 0),
               category: item.category || 'عام',
-              total: Number(item.total || (Number(item.price || 0) * Number(item.quantity || 1)))
+              total: Number(item.total || (Number(item.price || 0) * Number(item.quantity || 1))),
+              menuItemId: item.menuItemId || item.menu_item_id || null
             }));
 
         const itemsDescription = rawItems.length > 0
@@ -160,13 +212,23 @@ export const supabaseService = {
         else if (rawStatus === 'confirmed' || rawStatus === 'في التحضير') mappedStatus = 'waiting_driver';
         else if (rawStatus === 'تم الإسناد للطيار') mappedStatus = 'driver_assigned';
         else if (rawStatus === 'في الطريق للتسليم') mappedStatus = 'active';
-        else if (rawStatus === 'تم التوصيل') mappedStatus = 'completed';
-        else if (['pending', 'waiting_driver', 'driver_assigned', 'completed', 'cancelled', 'failed_delivery'].includes(rawStatus)) {
-          mappedStatus = rawStatus;
+        else if (rawStatus === 'تم التوصيل' || rawStatus === 'delivered') mappedStatus = 'completed';
+        else if (['pending', 'waiting_driver', 'driver_assigned', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(rawStatus)) {
+          mappedStatus = rawStatus === 'delivered' ? 'completed' : rawStatus;
         }
 
         // original_id: DB column first, then raw_payload fallback
         const orderId = row.original_id || rawPayload.order_id || `#${row.id.slice(0, 6)}`;
+
+        // Strict Pricing Logic
+        const itemsTotal = rawItems.reduce((sum, item) => sum + (item.price * item.count), 0);
+        const deliveryFee = Number(row.delivery_fee || rawPayload.totals?.delivery_fee || 0);
+        const serviceFee = Number(row.service_fee || rawPayload.totals?.service_fee || 0);
+        const computedTotal = itemsTotal + deliveryFee + serviceFee;
+
+        const isCashOnDelivery = (!row.payment_method || row.payment_method === 'Cash' || String(row.payment_method).toLowerCase().includes('cash'));
+        const paidNow = isCashOnDelivery ? 0 : Number(row.paid_now || rawPayload.totals?.paid_now || 0);
+        const remainingAmount = isCashOnDelivery ? computedTotal : (computedTotal - paidNow);
 
         return {
           supabaseId: row.id,
@@ -178,12 +240,12 @@ export const supabaseService = {
           phone: row.customer_phone || rawPayload.customer?.phone_1 || 'غير مسجل',
           phone2: row.customer_phone_2 || rawPayload.customer?.phone_2 || '',
           area: row.delivery_address || rawPayload.customer?.delivery_info?.address || 'استلام من المطعم',
-          total: Number(row.total_amount || rawPayload.totals?.total || 0),
-          deliveryFee: Number(row.delivery_fee || rawPayload.totals?.delivery_fee || 0),
-          subtotal: Number(rawPayload.totals?.subtotal || 0),
-          serviceFee: Number(row.service_fee || rawPayload.totals?.service_fee || 0),
-          paidNow: Number(row.paid_now || rawPayload.totals?.paid_now || 0),
-          remainingAmount: Number(row.remaining_amount || rawPayload.totals?.remaining_amount || 0),
+          total: computedTotal,
+          deliveryFee,
+          subtotal: itemsTotal,
+          serviceFee,
+          paidNow,
+          remainingAmount,
           items: rawItems,
           itemsDescription,
           paymentMethod: row.payment_method || rawPayload.customer?.payment_method || 'Cash',
@@ -193,12 +255,116 @@ export const supabaseService = {
           timestamp: row.created_at || rawPayload.timestamp || new Date().toISOString(),
           pilotId: row.pilot_id || null,
           pilotName: row.pilot_name || null,
+          deliveryId: row.delivery_id || null,
+          delivery: row.delivery || null,
           lat: Number(row.latitude) || rawPayload.customer?.delivery_info?.coordinates?.lat || null,
           lng: Number(row.longitude) || rawPayload.customer?.delivery_info?.coordinates?.lon || null,
           rawPayload
         };
       });
     }, null);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 1.5 createManualOrder
+  //    ينشئ صف الطلب أولاً بدون صورة إيصال (لتجنب تضارب الـ payload)
+  // ─────────────────────────────────────────────────────────
+  async createManualOrder(orderData, skipQueue = false) {
+    return withOfflineSupport('createManualOrder', async () => {
+      const items = orderData.items || [];
+      const itemsTotal = items.reduce((sum, item) => {
+        const price = Number(item.price || item.unit_price || 0);
+        const count = Number(item.count || item.quantity || 1);
+        return sum + (price * count);
+      }, 0);
+
+      const deliveryFee = Number(orderData.deliveryFee || orderData.delivery_fee || 0);
+      const serviceFee = Number(orderData.serviceFee || orderData.service_fee || 0);
+      const totalAmount = itemsTotal + deliveryFee + serviceFee;
+
+      const paymentMethod = orderData.paymentMethod || 'Cash';
+      const isCashOnDelivery = (!paymentMethod || paymentMethod === 'Cash' || String(paymentMethod).toLowerCase().includes('cash'));
+      const paidNow = isCashOnDelivery ? 0 : Number(orderData.paidNow || orderData.paid_now || 0);
+      const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
+
+      const rawPayload = {
+        order_id: String(orderData.id),
+        items: items.map(item => ({
+          name: item.name,
+          quantity: item.count || item.quantity || 1,
+          price: item.price || 0
+        })),
+        customer: {
+          full_name: orderData.customerName,
+          phone_1: orderData.phone,
+          delivery_info: {
+            address: orderData.area,
+            coordinates: {
+              lat: orderData.lat || orderData.latitude || null,
+              lon: orderData.lng || orderData.longitude || null
+            }
+          },
+          payment_method: paymentMethod
+        },
+        totals: {
+          delivery_fee: deliveryFee,
+          service_fee: serviceFee,
+          paid_now: paidNow,
+          remaining_amount: remainingAmount
+        },
+        route_distance_km: orderData.route_distance_km || null,
+        route_duration_minutes: orderData.route_duration_minutes || null,
+        calculated_by: orderData.calculated_by || null,
+        items_description: orderData.itemsDescription || null,
+        timestamp: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert([{
+          customer_name: orderData.customerName || 'عميل غير معروف',
+          customer_phone: orderData.phone || null,
+          customer_phone_2: orderData.phone2 || null,
+          order_type: orderData.type || 'delivery',
+          total_amount: totalAmount,
+          delivery_fee: deliveryFee,
+          service_fee: serviceFee,
+          paid_now: paidNow,
+          remaining_amount: remainingAmount,
+          status: 'pending',
+          delivery_address: orderData.area || null,
+          payment_method: paymentMethod,
+          payment_screenshot: null,
+          latitude: orderData.lat || orderData.latitude || null,
+          longitude: orderData.lng || orderData.longitude || null,
+          raw_payload: rawPayload,
+          source: orderData.source || 'manual',
+          original_id: String(orderData.id),
+          shift_id: orderData.shiftId || null
+        }])
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      return data;
+    }, orderData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 1.6 updateOrderPaymentScreenshot
+  //    يحدّث رابط صورة الإيصال بعد رفعها بنجاح إلى Storage
+  // ─────────────────────────────────────────────────────────
+  async updateOrderPaymentScreenshot(supabaseId, screenshotUrl, skipQueue = false) {
+    if (!supabaseId) return;
+
+    return withOfflineSupport('updateOrderPaymentScreenshot', async () => {
+      const { error } = await supabase
+        .from('orders')
+        .update({ payment_screenshot: screenshotUrl })
+        .eq('id', supabaseId);
+
+      if (error) throw error;
+    }, { supabaseId, screenshotUrl }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────
@@ -214,12 +380,13 @@ export const supabaseService = {
       else if (newStatus === 'cancelled') dbStatus = reason ? `ملغي (${reason})` : 'ملغي';
       else if (newStatus === 'driver_assigned') dbStatus = 'تم الإسناد للطيار';
       else if (newStatus === 'out_for_delivery' || newStatus === 'active') dbStatus = 'في الطريق للتسليم';
-      else if (newStatus === 'completed') dbStatus = 'تم التوصيل';
+      else if (newStatus === 'completed' || newStatus === 'delivered') dbStatus = 'تم التوصيل';
       else if (newStatus === 'failed_delivery') dbStatus = reason ? `فشل التوصيل (${reason})` : 'فشل التوصيل';
 
       const updatePayload = { status: dbStatus };
-      if (extraFields.pilot_id) updatePayload.pilot_id = String(extraFields.pilot_id);
-      if (extraFields.pilot_name) updatePayload.pilot_name = extraFields.pilot_name;
+      if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
+      if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
+      if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
 
       const { error } = await supabase
         .from('orders')
@@ -239,6 +406,7 @@ export const supabaseService = {
       const { data, error } = await supabase
         .from('reservations')
         .select('*')
+        .neq('status', 'deleted')
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -393,21 +561,34 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async saveShiftReport(reportData, skipQueue = false) {
     return withOfflineSupport('saveShiftReport', async () => {
-      // Try saving to shifts table (may or may not exist)
-      try {
-        await supabase
-          .from('shifts')
-          .update({
-            status: 'closed',
-            end_time: reportData.endTime,
-            total_orders: reportData.ordersCount,
-            stats: reportData
-          })
-          .eq('id', reportData.id);
-      } catch (e) {
-        console.warn('shifts table update skipped:', e?.message);
-      }
+      const { error } = await supabase.rpc('close_shift', {
+        p_shift_id: reportData.id,
+        p_stats: reportData
+      });
+
+      if (error) throw error;
     }, reportData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 8.5 resetAllPilots
+  // ─────────────────────────────────────────────────────────
+  async resetAllPilots(pilotIds, skipQueue = false) {
+    if (!pilotIds || !pilotIds.length) return;
+    return withOfflineSupport('resetAllPilots', async () => {
+      const { error } = await supabase
+        .from('delivery')
+        .update({
+          state: 'available',
+          shift_started_at: null,
+          shift_ended_at: null,
+          total_minutes: 0,
+          orders_count: 0,
+          shift_used: false
+        })
+        .in('id', pilotIds);
+      if (error) throw error;
+    }, { pilotIds }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────
@@ -416,23 +597,40 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async createShift(shiftData, skipQueue = false) {
     return withOfflineSupport('createShift', async () => {
-      try {
-        const { data, error } = await supabase
-          .from('shifts')
-          .insert([{
-            id: shiftData.id,
-            date: shiftData.date,
-            start_time: shiftData.startTime,
-            status: 'open'
-          }])
-          .select();
-        if (error) throw error;
-        return data;
-      } catch (e) {
-        console.warn('shifts table insert skipped (table may not exist):', e?.message);
-        return null;
-      }
+      const { data, error } = await supabase
+        .from('shifts')
+        .insert([{
+          id: shiftData.id,
+          date: shiftData.date,
+          start_time: shiftData.start_time || shiftData.startTime,
+          status: 'open',
+          total_orders: 0,
+          stats: {}
+        }])
+        .select();
+      if (error) throw error;
+      return data;
     }, shiftData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 9.5 getShiftByDate
+  //     يبحث عن وردية مفتوحة بنفس التاريخ لاستئنافها
+  // ─────────────────────────────────────────────────────────
+  async getShiftByDate(dateString) {
+    return withOfflineSupport('getShiftByDate', async () => {
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .eq('date', dateString)
+        .eq('status', 'open')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+      return data;
+    }, null);
   },
 
   // ─────────────────────────────────────────────────────────
@@ -462,11 +660,15 @@ export const supabaseService = {
 
   async deleteReservation(id, skipQueue = false) {
     return withOfflineSupport('deleteReservation', async () => {
-      const cleanId = String(id).replace('RES-', '');
+      const cleanId = String(id).replace(/^RES-/, '');
+      const isNumericId = /^\d+$/.test(cleanId) || !isNaN(parseInt(cleanId, 10));
+      if (!isNumericId) { console.warn('Invalid reservation ID for deletion:', cleanId); return; }
+      
       const { error } = await supabase
         .from('reservations')
-        .delete()
+        .update({ status: 'deleted' })
         .eq('id', cleanId);
+        
       if (error) throw error;
     }, { id }, skipQueue);
   },
@@ -537,8 +739,9 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
 
   subscribeToOrders(callback) {
+    const channelId = `orders-realtime-${Date.now()}`;
     return supabase
-      .channel('orders-realtime')
+      .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, payload => {
         console.log('🔄 Realtime Order:', payload);
         callback(payload);
@@ -547,8 +750,9 @@ export const supabaseService = {
   },
 
   subscribeToReservations(callback) {
+    const channelId = `reservations-realtime-${Date.now()}`;
     return supabase
-      .channel('reservations-realtime')
+      .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reservations' }, payload => {
         console.log('🔄 Realtime Reservation:', payload);
         callback(payload);
@@ -557,8 +761,9 @@ export const supabaseService = {
   },
 
   subscribeToDrivers(callback) {
+    const channelId = `delivery-realtime-${Date.now()}`;
     return supabase
-      .channel('delivery-realtime')
+      .channel(channelId)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery' }, payload => {
         console.log('🔄 Realtime Driver:', payload);
         callback(payload);

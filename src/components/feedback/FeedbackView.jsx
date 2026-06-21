@@ -94,12 +94,12 @@ const FeedbackView = () => {
         border: '1px solid rgba(99, 102, 241, 0.2)'
       };
     }
-    return {
-      label: '💬 رسالة عامة',
-      color: '#38bdf8',
-      bg: 'rgba(14, 165, 233, 0.1)',
-      border: '1px solid rgba(14, 165, 233, 0.2)'
-    };
+    // return {
+    //   label: '💬 رسالة عامة',
+    //   color: '#38bdf8',
+    //   bg: 'rgba(14, 165, 233, 0.1)',
+    //   border: '1px solid rgba(14, 165, 233, 0.2)'
+    // };
   };
 
   return (

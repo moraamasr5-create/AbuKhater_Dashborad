@@ -1,8 +1,10 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { API_CONFIG } from '../config/apiConfig';
 import { supabaseService, processPendingSync } from '../services/supabaseService';
+import { attachReceiptToOrder } from '../services/storageService';
 import { printerService } from '../services/printerService';
+import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 
 const AppContext = createContext();
 
@@ -11,7 +13,9 @@ import {
   getLogicalShiftDateString,
   calculateDelayMinutes,
   getSafeISOTime,
-  generateSafeId
+  generateSafeId,
+  generateUUID,
+  capShiftMinutes
 } from '../utils/shiftLogic';
 import { safeParseOrder } from '../utils/safeOrderParser';
 
@@ -32,7 +36,7 @@ const mergePilots = (prevPilots, fetchedPilots) => {
   const mergedFetched = fetchedPilots.map(fp => {
     const existing = prevPilots.find(p => p.id === fp.id);
     if (!existing) return fp;
-    const LOCAL_PILOT_FIELDS = ['ordersCount', 'totalMinutes', 'balance', 'shiftStatus', 'state', 'lastReturnTime', 'shiftUsed', 'lastOpenedAt'];
+    const LOCAL_PILOT_FIELDS = ['ordersCount', 'totalMinutes', 'balance', 'shiftStatus', 'state', 'lastReturnTime', 'shiftUsed', 'lastOpenedAt', 'shift'];
     const mergedFields = {};
     LOCAL_PILOT_FIELDS.forEach(f => {
       if (existing[f] !== undefined) {
@@ -54,11 +58,11 @@ export const AppProvider = ({ children }) => {
   });
 
   const [isThermalPrintMode, setIsThermalPrintMode] = useState(() => {
-    return localStorage.getItem('is_thermal_print_mode') === 'true';
+    return safeGetItem('is_thermal_print_mode') === 'true';
   });
 
   useEffect(() => {
-    localStorage.setItem('is_thermal_print_mode', isThermalPrintMode);
+    safeSetItem('is_thermal_print_mode', isThermalPrintMode);
     if (isThermalPrintMode) {
       document.body.classList.add('thermal-print-active');
     } else {
@@ -77,86 +81,38 @@ export const AppProvider = ({ children }) => {
 
   // تهيئة كلمات المرور الافتراضية إذا لم تكن موجودة
   useEffect(() => {
-    if (!localStorage.getItem('b_delivery_password_admin')) {
-      localStorage.setItem('b_delivery_password_admin', '8080');
+    if (!safeGetItem('b_delivery_password_admin')) {
+      safeSetItem('b_delivery_password_admin', '8080');
     }
-    if (!localStorage.getItem('b_delivery_password_casher')) {
-      localStorage.setItem('b_delivery_password_casher', '8080');
+    if (!safeGetItem('b_delivery_password_casher')) {
+      safeSetItem('b_delivery_password_casher', '8080');
     }
   }, []);
 
-  const [orders, setOrders] = useState(() => {
-    try {
-      const saved = localStorage.getItem('delivery_orders');
-      return (saved && saved !== 'undefined') ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [orders, setOrders] = useState([]);
 
   // الحجوزات: تُحمّل من localStorage أولاً ثم يُحدّث من Supabase في الخلفية
-  const [reservations, setReservations] = useState(() => {
-    try {
-      const saved = localStorage.getItem('delivery_reservations');
-      return (saved && saved !== 'undefined') ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
-const [pilots, setPilots] = useState(() => {
-    try {
-      const saved = localStorage.getItem("delivery_pilots");
-      if (saved && saved !== "undefined") {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch { }
-    return [];
-  });
+  const [reservations, setReservations] = useState([]);
+  const [pilots, setPilots] = useState([]);
 
   const [currentShift, setCurrentShift] = useState(() => {
     try {
-      const saved = localStorage.getItem('delivery_current_shift');
+      const saved = safeGetItem('delivery_current_shift');
       return (saved && saved !== 'undefined') ? JSON.parse(saved) : null;
     } catch { return null; }
   });
 
-  const [dailyReports, setDailyReports] = useState(() => {
-    try {
-      const saved = localStorage.getItem('delivery_reports');
-      return (saved && saved !== 'undefined') ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+  const [dailyReports, setDailyReports] = useState([]);
 
   useEffect(() => {
-    localStorage.setItem('delivery_orders', JSON.stringify(orders));
-  }, [orders]);
-
-  useEffect(() => {
-    localStorage.setItem('delivery_pilots', JSON.stringify(pilots));
-  }, [pilots]);
-
-  useEffect(() => {
-    localStorage.setItem('delivery_current_shift', JSON.stringify(currentShift));
+    safeSetItem('delivery_current_shift', JSON.stringify(currentShift));
   }, [currentShift]);
 
-  useEffect(() => {
-    localStorage.setItem('delivery_reports', JSON.stringify(dailyReports));
-  }, [dailyReports]);
-
-  const [auditLogs, setAuditLogs] = useState(() => {
-    try {
-      const saved = localStorage.getItem('delivery_audit_logs');
-      return (saved && saved !== 'undefined') ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
-
-  useEffect(() => {
-    localStorage.setItem('delivery_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  useEffect(() => {
-    localStorage.setItem('delivery_reservations', JSON.stringify(reservations));
-  }, [reservations]);
+  const [auditLogs, setAuditLogs] = useState([]);
 
   // عند تحميل التطبيق: أعد محاولة العمليات المعلّقة (pendingSync) في حال وجود اتصال
   useEffect(() => {
+    localStorage.removeItem('order_sequence_num'); // Remove legacy sequential ID
     processPendingSync();
   }, []);
 
@@ -176,6 +132,7 @@ const [pilots, setPilots] = useState(() => {
   // 🔥 3. Real-time Dashboard (Supabase Live System)
   const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
+  const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
 
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
@@ -201,7 +158,7 @@ const [pilots, setPilots] = useState(() => {
     const fetchInitialData = async () => {
       try {
         const [fetchedOrders, fetchedPilots, fetchedRes] = await Promise.all([
-          supabaseService.fetchOrders(),
+          supabaseService.fetchOrders(currentShift?.id),
           supabaseService.fetchDeliveryDrivers(),
           supabaseService.fetchReservations()
         ]);
@@ -223,7 +180,7 @@ const [pilots, setPilots] = useState(() => {
               logAction('LIVE_SYNC', `Supabase Sync: Received ${newOrdersForAudio.length} new orders`, 'System');
             }
 
-            const LOCAL_ONLY_FIELDS = ['pilotId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
+            const LOCAL_ONLY_FIELDS = ['pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
 
             const mergedOrders = fetchedOrders.map(fo => {
               const existing = prev.find(o => (o.originalId || o.id) === fo.originalId);
@@ -286,7 +243,7 @@ const [pilots, setPilots] = useState(() => {
     setPilots(prev => {
       let changed = false;
       const updated = prev.map(p => {
-        const finishedCount = orders.filter(o => String(o.pilotId) === String(p.id) && o.status === 'completed').length;
+        const finishedCount = orders.filter(o => String(o.pilotId) === String(p.id) && (o.status === 'completed' || o.status === 'delivered')).length;
         if (p.ordersCount !== finishedCount) {
           changed = true;
           return { ...p, ordersCount: finishedCount };
@@ -300,7 +257,7 @@ const [pilots, setPilots] = useState(() => {
   const syncExternalOrders = async () => {
     if (currentShift?.status !== 'open') return;
     try {
-      const fetchedOrders = await supabaseService.fetchOrders();
+      const fetchedOrders = await supabaseService.fetchOrders(currentShift?.id);
       setOrders(prev => {
         const onlyNew = fetchedOrders.filter(fo => !prev.some(p => (p.originalId || p.id) === fo.originalId));
         return [...onlyNew, ...prev];
@@ -343,52 +300,73 @@ const [pilots, setPilots] = useState(() => {
   };
 
   /**
-   * فتح وردية جديدة: يُنشئ الوردية محلياً ويُرسلها لـ Supabase
+   * فتح وردية جديدة: يتحقق من وجود وردية بنفس التاريخ، يستأنفها أو يُنشئ جديدة
    * يعمل بدون إنترنت بفضل localStorage + pendingSync
    */
-  const openShift = () => {
-    if (currentShift) return;
-    const newShift = {
-      id: generateSafeId('shift'),
-      date: getLogicalShiftDateString(),
-      startTime: getSafeISOTime(),
-      status: 'open'
-    };
-    setCurrentShift(newShift);
-    supabaseService.createShift(newShift).catch(e => console.error('Shift create failed:', e));
-    // Reset pilots for new shift: Available, No Orders, Last Return = Now (Start of Queue)
-    setPilots(prev => prev.map(p => ({
-      ...p,
-      shiftStatus: 'closed',
-      state: 'available',
-      lastReturnTime: getSafeISOTime(),
-      balance: 0,
-      totalMinutes: 0,
-      ordersCount: 0,
-      shiftUsed: false,
-      lastOpenedAt: null
-    })));
-    logAction('SHIFT_OPEN', 'New shift started', 'Manager');
+  const openShift = async () => {
+    const logicalDate = getLogicalShiftDateString();
+    console.log(`[Shift] Checking shift for date: ${logicalDate}`);
+
+    try {
+      // التحقق من وجود وردية مفتوحة في Supabase
+      const existingShift = await supabaseService.getShiftByDate(logicalDate);
+
+      if (existingShift) {
+        console.log(`[Shift] Resuming existing shift: ${existingShift.id}`);
+        setCurrentShift({
+          id: existingShift.id,
+          date: existingShift.date,
+          startTime: existingShift.start_time,
+          status: 'open'
+        });
+        logAction('SHIFT_RESUME', `استئناف وردية ${logicalDate}`, 'Manager');
+        alert(`✅ تم استئناف الوردية المفتوحة بتاريخ ${logicalDate}`);
+        return;
+      }
+    } catch (e) {
+      console.warn('[Shift] Could not check existing shift:', e.message);
+    }
+
+    // إنشاء وردية جديدة
+    try {
+      const newId = generateUUID();
+      console.log(`[Shift] Creating new shift with ID: ${newId}`);
+
+      const newShift = {
+        id: newId,
+        date: logicalDate,
+        start_time: getSafeISOTime(),   // مهم: اسم العمود start_time
+        status: 'open',
+        total_orders: 0,
+        stats: {}
+      };
+
+      setCurrentShift(newShift);
+
+      const result = await supabaseService.createShift(newShift);
+
+      console.log('✅ Shift created successfully in Supabase');
+      logAction('SHIFT_OPEN', `فتح وردية جديدة - ${logicalDate}`, 'Manager');
+      alert('✅ تم فتح وردية جديدة بنجاح');
+
+    } catch (error) {
+      console.error('❌ Failed to create shift:', error);
+      alert(`❌ خطأ في فتح الوردية: ${error.message}`);
+    }
   };
 
   /**
    * إغلاق الوردية: يحفظ التقرير ويُرسله لـ Supabase
    * يعمل بشكل كامل offline ويتزامن لاحقاً
    */
-  const closeShift = (force = false) => {
+  const closeShift = async (force = false) => {
     if (!currentShift) return false;
 
-    const activeOrderStatuses = ['active', 'waiting_driver', 'driver_assigned', 'pending', 'pending_timer'];
-    const hasActiveOrders = orders.some(o => activeOrderStatuses.includes(o.status));
     const hasOpenPilotShifts = pilots.some(p => p.shiftStatus === 'open');
 
-    // If forced (4 AM), we allow closing even if pilots are open (they will be auto-closed by reset)
-    // But we still block if there are active orders (safety)
-    if (hasActiveOrders || (!force && hasOpenPilotShifts)) {
-      const msg = hasActiveOrders
-        ? '⚠️ لا يمكن إغلاق الوردية! يوجد طلبات نشطة.'
-        : '⚠️ لا يمكن إغلاق الوردية! يوجد طيارين لم يغلقوا شفتاتهم بعد.';
-      alert(msg);
+    // منع الإغلاق إذا كان هناك طيارين مفتوحين (إلا إذا تم الإجبار)
+    if (!force && hasOpenPilotShifts) {
+      alert('⚠️ لا يمكن إغلاق الوردية! يوجد طيارين لم يغلقوا شفتاتهم بعد.');
       return false;
     }
 
@@ -406,18 +384,101 @@ const [pilots, setPilots] = useState(() => {
       archivedOrders: orders
     };
 
-    setDailyReports(prev => [snapshot, ...prev]);
+    try {
+      // استدعاء RPC close_shift من خلال saveShiftReport
+      await supabaseService.saveShiftReport(snapshot);
 
-    // Automatic JSON Download removed to prevent browser errors
+      setDailyReports(prev => [snapshot, ...prev]);
 
+      logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
+      sendToN8N(snapshot, 'SHIFT_CLOSE');
 
-    logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}. File Generated.`, 'Manager');
-    sendToN8N(snapshot, 'SHIFT_CLOSE');
+      // Bulk reset all pilots in the Supabase delivery table
+      const allPilotIds = pilots.map(p => p.id);
+      if (allPilotIds.length > 0) {
+        supabaseService.resetAllPilots(allPilotIds);
+      }
 
-    setOrders([]);
-    setCurrentShift(null);
-    setPilots(prev => prev.map(p => ({ ...p, shiftStatus: 'closed', state: 'available', balance: 0, totalMinutes: 0, shiftUsed: false, lastOpenedAt: null })));
-    return true;
+      setOrders([]);
+      setCurrentShift(null);
+      setPilots(prev => prev.map(p => ({ ...p, shiftStatus: 'closed', state: 'available', balance: 0, totalMinutes: 0, ordersCount: 0, shiftUsed: false, lastOpenedAt: null })));
+      alert('✅ تم إغلاق الوردية بنجاح.');
+      return true;
+
+    } catch (error) {
+      console.error('❌ Failed to close shift:', error);
+      let errorMsg = 'حدث خطأ أثناء إغلاق الوردية.';
+      if (error.message && (error.message.includes('Too early') || error.message.includes('قبل الساعة 4:00'))) {
+        errorMsg = '⚠️ لا يمكن إغلاق الوردية قبل الساعة 4:00 صباحًا نهائيًا!';
+      } else if (error.message && (error.message.includes('Active orders') || error.message.includes('طلبات نشطة'))) {
+        errorMsg = '⚠️ لا يمكن إغلاق الوردية! يوجد طلبات نشطة.';
+      } else if (error.message) {
+        errorMsg = `❌ خطأ من السيرفر: ${error.message}`;
+      }
+      alert(errorMsg);
+      return false;
+    }
+  };
+
+  /**
+   * يرفع صورة الإيصال بعد إنشاء صف الطلب في Supabase
+   */
+  const uploadOrderReceipt = async (localOrderId, supabaseId) => {
+    const file = pendingReceiptFilesRef.current.get(localOrderId);
+    if (!file || !supabaseId) return;
+
+    setOrders(prev => prev.map(o =>
+      o.id === localOrderId ? { ...o, receiptUploadStatus: 'uploading' } : o
+    ));
+
+    try {
+      const url = await attachReceiptToOrder(supabaseId, file);
+      pendingReceiptFilesRef.current.delete(localOrderId);
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId
+          ? { ...o, paymentScreenshot: url, paymentProof: url, receiptUploadStatus: 'done' }
+          : o
+      ));
+    } catch (err) {
+      console.error('❌ Receipt upload failed:', err);
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId ? { ...o, receiptUploadStatus: 'failed' } : o
+      ));
+    }
+  };
+
+  const retryReceiptUpload = (localOrderId) => {
+    const order = orders.find(o => o.id === localOrderId);
+    if (order?.supabaseId) {
+      uploadOrderReceipt(localOrderId, order.supabaseId);
+    }
+  };
+
+  /**
+   * يحفظ طلب الكول سنتر/التابلت في Supabase أولاً ثم يرفع الإيصال بشكل غير متزامن
+   */
+  const persistManualOrderToSupabase = async (localOrderId, orderPayload) => {
+    const persistableSources = ['manual', 'talabat'];
+    if (!persistableSources.includes(orderPayload.source)) return;
+
+    try {
+      const row = await supabaseService.createManualOrder({
+        ...orderPayload,
+        shiftId: currentShift?.id
+      });
+
+      if (!row?.id) return;
+
+      setOrders(prev => prev.map(o =>
+        o.id === localOrderId ? { ...o, supabaseId: row.id } : o
+      ));
+
+      if (pendingReceiptFilesRef.current.has(localOrderId)) {
+        uploadOrderReceipt(localOrderId, row.id);
+      }
+    } catch (err) {
+      console.error('❌ Failed to persist manual order to Supabase:', err);
+    }
   };
 
   /**
@@ -443,22 +504,51 @@ const [pilots, setPilots] = useState(() => {
       return;
     }
 
-    // Generate unique ID if duplicate
-    const finalId = existingCount > 0 ? `${orderData.id}_2` : orderData.id;
+    // Generate unique ID using server-generated UUID
+    const finalId = generateUUID();
+
+    const items = orderData.items || [];
+    const itemsTotal = items.reduce((sum, item) => {
+      const price = Number(item.price || item.unit_price || 0);
+      const count = Number(item.count || item.quantity || 1);
+      return sum + (price * count);
+    }, 0);
+    const serviceFee = Number(orderData.serviceFee || orderData.service_fee || 0);
+    const deliveryFee = Number(orderData.deliveryFee || orderData.delivery_fee || 0);
+    const totalAmount = itemsTotal + deliveryFee + serviceFee;
+
+    const isCashOnDelivery = (!orderData.paymentMethod || orderData.paymentMethod === 'Cash' || String(orderData.paymentMethod).toLowerCase().includes('cash'));
+    const paidNow = isCashOnDelivery ? 0 : Number(orderData.paidNow || orderData.paid_now || 0);
+    const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
+
+    const { paymentReceiptFile, ...orderFields } = orderData;
 
     const newOrder = {
-      ...orderData,
+      ...orderFields,
       id: finalId,
       originalId: orderData.id, // Store original receipt No for display
       source: orderData.source || 'manual',
       status: 'pending_timer', // Initial status
       timestamp: getSafeISOTime(),
       shiftId: currentShift.id, // Link to Shift
-      logs: [{ time: getSafeISOTime(), action: 'CREATED', user: 'System' }] // Internal Order Log
+      logs: [{ time: getSafeISOTime(), action: 'CREATED', user: 'System' }], // Internal Order Log
+      total: totalAmount,
+      deliveryFee,
+      serviceFee,
+      paidNow,
+      remainingAmount,
+      receiptUploadStatus: paymentReceiptFile ? 'pending' : null
     };
+
+    if (paymentReceiptFile instanceof File) {
+      pendingReceiptFilesRef.current.set(finalId, paymentReceiptFile);
+    }
+
     setOrders(prev => [newOrder, ...prev]);
     logAction('ORDER_CREATE', `Order #${orderData.id} created`, 'Operator');
     sendToN8N(newOrder, 'ORDER_CREATE');
+
+    persistManualOrderToSupabase(finalId, { ...orderFields, id: orderData.id });
 
     setTimeout(() => {
       setOrders(currentOrders => currentOrders.map(o =>
@@ -477,7 +567,34 @@ const [pilots, setPilots] = useState(() => {
         return prev;
       }
 
-      return prev.map(o => o.id === oldId ? { ...o, ...updatedData } : o);
+      return prev.map(o => {
+        if (o.id === oldId) {
+          const merged = { ...o, ...updatedData };
+          const items = merged.items || [];
+          const itemsTotal = items.reduce((sum, item) => {
+            const price = Number(item.price || item.unit_price || 0);
+            const count = Number(item.count || item.quantity || 1);
+            return sum + (price * count);
+          }, 0);
+          const serviceFee = Number(merged.serviceFee || merged.service_fee || 0);
+          const deliveryFee = Number(merged.deliveryFee || merged.delivery_fee || 0);
+          const totalAmount = itemsTotal + deliveryFee + serviceFee;
+
+          const isCashOnDelivery = (!merged.paymentMethod || merged.paymentMethod === 'Cash' || String(merged.paymentMethod).toLowerCase().includes('cash'));
+          const paidNow = isCashOnDelivery ? 0 : Number(merged.paidNow || merged.paid_now || 0);
+          const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
+
+          return {
+            ...merged,
+            total: totalAmount,
+            deliveryFee,
+            serviceFee,
+            paidNow,
+            remainingAmount
+          };
+        }
+        return o;
+      });
     });
     logAction('ORDER_UPDATE', `Order #${oldId} updated (New ID: ${updatedData.id})`, 'Supervisor');
   };
@@ -529,24 +646,52 @@ const [pilots, setPilots] = useState(() => {
   // Step 2: Assign Driver (Locks Order, Ready to Print)
   const assignPilot = (orderId, pilotId) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order || ['driver_assigned', 'active', 'completed', 'cancelled', 'failed_delivery'].includes(order.status)) return;
+    if (!order || ['driver_assigned', 'active', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(order.status)) return;
+
+    const pilot = pilots.find(p => String(p.id) === String(pilotId));
+    if (!pilot) {
+      console.error(`Pilot ${pilotId} not found.`);
+      alert(`⚠️ خطأ: لم يتم العثور على الطيار!`);
+      return;
+    }
+
+    if (pilot.state !== 'available') {
+      const errorMsg = `Cannot assign order to pilot ${pilot.name} because their state is '${pilot.state}'.`;
+      console.error(errorMsg);
+      alert(`⚠️ خطأ: الطيار ${pilot.name} غير متاح حالياً (حالة الطيار: ${pilot.state})!`);
+      return;
+    }
+
+    const safeDeliveryId = !isNaN(Number(pilotId)) ? Number(pilotId) : null;
 
     setOrders(prev => prev.map(o =>
       o.id === orderId
-        ? { ...o, status: 'driver_assigned', pilotId, assignedAt: getSafeISOTime() }
+        ? { ...o, status: 'driver_assigned', pilotId, deliveryId: safeDeliveryId, assignedAt: getSafeISOTime() }
         : o
     ));
-    const pilotName = pilots.find(p => String(p.id) === String(pilotId))?.name || 'Unknown';
+    const pilotName = pilot.name || 'Unknown';
     logAction('ORDER_ASSIGN', `Order #${orderId} assigned to ${pilotName}`, 'Supervisor');
     if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'driver_assigned', null, { pilot_id: String(pilotId), pilot_name: pilotName });
+      updateExternalOrderStatus(order.supabaseId, 'driver_assigned', null, {
+        pilot_id: String(pilotId),
+        pilot_name: pilotName,
+        delivery_id: safeDeliveryId
+      });
     }
+
+    // Set pilot's state to 'busy' or 'on_delivery' (using 'busy')
+    setPilots(prev => prev.map(p =>
+      String(p.id) === String(pilotId)
+        ? { ...p, state: 'busy' }
+        : p
+    ));
+    supabaseService.updatePilotState(pilotId, { state: 'busy' });
   };
 
   // Step 3: Start Delivery (Pilot Leaves -> Status Out)
   const startDelivery = (orderId) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order || !order.pilotId || order.status === 'active' || order.status === 'completed') return;
+    if (!order || !(order.deliveryId || order.pilotId) || order.status === 'active' || order.status === 'completed' || order.status === 'delivered') return;
 
     setOrders(prev => prev.map(o =>
       o.id === orderId
@@ -556,13 +701,13 @@ const [pilots, setPilots] = useState(() => {
 
     // Mark Pilot as OUT
     setPilots(prev => prev.map(p =>
-      String(p.id) === String(order.pilotId)
-        ? { ...p, state: 'out' }
+      String(p.id) === String(order.deliveryId || order.pilotId)
+        ? { ...p, state: 'on_delivery' }
         : p
     ));
 
     if (order.supabaseId) {
-      supabaseService.updatePilotState(order.pilotId, { state: 'out' });
+      supabaseService.updatePilotState(order.deliveryId || order.pilotId, { state: 'on_delivery' });
     }
 
     logAction('DELIVERY_START', `Order #${orderId} out for delivery`, 'System');
@@ -577,41 +722,43 @@ const [pilots, setPilots] = useState(() => {
    */
   const completeOrder = (orderId) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order || order.status === 'completed') return;
+    if (!order || order.status === 'completed' || order.status === 'delivered') return;
 
     const nowTime = getSafeISOTime();
     setOrders(prev => prev.map(o =>
       o.id === orderId
-        ? { ...o, status: 'completed', endTime: nowTime, deliveredAt: nowTime }
+        ? { ...o, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }
         : o
     ));
 
-    // Return Pilot to Queue (Last Return Time = Now) only if they have no other active orders left
-    if (order.pilotId) {
-      const otherActive = orders.some(o => String(o.pilotId) === String(order.pilotId) && o.status === 'active' && o.id !== orderId);
-      const nextState = otherActive ? 'out' : 'available';
-
+    // Return Pilot to Queue (Last Return Time = Now)
+    const pilotIdToUse = order.deliveryId || order.pilotId;
+    if (pilotIdToUse) {
       setPilots(prev => prev.map(p => {
-        if (String(p.id) === String(order.pilotId)) {
-          const returnTimeUpdates = nextState === 'available' ? { lastReturnTime: nowTime } : {};
+        if (String(p.id) === String(pilotIdToUse)) {
           return {
             ...p,
-            state: nextState,
-            ...returnTimeUpdates
+            state: 'available',
+            lastReturnTime: nowTime,
+            ordersCount: (p.ordersCount || 0) + 1
           };
         }
         return p;
       }));
 
-      const returnUpdates = nextState === 'available' 
-        ? { state: 'available', last_return_time: nowTime }
-        : { state: 'out' };
-      supabaseService.updatePilotState(order.pilotId, returnUpdates);
+      const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
+      const returnUpdates = {
+        state: 'available',
+        last_return_time: nowTime,
+        orders_count: (targetPilot ? (targetPilot.ordersCount || 0) : 0) + 1
+      };
+
+      supabaseService.updatePilotState(pilotIdToUse, returnUpdates);
     }
     logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
-    sendToN8N({ ...order, status: 'completed', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
+    sendToN8N({ ...order, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
     if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'completed');
+      updateExternalOrderStatus(order.supabaseId, 'delivered');
     }
   };
 
@@ -627,12 +774,13 @@ const [pilots, setPilots] = useState(() => {
     ));
 
     // Return Pilot to Queue (Last Return Time = Now) only if they have no other active orders left
-    if (order.pilotId) {
-      const otherActive = orders.some(o => String(o.pilotId) === String(order.pilotId) && o.status === 'active' && o.id !== orderId);
+    const pilotIdToUse = order.deliveryId || order.pilotId;
+    if (pilotIdToUse) {
+      const otherActive = orders.some(o => String(o.deliveryId || o.pilotId) === String(pilotIdToUse) && o.status === 'active' && o.id !== orderId);
       const nextState = otherActive ? 'out' : 'available';
 
       setPilots(prev => prev.map(p => {
-        if (String(p.id) === String(order.pilotId)) {
+        if (String(p.id) === String(pilotIdToUse)) {
           const returnTimeUpdates = nextState === 'available' ? { lastReturnTime: nowTime } : {};
           return {
             ...p,
@@ -643,10 +791,20 @@ const [pilots, setPilots] = useState(() => {
         return p;
       }));
 
-      const returnUpdates = nextState === 'available' 
+      const returnUpdates = nextState === 'available'
         ? { state: 'available', last_return_time: nowTime }
         : { state: 'out' };
-      supabaseService.updatePilotState(order.pilotId, returnUpdates);
+
+      const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
+      if (targetPilot) {
+        const currentActiveSession = (targetPilot.shiftStatus === 'open' && targetPilot.lastOpenedAt)
+          ? calculateDelayMinutes(targetPilot.lastOpenedAt)
+          : 0;
+        returnUpdates.total_minutes = (targetPilot.totalMinutes || 0) + currentActiveSession;
+        returnUpdates.orders_count = orders.filter(o => String(o.pilotId) === String(pilotIdToUse) && o.status === 'completed' && o.id !== orderId).length;
+      }
+
+      supabaseService.updatePilotState(order.pilotId || pilotIdToUse, returnUpdates);
     }
     logAction('DELIVERY_FAIL', `Order #${orderId} failed delivery. Reason: ${reason}`, 'Supervisor');
     sendToN8N({ ...order, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }, 'ORDER_FAIL');
@@ -666,8 +824,11 @@ const [pilots, setPilots] = useState(() => {
     const newStatus = pilot.shiftStatus === 'open' ? 'closed' : 'open';
 
     if (newStatus === 'open' && pilot.shiftUsed) {
-      alert('⚠️ هذا الطيار قام بفتح وردية مسبقاً في هذا اليوم. لا يمكن فتحه مرة أخرى.');
-      return;
+      const password = prompt('⚠️ الطيار فتح وردية مسبقاً! للضرورة القصوى أدخل كلمة سر الأدمن لفتحه مرة أخرى:');
+      if (password !== '8080') {
+        alert('❌ كلمة السر غير صحيحة، تم إلغاء العملية.');
+        return;
+      }
     }
 
     let sessionMinutes = 0;
@@ -678,11 +839,11 @@ const [pilots, setPilots] = useState(() => {
     // Call Supabase to update status
     await supabaseService.updatePilotState(pilotId, {
       shift_status: newStatus,
-      ...(newStatus === 'open' ? { 
-        state: 'available', 
+      ...(newStatus === 'open' ? {
+        state: 'available',
         last_return_time: getSafeISOTime(),
-        last_opened_at: getSafeISOTime() 
-      } : { 
+        last_opened_at: getSafeISOTime()
+      } : {
         state: 'off',
         last_opened_at: null,
         shift_used: true,
@@ -723,7 +884,7 @@ const [pilots, setPilots] = useState(() => {
    * يُستدعى في كل render للـ Dashboard
    */
   const activeStats = () => {
-    const finishedOrders = orders.filter(o => o.status === 'completed');
+    const finishedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered');
     const failedOrders = orders.filter(o => o.status === 'failed_delivery');
 
     const pilotPerformance = pilots.map(p => {
@@ -751,7 +912,7 @@ const [pilots, setPilots] = useState(() => {
       [...pOrders, ...pFailed].forEach(o => {
         const fee = Number(o.deliveryFee) || 0;
         const source = o.source || (o.type === 'trip' ? 'external' : o.type === 'talabat' || o.type === 'external' ? 'talabat' : 'manual');
-        const isCompleted = o.status === 'completed';
+        const isCompleted = o.status === 'completed' || o.status === 'delivered';
 
         if (source === 'external') {
           if (isCompleted) {
@@ -779,7 +940,7 @@ const [pilots, setPilots] = useState(() => {
         }
       });
 
-      const attendancePay = Math.floor(totalMinutes / 36) * 15;
+      const attendancePay = Math.floor(capShiftMinutes(totalMinutes) / 35) * 15;
 
       return {
         ...p,
@@ -838,7 +999,7 @@ const [pilots, setPilots] = useState(() => {
         id: `RES-${row.id}`,
         timestamp: row.created_at || getSafeISOTime(),
         status: 'pending',
-        deposit: resData.deposit || 50,
+        deposit: resData.deposit || 105,
         ...resData
       };
       // Optimistic update
@@ -852,7 +1013,11 @@ const [pilots, setPilots] = useState(() => {
           id: tempId,
           timestamp: getSafeISOTime(),
           status: 'pending',
+done
           deposit: resData.deposit || 50,
+=======
+          deposit: resData.deposit || 105,
+main
           ...resData
         };
         setReservations(prev => [newRes, ...prev]);
@@ -939,15 +1104,19 @@ const [pilots, setPilots] = useState(() => {
     return { success: false, error: 'تم الإلغاء' };
   };
 
+  const computedStats = useMemo(() => activeStats(), [orders, pilots, reservations, currentShift]);
+
   return (
     <AppContext.Provider value={{
       orders, pilots, currentShift, dailyReports, auditLogs, reservations,
       userRole, setUserRole, // 🔐 تصدير بيانات الدور لباقي السيستم
       isThermalPrintMode, setIsThermalPrintMode,
       openShift, closeShift, addOrder, deleteOrder, cancelOrder, confirmOrder, completeOrder, failDelivery, togglePilotShift, updateOrder, addNewPilot, deletePilot,
+      retryReceiptUpload,
       addReservation, confirmReservation, deleteReservation,
       isShiftOpen: currentShift?.status === 'open',
-      activeStats: activeStats(),
+      activeStats: computedStats,
+      recalcStats: activeStats,     // expose raw function for manual recalc if needed
       assignPilot, startDelivery, getSuggestedPilot,
       sendToN8N, syncExternalOrders
     }}>

@@ -7,28 +7,36 @@
 export const repairOrder = (order) => {
     if (!order) return null;
 
-    // 💰 معالجة الماليات (Financial Healing)
-    const rawTotal = order.payment?.amount_total || order.totals?.total || 0;
-    const rawDelivery = order.payment?.delivery_fee || order.totals?.delivery_fee || 0;
+    // 🍔 معالجة الأصناف (Items Healing)
+    const items = Array.isArray(order.items) ? order.items : [];
+    const safeItems = items.map(item => ({
+        name: item.name || "صنف غير معروف",
+        count: Number(item.quantity || item.count || item.qty || 1) || 1,
+        price: Number(item.price || item.unit_price || 0) || 0,
+        menuItemId: item.menuItemId || item.menu_item_id || null
+    }));
 
-    const safeTotal = isNaN(Number(rawTotal)) ? 0 : Number(rawTotal);
+    // 💰 معالجة الماليات (Financial Healing)
+    const itemsTotal = safeItems.reduce((sum, item) => sum + (item.price * item.count), 0);
+    const rawDelivery = order.payment?.delivery_fee || order.totals?.delivery_fee || order.deliveryFee || order.delivery_fee || 0;
+    const rawService = order.payment?.service_fee || order.totals?.service_fee || order.serviceFee || order.service_fee || 0;
+
     const safeDelivery = isNaN(Number(rawDelivery)) ? 0 : Number(rawDelivery);
+    const safeService = isNaN(Number(rawService)) ? 0 : Number(rawService);
+    const computedTotal = itemsTotal + safeDelivery + safeService;
+
+    const paymentMethodStr = order.payment?.method || order.paymentMethod || 'Cash';
+    const isCashOnDelivery = (!paymentMethodStr || paymentMethodStr === 'Cash' || String(paymentMethodStr).toLowerCase().includes('cash'));
+    const paidNow = isCashOnDelivery ? 0 : Number(order.payment?.paid_now || order.totals?.paid_now || order.paidNow || 0);
+    const remainingAmount = isCashOnDelivery ? computedTotal : (computedTotal - paidNow);
 
     // 👤 معالجة بيانات العميل (Customer Healing)
     const customer = order.customer || {};
     const safeCustomer = {
         name: (customer.name || customer.full_name || "عميل غير معروف").trim(),
         phone: customer.phone_primary || customer.phone || customer.mobile || "غير مسجل",
-        address: customer.address || "غير محدد - استلام فرع"
+        address: customer.address || "غير مححدد - استلام فرع"
     };
-
-    // 🍔 معالجة الأصناف (Items Healing)
-    const items = Array.isArray(order.items) ? order.items : [];
-    const safeItems = items.map(item => ({
-        name: item.name || "صنف غير معروف",
-        count: Number(item.quantity || item.count || item.qty || 1) || 1,
-        price: Number(item.price || 0) || 0
-    }));
 
     // تجميع الوصف النصي للأصناف
     const safeItemsDescription = safeItems.length > 0
@@ -40,11 +48,14 @@ export const repairOrder = (order) => {
         customerName: safeCustomer.name,
         phone: safeCustomer.phone,
         area: safeCustomer.address,
-        total: safeTotal,
+        total: computedTotal,
         deliveryFee: safeDelivery,
+        serviceFee: safeService,
+        paidNow,
+        remainingAmount,
         items: safeItems,
         itemsDescription: safeItemsDescription,
-        paymentMethod: order.payment?.method || 'Cash',
+        paymentMethod: paymentMethodStr,
         status: order.status || 'pending',
         timestamp: order.created_at || new Date().toISOString(),
         source: order.source || 'online' // 🌐 تحديد المصدر (أونلاين افتراضياً للطلبات الخارجية)

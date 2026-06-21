@@ -261,7 +261,7 @@ button {
 @media (min-width: 1025px) {
   /* تقسيم الشاشة - 3 أعمدة في الشاشات الكبيرة */
   .order-card-grid {
-    grid-template-columns: repeat(3, 1fr) !important;
+    grid-template-columns: repeat(4, 1fr) !important;
   }
   
   .layout {

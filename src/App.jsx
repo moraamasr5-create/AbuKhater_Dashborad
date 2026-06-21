@@ -7,6 +7,38 @@ import FeedbackView from './components/feedback/FeedbackView';
 import Login from './components/auth/Login';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
+import { supabase } from './services/supabase/supabaseClient';
+import { uploadReservationReceipt } from './services/storageService';
+
+export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
+  if (file.size > 5 * 1024 * 1024) {
+    alert("حجم الصورة كبير جداً (أقصى حجم 5MB).");
+    return null;
+  }
+
+  if (!navigator.onLine || !supabase) {
+    alert("لا يوجد اتصال بالإنترنت لرفع الصورة. يرجى التحقق من اتصالك.");
+    return null;
+  }
+
+  try {
+    const publicUrl = folderPath === 'reservations'
+      ? await uploadReservationReceipt(file)
+      : null;
+
+    if (publicUrl) {
+      console.log("[Image] Uploaded to Supabase Storage");
+      return publicUrl;
+    }
+
+    alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
+    return null;
+  } catch (err) {
+    console.error("[Image] Error uploading to Supabase:", err);
+    alert("حدث خطأ أثناء رفع الصورة. يرجى التحقق من اتصالك والمحاولة مرة أخرى.");
+    return null;
+  }
+};
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
 
@@ -646,19 +678,109 @@ const SIMPLE_MENU = {
   'مشروبات': ['بيبسي', 'سفن اب', 'مياه معدنية', 'عصير']
 };
 
+// Helper requested to sync pricing, assumes global existence or defaults to base tier logic
+const getDeliveryFee = typeof window.getDeliveryFee === 'function' ? window.getDeliveryFee : (routeDistanceKm) => {
+  if (routeDistanceKm <= 3) return 20;
+  if (routeDistanceKm <= 7) return 30;
+  if (routeDistanceKm <= 10) return 45;
+  if (routeDistanceKm <= 15) return 70;
+  return 80;
+};
+
 const ManualOrderForm = ({ onClose, initialData }) => {
   const { addOrder, sendToN8N } = useApp();
+  const [isCompressing, setIsCompressing] = useState(false);
   const [formData, setFormData] = useState(initialData?.formData || {
     receiptNo: '', customerName: '', phone: '', area: '',
     lat: null, lng: null, zone: null, distance: 0,
+    route_distance_km: null, route_duration_minutes: null, calculated_by: 'manual',
     customArea: '', total: 0, deliveryFee: 20, itemsDescription: '',
-    paymentMethod: 'Cash', paymentProof: null
+    paymentMethod: 'Cash', paymentReceiptFile: null, paymentProofPreview: null
   });
   const [selectedItems, setSelectedItems] = useState(initialData?.selectedItems || {});
   const [activeCategory, setActiveCategory] = useState('سندوتشات');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState('');
   const [showAreaSuggestions, setShowAreaSuggestions] = useState(false);
+  const [onlineSuggestions, setOnlineSuggestions] = useState([]);
+  const [isSearchingOnline, setIsSearchingOnline] = useState(false);
+
+  // Helper for online search
+  const handleOnlineSearch = async (query) => {
+    setAreaSearch(query);
+    setShowAreaSuggestions(true);
+    
+    if (!navigator.onLine || !query) {
+      setOnlineSuggestions([]);
+      return;
+    }
+
+    setIsSearchingOnline(true);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=5&viewbox=31.1,30.0,31.5,30.3&bounded=1`);
+      if (res.ok) {
+        const data = await res.json();
+        setOnlineSuggestions(data);
+      } else {
+        setOnlineSuggestions([]);
+      }
+    } catch (e) {
+      console.error("Nominatim search failed:", e);
+    }
+    setIsSearchingOnline(false);
+  };
+
+  const selectOnlineAddress = async (place) => {
+    const lat = parseFloat(place.lat);
+    const lon = parseFloat(place.lon);
+    const mainStreet = place.display_name.split(',')[0];
+    setAreaSearch(mainStreet);
+    setShowAreaSuggestions(false);
+    
+    try {
+      // OSRM Routing
+      const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${RESTAURANT_COORDS.lng},${RESTAURANT_COORDS.lat};${lon},${lat}?overview=false`);
+      if (osrmRes.ok) {
+        const osrmData = await osrmRes.json();
+        if (osrmData.code === 'Ok') {
+          const routeDistanceKm = +(osrmData.routes[0].distance / 1000).toFixed(2);
+          const routeDurationMin = Math.ceil(osrmData.routes[0].duration / 60);
+          const fee = getDeliveryFee(routeDistanceKm);
+          
+          setFormData({
+            ...formData,
+            area: mainStreet,
+            customArea: place.display_name,
+            lat: lat,
+            lng: lon,
+            distance: routeDistanceKm, 
+            route_distance_km: routeDistanceKm,
+            route_duration_minutes: routeDurationMin,
+            deliveryFee: fee,
+            calculated_by: 'osrm'
+          });
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("OSRM routing failed:", e);
+    }
+    
+    // Fallback if OSRM fails
+    const haversineDist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, lat, lon);
+    setFormData({
+      ...formData,
+      area: mainStreet,
+      customArea: place.display_name,
+      lat: lat,
+      lng: lon,
+      distance: haversineDist,
+      route_distance_km: haversineDist,
+      route_duration_minutes: Math.ceil(haversineDist * 3),
+      deliveryFee: getDeliveryFee(haversineDist),
+      calculated_by: 'haversine_fallback'
+    });
+  };
 
   const isOutsideRadius = formData.distance > 15;
 
@@ -788,12 +910,24 @@ const ManualOrderForm = ({ onClose, initialData }) => {
       id: formData.receiptNo, type: 'restaurant', customerName: formData.customerName || "عميل مطعم",
       phone: formData.phone, area: formData.area || "المطرية",
       lat: formData.lat, lng: formData.lng,
+      latitude: formData.lat, longitude: formData.lng, // added as requested
       total: 0, // Removed per request
       deliveryFee: Number(formData.deliveryFee),
+      delivery_fee: Number(formData.deliveryFee), // added as requested
       source: 'manual', // 📞 طلب داخلي (كول سنتر)
+      route_distance_km: formData.route_distance_km,
+      route_duration_minutes: formData.route_duration_minutes,
+      calculated_by: formData.calculated_by,
       itemsDescription: itemsList.map(i => `${i.count}x ${i.name}`).join(', ') + (formData.itemsDescription ? ` (${formData.itemsDescription})` : ''),
       items: itemsList, itemsCount: itemsList.reduce((acc, curr) => acc + curr.count, 0),
-      paymentMethod: formData.paymentMethod, paymentProof: formData.paymentProof
+      paymentMethod: formData.paymentMethod,
+      paymentReceiptFile: formData.paymentReceiptFile,
+      status: formData.status || 'pending',
+      reservation_date: formData.reservation_date || null,
+      reservation_time: formData.reservation_time || null,
+      guests_count: formData.guests_count || null,
+      location_type: formData.location_type || null,
+      notes: formData.notes || null,
     });
     onClose();
   };
@@ -828,14 +962,12 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 type="text"
                 placeholder="اكتب اسم المنطقة (مثلاً: المطرية)..."
                 value={areaSearch}
-                onChange={e => {
-                  setAreaSearch(e.target.value);
-                  setShowAreaSuggestions(true);
-                }}
+                onChange={e => handleOnlineSearch(e.target.value)}
                 onFocus={() => setShowAreaSuggestions(true)}
                 style={{ background: 'var(--bg-dark)', color: 'white', padding: '14px', borderRadius: '12px', width: '100%', border: '1px solid var(--border)' }}
               />
               <MapPin size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--primary)', opacity: 0.5 }} />
+              {isSearchingOnline && <div style={{ position: 'absolute', left: '40px', top: '50%', transform: 'translateY(-50%)', fontSize: '0.7rem', color: 'var(--accent)' }}>جاري البحث...</div>}
             </div>
 
             {showAreaSuggestions && areaSearch && (
@@ -845,46 +977,70 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 border: '1px solid var(--border)', background: '#111827',
                 boxShadow: '0 10px 25px rgba(0,0,0,0.5)'
               }}>
-                {[1, 2, 3, 4].map(zoneNum => {
-                  const zoneAreas = AREAS_METADATA.filter(a => a.zone === zoneNum && a.name.includes(areaSearch));
-                  if (zoneAreas.length === 0) return null;
-                  return (
-                    <div key={zoneNum}>
-                      <div style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)' }}>
-                        النطاق {zoneNum} (Zone {zoneNum})
-                      </div>
-                      {zoneAreas.map(area => {
-                        const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, area.lat, area.lng);
-                        return (
-                          <div
-                            key={area.name}
-                            onClick={() => {
-                              setFormData({
-                                ...formData,
-                                area: area.name,
-                                lat: area.lat,
-                                lng: area.lng,
-                                zone: area.zone,
-                                distance: dist,
-                                deliveryFee: area.fee
-                              });
-                              setAreaSearch(area.name);
-                              setShowAreaSuggestions(false);
-                            }}
-                            className="hover-scale"
-                            style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}
-                          >
-                            <div>
-                              <span style={{ fontWeight: 'bold' }}>{area.name}</span>
-                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '8px' }}>({dist} كم)</span>
+                {/* Online Nominatim Suggestions */}
+                {navigator.onLine && onlineSuggestions.length > 0 && (
+                  <div style={{ marginBottom: '10px' }}>
+                     <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '6px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#3b82f6', borderBottom: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                        🌐 نتائج البحث المباشر
+                     </div>
+                     {onlineSuggestions.map(place => (
+                       <div
+                         key={place.place_id}
+                         onClick={() => selectOnlineAddress(place)}
+                         className="hover-scale"
+                         style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '4px' }}
+                       >
+                         <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{place.display_name.split(',')[0]}</span>
+                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{place.display_name}</span>
+                       </div>
+                     ))}
+                  </div>
+                )}
+                
+                {/* Fallback Local Areas */}
+                <div style={{ opacity: navigator.onLine ? 0.7 : 1 }}>
+                  {[1, 2, 3, 4].map(zoneNum => {
+                    const zoneAreas = AREAS_METADATA.filter(a => a.zone === zoneNum && a.name.includes(areaSearch));
+                    if (zoneAreas.length === 0) return null;
+                    return (
+                      <div key={zoneNum}>
+                        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '6px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: 'var(--primary)' }}>
+                          النطاق {zoneNum} (Zone {zoneNum}) {navigator.onLine && '- بحث يدوي'}
+                        </div>
+                        {zoneAreas.map(area => {
+                          const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, area.lat, area.lng);
+                          return (
+                            <div
+                              key={area.name}
+                              onClick={() => {
+                                setFormData({
+                                  ...formData,
+                                  area: area.name,
+                                  lat: area.lat,
+                                  lng: area.lng,
+                                  zone: area.zone,
+                                  distance: dist,
+                                  deliveryFee: area.fee,
+                                  calculated_by: 'manual'
+                                });
+                                setAreaSearch(area.name);
+                                setShowAreaSuggestions(false);
+                              }}
+                              className="hover-scale"
+                              style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between' }}
+                            >
+                              <div>
+                                <span style={{ fontWeight: 'bold' }}>{area.name}</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginLeft: '8px' }}>({dist} كم)</span>
+                              </div>
+                              <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{area.fee} ج.م</span>
                             </div>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--accent)' }}>{area.fee} ج.م</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>
@@ -893,11 +1049,19 @@ const ManualOrderForm = ({ onClose, initialData }) => {
           {formData.area && (
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(79, 70, 229, 0.1)', border: '1px solid var(--primary)', color: 'var(--primary)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Ruler size={14} /> {formData.distance} كم من المطعم
+                <Ruler size={14} /> {formData.distance} كم
               </div>
-              <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '0.75rem' }}>
-                نطاق التوصيل: {formData.zone}
-              </div>
+              
+              {formData.calculated_by === 'osrm' ? (
+                <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#3b82f6', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={14} /> وقت الرحلة: ~{formData.route_duration_minutes} دقيقة
+                </div>
+              ) : (
+                <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid var(--accent)', color: 'var(--accent)', fontSize: '0.75rem' }}>
+                  نطاق التوصيل: {formData.zone || 'يدوي'}
+                </div>
+              )}
+
               {isOutsideRadius && (
                 <div style={{ width: '100%', padding: '8px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: '8px', marginTop: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <ShieldAlert size={18} /> خارج نطاق التوصيل (أكثر من 15كم)
@@ -964,20 +1128,29 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 onChange={(e) => {
                   const file = e.target.files[0];
                   if (file) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => setFormData({ ...formData, paymentProof: reader.result });
-                    reader.readAsDataURL(file);
+                    if (formData.paymentProofPreview) {
+                      URL.revokeObjectURL(formData.paymentProofPreview);
+                    }
+                    setFormData({
+                      ...formData,
+                      paymentReceiptFile: file,
+                      paymentProofPreview: URL.createObjectURL(file)
+                    });
                   }
                 }}
+                disabled={isCompressing}
                 style={{ fontSize: '0.8rem', color: 'white', cursor: 'pointer' }}
               />
-              {formData.paymentProof && (
+              {formData.paymentProofPreview && (
                 <img
-                  src={formData.paymentProof}
-                  alt="Success"
+                  src={formData.paymentProofPreview}
+                  alt="معاينة الإيصال"
                   style={{ marginTop: '12px', width: '100%', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '2px solid var(--accent)' }}
                 />
               )}
+              <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                سيتم رفع الصورة تلقائياً بعد حفظ الطلب
+              </p>
             </div>
           )}
 
@@ -985,19 +1158,20 @@ const ManualOrderForm = ({ onClose, initialData }) => {
             <button
               onClick={handleSubmit}
               disabled={
+                isCompressing ||
                 isOutsideRadius ||
                 !formData.receiptNo ||
                 !formData.area ||
-                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)
+                ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)
               }
               className="btn-primary"
               style={{
                 flex: 2, justifyContent: 'center', height: '50px', fontSize: '1.1rem',
-                opacity: (isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)) ? 0.5 : 1,
-                cursor: (isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentProof)) ? 'not-allowed' : 'pointer'
+                opacity: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)) ? 0.5 : 1,
+                cursor: (isCompressing || isOutsideRadius || !formData.receiptNo || !formData.area || ((formData.paymentMethod === 'vodafone_cash' || formData.paymentMethod === 'instapay') && !formData.paymentReceiptFile)) ? 'not-allowed' : 'pointer'
               }}
             >
-              حفظ الأوردر
+              {isCompressing ? "جاري المعالجة..." : "حفظ الأوردر"}
             </button>
             <button onClick={onClose} style={{ flex: 1, background: 'rgba(255,255,255,0.05)', color: 'white' }}>إلغاء</button>
           </div>
@@ -1152,7 +1326,7 @@ const ReservationModal = ({ onClose }) => {
                 ))}
               </div>
               <input required style={{ background: 'var(--bg-dark)', color: 'white', padding: '14px', borderRadius: '12px', border: '1px solid var(--border)' }} placeholder="اسم العميل" value={formData.customerName} onChange={e => setFormData({ ...formData, customerName: e.target.value })} />
-              <input required style={{ background: 'var(--bg-dark)', color: 'white', padding: '14px', borderRadius: '12px', border: '1px solid var(--border)' }} placeholder="رقم الهاتف" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
+              <input required style={{ background: 'var(--bg-dark)', color: 'white', padding: '14px', borderRadius: '12px', border: '1px solid var(--border)' }} placeholder="رقم الهاتف" value={formData.phone} maxLength={11} onChange={e => { if (e.target.value.length <= 11) setFormData({ ...formData, phone: e.target.value }); }} />
             </>
           ) : (
             <>
@@ -1178,15 +1352,20 @@ const ReservationModal = ({ onClose }) => {
 
 const ConfirmPaymentModal = ({ res, onClose }) => {
   const { confirmReservation } = useApp();
-  const [refNum, setRefNum] = useState('');
-  const [proof, setProof] = useState(null);
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [refNum, setRefNum] = useState(res.ref_number || '');
+  const existingProof = res.payment_proof_url || res.paymentProof;
+  const [proof, setProof] = useState(existingProof || null);
 
-  const handleFile = (e) => {
+  const handleFile = async (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setProof(reader.result);
-      reader.readAsDataURL(file);
+      setIsCompressing(true);
+      const processed = await processImageUpload(file, 'payment-screenshots', 'reservations');
+      if (processed) {
+        setProof(processed);
+      }
+      setIsCompressing(false);
     }
   };
 
@@ -1203,18 +1382,20 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div>
             <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>رقم التحويل / المرجع</label>
-            <input required className="glass-card" style={{ width: '100%', padding: '12px', color: 'white' }} placeholder="أدخل الرقم هنا..." value={refNum} onChange={e => setRefNum(e.target.value)} />
+            <input required={!existingProof} className="glass-card" style={{ width: '100%', padding: '12px', color: 'white' }} placeholder="أدخل الرقم هنا..." value={refNum} onChange={e => setRefNum(e.target.value)} />
           </div>
 
           <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px dashed var(--border)', textAlign: 'center' }}>
             <p style={{ fontSize: '0.85rem', marginBottom: '10px' }}>📸 صورة إيصال التحويل</p>
-            <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
+            {!existingProof && (
+              <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
+            )}
             {proof && <img src={proof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
-            <button type="submit" className="btn-primary" style={{ flex: 2, background: 'var(--success)', justifyContent: 'center' }}>تأكيد نهائي</button>
-            <button type="button" onClick={onClose} style={{ flex: 1, background: 'transparent', border: '1px solid var(--border)', color: 'white', cursor: 'pointer', borderRadius: '8px' }}>رجوع</button>
+            <button type="submit" disabled={isCompressing || (!proof && !existingProof)} className="btn-primary" style={{ flex: 2, background: 'var(--success)', justifyContent: 'center', opacity: (isCompressing || (!proof && !existingProof)) ? 0.5 : 1 }}>{isCompressing ? "جاري المعالجة..." : "تأكيد نهائي"}</button>
+            <button type="button" onClick={onClose} disabled={isCompressing} style={{ flex: 1, background: 'transparent', border: '1px solid var(--border)', color: 'white', cursor: 'pointer', borderRadius: '8px', opacity: isCompressing ? 0.5 : 1 }}>رجوع</button>
           </div>
         </form>
       </div>

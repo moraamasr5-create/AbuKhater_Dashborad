@@ -26,8 +26,11 @@ const getZone = (dist) => {
     return { id: 'Out', color: '#ef4444' };
 };
 
+const getOrderPaymentScreenshot = (order) =>
+    order.paymentScreenshot || order.screenshot || order.image || order.attachment || order.paymentProof || null;
+
 const OrderInbox = ({ onReedit }) => {
-    const { orders, pilots, confirmOrder, deleteOrder, cancelOrder, isShiftOpen, assignPilot, startDelivery, completeOrder, failDelivery, getSuggestedPilot, syncExternalOrders, userRole, isThermalPrintMode } = useApp();
+    const { orders, pilots, confirmOrder, deleteOrder, cancelOrder, isShiftOpen, assignPilot, startDelivery, completeOrder, failDelivery, getSuggestedPilot, syncExternalOrders, userRole, isThermalPrintMode, retryReceiptUpload } = useApp();
     const handleCancel = (id) => {
         const reason = prompt('هل أنت متأكد من إلغاء الطلب؟ يرجى إدخال سبب الإلغاء:');
         if (reason) cancelOrder(id, reason);
@@ -168,6 +171,8 @@ const OrderInbox = ({ onReedit }) => {
                                 const timeLeft = auditTimers[order.id] || 0;
                                 const suggestedPilot = order.status === 'waiting_driver' ? getSuggestedPilot() : null;
                                 const isOnline = order.source === 'online';
+                                const paymentScreenshot = getOrderPaymentScreenshot(order);
+                                const receiptUploadStatus = order.receiptUploadStatus;
 
                                 const normalized = isOnline ? {
                                     name: order.customerName || order.customer?.name || "عميل غير معروف",
@@ -179,7 +184,7 @@ const OrderInbox = ({ onReedit }) => {
                                     paymentMethod: order.paymentMethod || order.payment?.method || "unknown",
                                     lat: order.lat || order.lan || null,
                                     lng: order.lng || order.len || null,
-                                    screenshot: order.paymentScreenshot || order.screenshot || order.paymentProof || null
+                                    screenshot: getOrderPaymentScreenshot(order)
                                 } : null;
 
                                 if (isOnline && normalized.screenshot?.includes("drive.google.com")) {
@@ -407,9 +412,9 @@ const OrderInbox = ({ onReedit }) => {
                                                     })()}
 
                                                     {/* 🖼️ Mini Preview Thumbnail */}
-                                                    {(order.paymentScreenshot || order.screenshot || order.image || order.attachment || order.paymentProof) && (
+                                                    {paymentScreenshot && (
                                                         <div
-                                                            onClick={() => setPreviewImage(order.paymentScreenshot || order.screenshot || order.image || order.attachment || order.paymentProof)}
+                                                            onClick={() => setPreviewImage(paymentScreenshot)}
                                                             className="hover-scale"
                                                             style={{
                                                                 width: '45px',
@@ -422,11 +427,37 @@ const OrderInbox = ({ onReedit }) => {
                                                             title="عرض صورة التحويل"
                                                         >
                                                             <img
-                                                                src={order.paymentScreenshot || order.screenshot || order.image || order.attachment || order.paymentProof}
+                                                                src={paymentScreenshot}
                                                                 alt="preview"
                                                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                                             />
                                                         </div>
+                                                    )}
+
+                                                    {receiptUploadStatus === 'uploading' && (
+                                                        <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>⏳ جاري رفع الإيصال...</span>
+                                                    )}
+
+                                                    {receiptUploadStatus === 'failed' && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                retryReceiptUpload(order.id);
+                                                            }}
+                                                            style={{
+                                                                padding: '4px 10px',
+                                                                borderRadius: '8px',
+                                                                fontSize: '0.75rem',
+                                                                fontWeight: 'bold',
+                                                                background: 'rgba(239, 68, 68, 0.15)',
+                                                                color: 'var(--danger)',
+                                                                border: '1px solid var(--danger)',
+                                                                cursor: 'pointer'
+                                                            }}
+                                                        >
+                                                            🔄 إعادة رفع الإيصال
+                                                        </button>
                                                     )}
 
                                                     {/* 📍 Location Button (Prominent Map Access) */}

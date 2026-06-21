@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Inbox, Users, BarChart3, Settings, Play, Square, PlusCircle, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { isAutoCloseTime } from '../../utils/shiftLogic';
+import { safeGetItem } from '../../utils/safeStorage';
 
 
 const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenSecurity }) => {
@@ -27,10 +27,10 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
     const allMenuItems = [
         { id: 'dashboard', label: 'الرئيسية', icon: Home, roles: ['admin', 'casher'] },
         {
-            id: 'inbox', label: 'صندوق الوارد', icon: Inbox, roles: ['casher', 'driver']
+            id: 'inbox', label: 'صندوق الوارد', icon: Inbox, roles: ['admin', 'casher', 'driver']
         },
         { id: 'pilots', label: 'الطيارين', icon: Users, roles: ['admin', 'casher'] },
-{ id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['admin', 'casher'], special: true },
+        { id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
         { id: 'feedback', label: 'الشكاوى والمقترحات', icon: MessageSquare, roles: ['admin'] },
         { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin'] },
     ];
@@ -125,7 +125,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         {!isShiftOpen ? (
                             <button
                                 onClick={() => {
-                                    const correctPwd = localStorage.getItem(`b_delivery_password_${userRole}`) || '8080';
+                                    const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';
                                     const pwd = prompt('أدخل كلمة المرور لفتح الوردية:');
                                     if (pwd === correctPwd) {
                                         openShift();
@@ -141,32 +141,38 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                             </button>
                         ) : (
                             <button
-                                onClick={() => {
-                                    if (isAutoCloseTime()) {
-                                        closeShift(true);
-                                        closeSidebar();
-                                    } else {
-                                        const correctPwd = localStorage.getItem(`b_delivery_password_${userRole}`) || '8080';
+                                onClick={async () => {
+                                    try {
+                                        if (!isShiftOpen) return;
+
+                                        // 🔐 كلمة المرور
+                                        const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';
                                         const pwd = prompt('أدخل كلمة المرور لإغلاق الوردية:');
+
                                         if (pwd === correctPwd) {
-                                            closeShift(false);
+                                            await closeShift(false);
                                             closeSidebar();
+                                        } else if (pwd !== null) {
+                                            alert('كلمة مرور خاطئة');
                                         }
-                                        else if (pwd !== null) alert('كلمة مرور خاطئة');
+
+                                    } catch (error) {
+                                        console.error('Close shift error:', error);
+                                        alert('حدث خطأ أثناء إغلاق الوردية');
                                     }
                                 }}
                                 className="btn-primary"
-                                style={{ width: '100%', background: 'var(--danger)' }}
+                                style={{ width: '55%', background: 'var(--danger)' }}
                             >
                                 <Square size={18} />
-                                <span>إغلاق الوردية اليومية</span>
+                                <span>إغلاق الوردية</span>
                             </button>
                         )}
                     </div>
                 )}
 
                 {/* 🖨️ زر تبديل وضع الطباعة الحرارية */}
-                <button
+                {/* <button
                     onClick={() => setIsThermalPrintMode(!isThermalPrintMode)}
                     className="btn-primary"
                     style={{
@@ -184,7 +190,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 >
                     <span style={{ filter: isThermalPrintMode ? 'none' : 'grayscale(100%)' }}>🖨️</span>
                     <span>{isThermalPrintMode ? 'وضع الطباعة: حراري 80مم' : 'وضع الطباعة: الشاشة العادي'}</span>
-                </button>
+                </button> */}
 
                 {/* 🚪 صف الأزرار السفلية (تسجيل الخروج + مفتاح الأمان الصغير للأدمن) */}
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
@@ -199,7 +205,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
                     >
                         <LogOut size={18} />
-                        <span>تسجيل الخروج</span>
+                        <span>تبديل المستخدم</span>
                     </button>
 
                     {userRole === 'admin' && (
