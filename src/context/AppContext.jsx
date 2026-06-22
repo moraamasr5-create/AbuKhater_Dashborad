@@ -825,41 +825,56 @@ export const AppProvider = ({ children }) => {
       });
     }
 
-    // Set pilot's state to 'busy' or 'on_delivery' (using 'busy')
+    // Set pilot's state to 'available' (pilot is still in the restaurant, and can receive up to 7 orders)
     setPilots(prev => prev.map(p =>
       String(p.id) === String(pilotId)
-        ? { ...p, state: 'busy' }
+        ? { ...p, state: 'available' }
         : p
     ));
-    supabaseService.updatePilotState(pilotId, { state: 'busy' });
+    supabaseService.updatePilotState(pilotId, { state: 'available' });
   };
 
   // Step 3: Start Delivery (Pilot Leaves -> Status Out)
+  // وعند أول بدء الرحلة لأي أوردر مسند له، يتم تفعيل الرحلة لجميع الأوردرات الأخرى المسندة إليه معاً
   const startDelivery = (orderId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || !(order.deliveryId || order.pilotId) || order.status === 'active' || order.status === 'completed' || order.status === 'delivered') return;
 
-    setOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, status: 'active', startTime: getSafeISOTime() }
-        : o
-    ));
+    const pilotIdToUse = order.pilotId || order.deliveryId;
+    const nowTime = getCairoDateString(); // Cairo-based ISO timestamp or ISO string
 
-    // Mark Pilot as OUT
+    // جلب كل الأوردرات المسندة لهذا الطيار حالياً ولم تخرج بعد (في حالة driver_assigned) بما فيها الأوردر الحالي
+    const assignedOrders = orders.filter(o => 
+      String(o.pilotId || o.deliveryId) === String(pilotIdToUse) && 
+      (o.status === 'driver_assigned' || o.id === orderId)
+    );
+
+    // تفعيل حالة التوصيل (active) لكل الأوردرات المسندة معاً
+    setOrders(prev => prev.map(o => {
+      const isAssignedToThisPilot = String(o.pilotId || o.deliveryId) === String(pilotIdToUse);
+      if (isAssignedToThisPilot && (o.status === 'driver_assigned' || o.id === orderId)) {
+        return { ...o, status: 'active', startTime: getSafeISOTime() };
+      }
+      return o;
+    }));
+
+    // تغيير حالة الطيار في القائمة إلى "خارج للتوصيل" (on_delivery)
     setPilots(prev => prev.map(p =>
-      String(p.id) === String(order.deliveryId || order.pilotId)
+      String(p.id) === String(pilotIdToUse)
         ? { ...p, state: 'on_delivery' }
         : p
     ));
 
-    if (order.supabaseId) {
-      supabaseService.updatePilotState(order.deliveryId || order.pilotId, { state: 'on_delivery' });
-    }
+    // تحديث قاعدة البيانات لحالة الطيار
+    supabaseService.updatePilotState(pilotIdToUse, { state: 'on_delivery' });
 
-    logAction('DELIVERY_START', `Order #${orderId} out for delivery`, 'System');
-    if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'out_for_delivery');
-    }
+    // تحديث قاعدة البيانات لجميع الأوردرات المسندة معاً إلى "في الطريق للتسليم" (out_for_delivery)
+    assignedOrders.forEach(ao => {
+      logAction('DELIVERY_START', `Order #${ao.originalId || ao.id} out for delivery`, 'System');
+      if (ao.supabaseId) {
+        updateExternalOrderStatus(ao.supabaseId, 'out_for_delivery');
+      }
+    });
   };
 
   // Step 4: Complete (Pilot Returns -> Status Available + Queue Update)
