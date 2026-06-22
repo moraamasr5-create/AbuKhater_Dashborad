@@ -1547,11 +1547,36 @@ const ExtraTripForm = ({ onClose, initialData }) => {
 };
 
 const SecurityModal = ({ onClose }) => {
+  const { shiftConfig, updateShiftConfig } = useApp();
   const [targetUser, setTargetUser] = useState('admin');
   const [newPin, setNewPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 🕐 إعدادات أوقات تشغيل الورديات (المصدر: قاعدة البيانات)
+  const [openTime, setOpenTime] = useState(shiftConfig?.openTime || '06:00');
+  const [closeTime, setCloseTime] = useState(shiftConfig?.closeTime || '04:00');
+  const [shiftSaving, setShiftSaving] = useState(false);
+  const [shiftMsg, setShiftMsg] = useState('');
+
+  useEffect(() => {
+    setOpenTime(shiftConfig?.openTime || '06:00');
+    setCloseTime(shiftConfig?.closeTime || '04:00');
+  }, [shiftConfig?.openTime, shiftConfig?.closeTime]);
+
+  const handleSaveShiftTimes = async (e) => {
+    e.preventDefault();
+    setShiftMsg('');
+    setShiftSaving(true);
+    const result = await updateShiftConfig({ openTime, closeTime });
+    setShiftSaving(false);
+    if (result?.success) {
+      setShiftMsg('✅ تم حفظ أوقات التشغيل وتطبيقها فوراً على الجميع.');
+    } else {
+      setShiftMsg('❌ ' + (result?.error || 'تعذّر حفظ الأوقات'));
+    }
+  };
 
   const handleSave = (e) => {
     e.preventDefault();
@@ -1592,6 +1617,44 @@ const SecurityModal = ({ onClose }) => {
         <h3 className="flex" style={{ fontSize: '1.15rem', margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: '10px', color: 'white' }}>
           <KeyRound size={18} color="var(--accent)" /> إعدادات الأمان
         </h3>
+
+        {/* 🕐 حوكمة أوقات تشغيل الورديات (تُحفظ في قاعدة البيانات) */}
+        <form onSubmit={handleSaveShiftTimes} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
+          <div className="flex" style={{ alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent)' }}>
+            <Clock size={16} /> أوقات تشغيل الورديات (بتوقيت القاهرة)
+          </div>
+          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
+            تُطبَّق فوراً على جميع المستخدمين. اليوم التشغيلي قد يمتد بعد منتصف الليل (مثال: 06:00 ← 04:00).
+          </p>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>بداية التشغيل (فتح)</label>
+              <input
+                type="time"
+                value={openTime}
+                onChange={e => setOpenTime(e.target.value)}
+                className="glass-card"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '8px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center' }}
+                required
+              />
+            </div>
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>نهاية التشغيل (إغلاق)</label>
+              <input
+                type="time"
+                value={closeTime}
+                onChange={e => setCloseTime(e.target.value)}
+                className="glass-card"
+                style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '8px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center' }}
+                required
+              />
+            </div>
+          </div>
+          {shiftMsg && <div style={{ fontSize: '0.78rem', fontWeight: 'bold', textAlign: 'center', color: shiftMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>{shiftMsg}</div>}
+          <button type="submit" disabled={shiftSaving} className="btn-primary" style={{ height: '36px', justifyContent: 'center', fontSize: '0.82rem', background: 'var(--accent)', opacity: shiftSaving ? 0.6 : 1 }}>
+            {shiftSaving ? 'جاري الحفظ...' : 'حفظ أوقات التشغيل'}
+          </button>
+        </form>
 
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {/* User selector */}

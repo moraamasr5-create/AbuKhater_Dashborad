@@ -17,6 +17,12 @@ import {
   generateUUID,
   capShiftMinutes
 } from '../utils/shiftLogic';
+import {
+  isShiftOperationAllowed,
+  isAutoCloseTimeNow,
+  DEFAULT_SHIFT_OPEN_TIME,
+  DEFAULT_SHIFT_CLOSE_TIME
+} from '../utils/shiftGovernance';
 import { safeParseOrder } from '../utils/safeOrderParser';
 
 /**
@@ -104,6 +110,90 @@ export const AppProvider = ({ children }) => {
 
   const [dailyReports, setDailyReports] = useState([]);
 
+  // 🕐 إعدادات أوقات تشغيل الورديات (المصدر: قاعدة البيانات app_config).
+  // تُحمَّل من الكاش محلياً أولاً لضمان عمل offline، ثم تُحدّث من DB وتتزامن live.
+  const [shiftConfig, setShiftConfig] = useState(() => {
+    try {
+      const saved = safeGetItem('delivery_shift_config');
+      const parsed = (saved && saved !== 'undefined') ? JSON.parse(saved) : null;
+      return {
+        openTime: parsed?.openTime || DEFAULT_SHIFT_OPEN_TIME,
+        closeTime: parsed?.closeTime || DEFAULT_SHIFT_CLOSE_TIME
+      };
+    } catch {
+      return { openTime: DEFAULT_SHIFT_OPEN_TIME, closeTime: DEFAULT_SHIFT_CLOSE_TIME };
+    }
+  });
+
+  // المرجع يضمن أن أحدث الإعدادات متاحة داخل دوال فتح/إغلاق الوردية دون
+  // الاعتماد على closure قديم.
+  const shiftConfigRef = useRef(shiftConfig);
+  useEffect(() => {
+    shiftConfigRef.current = shiftConfig;
+    safeSetItem('delivery_shift_config', JSON.stringify(shiftConfig));
+  }, [shiftConfig]);
+
+  // يحوّل Map الإعدادات القادمة من DB إلى شكل shiftConfig
+  const applyConfigMap = (map) => {
+    if (!map) return;
+    setShiftConfig(prev => ({
+      openTime: map.shift_open_time || prev.openTime,
+      closeTime: map.shift_close_time || prev.closeTime
+    }));
+  };
+
+  // تحميل الإعدادات من قاعدة البيانات + الاشتراك في التغييرات اللحظية
+  useEffect(() => {
+    let configSub;
+    const loadConfig = async () => {
+      try {
+        const map = await supabaseService.fetchAppConfig();
+        applyConfigMap(map);
+      } catch (e) {
+        console.warn('[ShiftConfig] Could not load app_config:', e?.message);
+      }
+    };
+
+    loadConfig();
+
+    // أي تعديل للأوقات من قاعدة البيانات يُطبَّق فوراً على كل المستخدمين
+    configSub = supabaseService.subscribeToAppConfig(() => {
+      supabaseService.fetchAppConfig().then(applyConfigMap);
+    });
+
+    return () => {
+      if (configSub) configSub.unsubscribe();
+    };
+  }, []);
+
+  /**
+   * تحديث أوقات التشغيل في قاعدة البيانات (للمدير فقط).
+   * يُطبَّق التغيير فوراً محلياً ثم يُبثّ لباقي المستخدمين عبر realtime.
+   */
+  const updateShiftConfig = async ({ openTime, closeTime }) => {
+    const updates = [];
+    if (openTime && openTime !== shiftConfig.openTime) {
+      updates.push(supabaseService.updateAppConfig('shift_open_time', openTime));
+    }
+    if (closeTime && closeTime !== shiftConfig.closeTime) {
+      updates.push(supabaseService.updateAppConfig('shift_close_time', closeTime));
+    }
+    if (!updates.length) return { success: true };
+
+    try {
+      await Promise.all(updates);
+      setShiftConfig(prev => ({
+        openTime: openTime || prev.openTime,
+        closeTime: closeTime || prev.closeTime
+      }));
+      logAction('SHIFT_CONFIG_UPDATE', `تحديث أوقات التشغيل: فتح ${openTime}, إغلاق ${closeTime}`, 'Admin');
+      return { success: true };
+    } catch (e) {
+      console.error('❌ Failed to update shift config:', e);
+      return { success: false, error: e?.message || 'تعذّر حفظ الإعدادات' };
+    }
+  };
+
   useEffect(() => {
     safeSetItem('delivery_current_shift', JSON.stringify(currentShift));
   }, [currentShift]);
@@ -116,16 +206,15 @@ export const AppProvider = ({ children }) => {
     processPendingSync();
   }, []);
 
-  // إغلاق تلقائي للوردية عند الساعة 4 صباحاً
+  // إغلاق تلقائي للوردية عند بلوغ وقت الإغلاق (المصدر: قاعدة البيانات، بتوقيت القاهرة)
   useEffect(() => {
     const checkAutoClose = () => {
-      const now = getNormalizedNow();
-      if (currentShift && now.getHours() === 4) {
+      if (currentShift && isAutoCloseTimeNow(shiftConfigRef.current.closeTime, getNormalizedNow())) {
         closeShift(true);
       }
     };
 
-    const timer = setInterval(checkAutoClose, 10 * 60 * 1000);
+    const timer = setInterval(checkAutoClose, 5 * 60 * 1000);
     return () => clearInterval(timer);
   }, [currentShift]);
 
@@ -304,11 +393,12 @@ export const AppProvider = ({ children }) => {
    * يعمل بدون إنترنت بفضل localStorage + pendingSync
    */
   const openShift = async () => {
-    const logicalDate = getLogicalShiftDateString();
+    const config = shiftConfigRef.current;
+    const logicalDate = getLogicalShiftDateString(config.openTime);
     console.log(`[Shift] Checking shift for date: ${logicalDate}`);
 
     try {
-      // التحقق من وجود وردية مفتوحة في Supabase
+      // التحقق من وجود وردية مفتوحة في Supabase (الاستئناف مسموح دائماً)
       const existingShift = await supabaseService.getShiftByDate(logicalDate);
 
       if (existingShift) {
@@ -327,6 +417,19 @@ export const AppProvider = ({ children }) => {
       console.warn('[Shift] Could not check existing shift:', e.message);
     }
 
+    // 🛡️ حوكمة فتح الوردية (Frontend) — المرجع المركزي isShiftOperationAllowed
+    const gate = isShiftOperationAllowed({
+      operation: 'open',
+      openTime: config.openTime,
+      closeTime: config.closeTime,
+      isAdmin: userRole === 'admin'
+    });
+    if (!gate.allowed) {
+      alert(gate.reason);
+      logAction('SHIFT_OPEN_BLOCKED', gate.reason, userRole || 'User');
+      return;
+    }
+
     // إنشاء وردية جديدة
     try {
       const newId = generateUUID();
@@ -343,7 +446,7 @@ export const AppProvider = ({ children }) => {
 
       setCurrentShift(newShift);
 
-      const result = await supabaseService.createShift(newShift);
+      await supabaseService.createShift(newShift);
 
       console.log('✅ Shift created successfully in Supabase');
       logAction('SHIFT_OPEN', `فتح وردية جديدة - ${logicalDate}`, 'Manager');
@@ -351,7 +454,17 @@ export const AppProvider = ({ children }) => {
 
     } catch (error) {
       console.error('❌ Failed to create shift:', error);
-      alert(`❌ خطأ في فتح الوردية: ${error.message}`);
+      // رفض السيرفر (مثل خارج وقت التشغيل) — تراجع عن الفتح المتفائل
+      const serverReason = error?.message || '';
+      const isGovernanceBlock = error?.code === 'P0001' ||
+        serverReason.includes('الوردية') || serverReason.includes('التشغيل');
+      if (isGovernanceBlock) {
+        setCurrentShift(null);
+        alert(serverReason || '❌ تعذّر فتح الوردية (خارج وقت التشغيل).');
+        logAction('SHIFT_OPEN_BLOCKED', serverReason, userRole || 'User');
+      } else {
+        alert(`❌ خطأ في فتح الوردية: ${serverReason}`);
+      }
     }
   };
 
@@ -362,10 +475,40 @@ export const AppProvider = ({ children }) => {
   const closeShift = async (force = false) => {
     if (!currentShift) return false;
 
+    const config = shiftConfigRef.current;
+    const isAdmin = userRole === 'admin';
+
+    // 🛡️ حوكمة إغلاق الوردية (Frontend) — المرجع المركزي isShiftOperationAllowed
+    // force=true يأتي من الإغلاق التلقائي (System) أو من الإغلاق الإجباري للمدير.
+    let forceClose = force;
+    const gate = isShiftOperationAllowed({
+      operation: 'close',
+      openTime: config.openTime,
+      closeTime: config.closeTime,
+      isAdmin,
+      forceClose
+    });
+
+    if (!gate.allowed) {
+      // المدير فقط يمكنه تجاوز موعد الإغلاق عبر الإغلاق الإجباري
+      if (isAdmin) {
+        const confirmed = window.confirm(
+          `${gate.reason}\n\nأنت مدير (Admin): هل تريد تنفيذ إغلاق إجباري (Force Close)؟`
+        );
+        if (!confirmed) return false;
+        forceClose = true;
+        logAction('SHIFT_FORCE_CLOSE', 'إغلاق إجباري للوردية بواسطة المدير', 'Admin');
+      } else {
+        alert(gate.reason);
+        logAction('SHIFT_CLOSE_BLOCKED', gate.reason, userRole || 'User');
+        return false;
+      }
+    }
+
     const hasOpenPilotShifts = pilots.some(p => p.shiftStatus === 'open');
 
     // منع الإغلاق إذا كان هناك طيارين مفتوحين (إلا إذا تم الإجبار)
-    if (!force && hasOpenPilotShifts) {
+    if (!forceClose && hasOpenPilotShifts) {
       alert('⚠️ لا يمكن إغلاق الوردية! يوجد طيارين لم يغلقوا شفتاتهم بعد.');
       return false;
     }
@@ -374,6 +517,7 @@ export const AppProvider = ({ children }) => {
 
     const snapshot = {
       ...currentShift,
+      forceClose,
       endTime: getSafeISOTime(),
       status: 'closed',
       ordersCount: stats.totalOrders,
@@ -408,8 +552,10 @@ export const AppProvider = ({ children }) => {
     } catch (error) {
       console.error('❌ Failed to close shift:', error);
       let errorMsg = 'حدث خطأ أثناء إغلاق الوردية.';
-      if (error.message && (error.message.includes('Too early') || error.message.includes('قبل الساعة 4:00'))) {
-        errorMsg = '⚠️ لا يمكن إغلاق الوردية قبل الساعة 4:00 صباحًا نهائيًا!';
+      if (error.message && (error.message.includes('Too early') || error.message.includes('موعد الإغلاق') || error.message.includes('قبل الساعة 4:00'))) {
+        errorMsg = error.message.includes('موعد الإغلاق')
+          ? error.message
+          : '⚠️ لا يمكن إغلاق الوردية قبل موعد الإغلاق المحدد!';
       } else if (error.message && (error.message.includes('Active orders') || error.message.includes('طلبات نشطة'))) {
         errorMsg = '⚠️ لا يمكن إغلاق الوردية! يوجد طلبات نشطة.';
       } else if (error.message) {
@@ -1107,6 +1253,15 @@ export const AppProvider = ({ children }) => {
       orders, pilots, currentShift, dailyReports, auditLogs, reservations,
       userRole, setUserRole, // 🔐 تصدير بيانات الدور لباقي السيستم
       isThermalPrintMode, setIsThermalPrintMode,
+      // 🕐 حوكمة أوقات الورديات (المصدر: قاعدة البيانات)
+      shiftConfig, updateShiftConfig,
+      checkShiftOperation: (operation, opts = {}) => isShiftOperationAllowed({
+        operation,
+        openTime: shiftConfig.openTime,
+        closeTime: shiftConfig.closeTime,
+        isAdmin: userRole === 'admin',
+        ...opts
+      }),
       openShift, closeShift, addOrder, deleteOrder, cancelOrder, confirmOrder, completeOrder, failDelivery, togglePilotShift, updateOrder, addNewPilot, deletePilot,
       retryReceiptUpload,
       addReservation, confirmReservation, deleteReservation,
