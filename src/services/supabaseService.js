@@ -56,6 +56,8 @@ export const processPendingSync = async () => {
         await supabaseService.createShift(item.payload, true);
       } else if (item.action === 'updateMenuAvailability') {
         await supabaseService.updateMenuAvailability(item.payload.itemName, item.payload.isAvailable, true);
+      } else if (item.action === 'updateAppConfig') {
+        await supabaseService.updateAppConfig(item.payload.key, item.payload.value, true);
       } else if (item.action === 'createReservation') {
         await supabaseService.createReservation(item.payload, true);
       } else if (item.action === 'updateReservationStatus') {
@@ -561,7 +563,8 @@ export const supabaseService = {
     return withOfflineSupport('saveShiftReport', async () => {
       const { error } = await supabase.rpc('close_shift', {
         p_shift_id: reportData.id,
-        p_stats: reportData
+        p_stats: reportData,
+        p_force_close: Boolean(reportData.forceClose)
       });
 
       if (error) throw error;
@@ -595,17 +598,13 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async createShift(shiftData, skipQueue = false) {
     return withOfflineSupport('createShift', async () => {
-      const { data, error } = await supabase
-        .from('shifts')
-        .insert([{
-          id: shiftData.id,
-          date: shiftData.date,
-          start_time: shiftData.start_time || shiftData.startTime,
-          status: 'open',
-          total_orders: 0,
-          stats: {}
-        }])
-        .select();
+      // open_shift RPC enforces the DB-controlled opening window (Africa/Cairo)
+      // server-side, then inserts (or resumes) the shift atomically.
+      const { data, error } = await supabase.rpc('open_shift', {
+        p_id: shiftData.id,
+        p_date: shiftData.date,
+        p_start_time: shiftData.start_time || shiftData.startTime
+      });
       if (error) throw error;
       return data;
     }, shiftData, skipQueue);
@@ -708,6 +707,57 @@ export const supabaseService = {
         );
       if (error) throw error;
     }, { itemName, isAvailable }, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 11.5 App Config (جدول app_config) — مصدر الحقيقة لأوقات الورديات
+  //      key/value editable from the database, applied live to all users.
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * يجلب كل الإعدادات من app_config ويُعيدها كـ Map { key: value }
+   */
+  async fetchAppConfig() {
+    return withOfflineSupport('fetchAppConfig', async () => {
+      const { data, error } = await supabase
+        .from('app_config')
+        .select('key, value');
+      if (error) throw error;
+
+      const map = {};
+      (data || []).forEach(row => { map[row.key] = row.value; });
+      return map;
+    }, null);
+  },
+
+  /**
+   * يحدّث (أو يضيف) قيمة إعداد في app_config — يطبّق فوراً على كل المستخدمين
+   * عبر الـ realtime subscription.
+   */
+  async updateAppConfig(key, value, skipQueue = false) {
+    return withOfflineSupport('updateAppConfig', async () => {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert(
+          { key, value: String(value), updated_at: new Date().toISOString() },
+          { onConflict: 'key' }
+        );
+      if (error) throw error;
+    }, { key, value }, skipQueue);
+  },
+
+  /**
+   * يشترك في تغييرات app_config بحيث يُطبّق أي تعديل للأوقات فوراً.
+   */
+  subscribeToAppConfig(callback) {
+    const channelId = `app-config-realtime-${Date.now()}`;
+    return supabase
+      .channel(channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, payload => {
+        console.log('🔄 Realtime AppConfig:', payload);
+        callback(payload);
+      })
+      .subscribe();
   },
 
   // ─────────────────────────────────────────────────────────

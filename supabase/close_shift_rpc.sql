@@ -1,3 +1,8 @@
+-- ⚠️ SUPERSEDED: This original close_shift definition is replaced by
+-- `supabase/shift_governance.sql`, which reads the close time from the
+-- app_config table (Africa/Cairo) and adds the p_force_close parameter.
+-- Apply shift_governance.sql instead. This file is kept for historical context.
+
 -- SQL Migration script to create the close_shift function and RLS policies
 
 -- Create or replace the close_shift RPC function
