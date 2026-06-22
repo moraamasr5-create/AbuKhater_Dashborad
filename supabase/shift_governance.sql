@@ -213,7 +213,7 @@ BEGIN
   -- 2. Active Orders Validation
   IF EXISTS (
     SELECT 1 FROM public.orders
-    WHERE shift_id = p_shift_id
+    WHERE shift_id = p_shift_id::text
       AND status IN (
         'active', 'pending', 'waiting_driver', 'confirmed',
         'في التحضير', 'تم الإسناد للطيار', 'في الطريق للتسليم',
@@ -225,7 +225,7 @@ BEGIN
 
   -- 3. Orders Association
   UPDATE public.orders
-  SET shift_id = p_shift_id
+  SET shift_id = p_shift_id::text
   WHERE shift_id IS NULL;
 
   -- 4. Shift Closing Logic
@@ -234,16 +234,15 @@ BEGIN
     status = 'closed',
     end_time = now(),
     stats = COALESCE(p_stats, stats)
-  WHERE id = p_shift_id;
+  WHERE id = p_shift_id::text;
 
   -- 5. Delivery Logs (Safe Update)
   BEGIN
     EXECUTE 'UPDATE public.delivery_shift_logs
-             SET status = ''closed'',
-                 end_time = now()
-             WHERE shift_id = $1 AND status = ''open'''
-    USING p_shift_id;
-  EXCEPTION WHEN undefined_table THEN
+             SET shift_ended_at = now()
+             WHERE shift_id = $1 AND shift_ended_at IS NULL'
+    USING p_shift_id::text;
+  EXCEPTION WHEN others THEN
     NULL;
   END;
 END;
