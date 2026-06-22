@@ -1,16 +1,53 @@
-# React + Vite
+# Abu Khater Delivery System
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Production restaurant delivery management system built with React, Vite, and Supabase.
 
-Currently, two official plugins are available:
+The application supports online orders, offline/manual cashier orders, call center flows, pilot dispatching, long-running shifts, realtime updates, and offline-first synchronization.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Engineering Principles
 
-## React Compiler
+- Supabase is the source of truth for business data.
+- Frontend state is a temporary UI/cache layer, not an authoritative workflow store.
+- Order, pilot, and shift transitions must be validated and persisted.
+- Offline work must be queued, retried, and protected from data loss or duplicate writes.
+- Realtime subscriptions should be supported with fallback polling.
+- Role-based permissions must be enforced through trusted persisted data, not only browser state.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+See [Project Instructions](docs/PROJECT_INSTRUCTIONS.md) for the full operational rules.
 
-## Expanding the ESLint configuration
+## Architecture Notes
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- Current Supabase architecture review: [Supabase Architecture Audit](docs/SUPABASE_ARCHITECTURE_AUDIT.md)
+- Frontend framework: React 19 + Vite
+- Data access: Supabase JavaScript client through service-layer abstractions
+- Core operational areas: orders, pilots, shifts, reservations, feedback, offline sync
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the development server:
+
+```bash
+npm run dev
+```
+
+Run lint checks:
+
+```bash
+npm run lint
+```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+## Safety Expectations
+
+Before changing production workflows, review the project instructions and the Supabase audit. Changes that affect orders, pilots, shifts, realtime subscriptions, offline sync, RLS, or database relationships should include focused verification.
