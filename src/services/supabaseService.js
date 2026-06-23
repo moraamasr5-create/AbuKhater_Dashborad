@@ -73,7 +73,7 @@ export const processPendingSync = async () => {
       } else if (item.action === 'assignOrderToPilot') {
         await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
       } else if (item.action === 'startPilotTrip') {
-        await supabaseService.startPilotTrip(item.payload.pilotId, item.payload.mutationId, true);
+        await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
       } else if (item.action === 'completeOrderDelivery') {
         await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
       } else if (item.action === 'failOrderDelivery') {
@@ -594,16 +594,16 @@ export const supabaseService = {
     }, { orderId, pilotId, pilotName, mutationId: pMutationId }, skipQueue);
   },
 
-  async startPilotTrip(pilotId, mutationId = null, skipQueue = false) {
+  async startPilotTrip(orderId, mutationId = null, skipQueue = false) {
     const pMutationId = mutationId || newMutationId();
     return withOfflineSupport('startPilotTrip', async () => {
       const { data, error } = await supabase.rpc('start_pilot_trip', {
-        p_pilot_id: pilotId,
+        p_order_id: orderId,
         p_mutation_id: pMutationId
       });
       if (error) throw error;
       return data;
-    }, { pilotId, mutationId: pMutationId }, skipQueue);
+    }, { orderId, mutationId: pMutationId }, skipQueue);
   },
 
   async completeOrderDelivery(orderId, mutationId = null, skipQueue = false) {

@@ -200,6 +200,12 @@ const OrderInbox = ({ onReedit }) => {
                                 if (order.status === 'driver_assigned') { statusColor = '#3b82f6'; statusBg = 'rgba(59, 130, 246, 0.05)'; }
                                 if (order.status === 'active') { statusColor = 'var(--success)'; statusBg = 'rgba(16, 185, 129, 0.08)'; }
 
+                                const pilotIdForBadge = order.pilotId || order.deliveryId;
+                                const orderPilot = pilotIdForBadge
+                                    ? pilots.find(p => String(p.id) === String(pilotIdForBadge))
+                                    : null;
+                                const showPilotOutBadge = order.status === 'driver_assigned' && isPilotOnDelivery(orderPilot?.state);
+
                                 const isSelectedPreview = isThermalPrintMode && previewOrder && previewOrder.id === order.id;
 
                                 return (
@@ -235,6 +241,15 @@ const OrderInbox = ({ onReedit }) => {
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                             {new Date(order.timestamp).toLocaleTimeString('ar-EG')}
                                         </p>
+                                        {showPilotOutBadge && (
+                                            <div style={{
+                                                marginTop: '6px', fontSize: '0.72rem', color: 'var(--warning)',
+                                                background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                borderRadius: '6px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                            }}>
+                                                <Bike size={12} /> الطيار خارج — بانتظار بدء الرحلة
+                                            </div>
+                                        )}
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                                             {order.confirmedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>✔️ {new Date(order.confirmedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
                                             {order.assignedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>👤 {new Date(order.assignedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
@@ -547,30 +562,38 @@ const OrderInbox = ({ onReedit }) => {
                                             </div>
                                         )}
 
-                                        {/* Stage 3: Assigned -> Out (Admin or Assigned Driver) */}
+                                        {/* Stage 3: Assigned -> Out (one order per trip start) */}
                                         {order.status === 'driver_assigned' && (() => {
                                             const pilotIdForOrder = order.pilotId || order.deliveryId;
-                                            const batchCount = orders.filter(o =>
+                                            const assignedPilot = pilots.find(p => String(p.id) === String(pilotIdForOrder));
+                                            const pilotAlreadyOut = isPilotOnDelivery(assignedPilot?.state);
+                                            const pendingSiblings = orders.filter(o =>
                                                 String(o.pilotId || o.deliveryId) === String(pilotIdForOrder) &&
-                                                o.status === 'driver_assigned'
+                                                o.status === 'driver_assigned' &&
+                                                o.id !== order.id
                                             ).length;
 
                                             return (
                                             <div style={{ textAlign: 'center' }}>
                                                 <div style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
-                                                    الطيار: <strong>{pilots.find(p => String(p.id) === String(order.pilotId))?.name}</strong>
-                                                    {batchCount > 1 && (
-                                                        <div style={{ marginTop: '4px', color: 'var(--accent)', fontSize: '0.85rem' }}>
-                                                            {batchCount} طلبات مسندة — ستبدأ الرحلة لجميعها معاً
-                                                        </div>
-                                                    )}
+                                                    الطيار: <strong>{assignedPilot?.name}</strong>
                                                 </div>
+                                                {pilotAlreadyOut && (
+                                                    <div style={{
+                                                        marginBottom: '8px', fontSize: '0.78rem', color: 'var(--warning)',
+                                                        background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                        borderRadius: '8px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                                    }}>
+                                                        <Bike size={14} /> الطيار خارج المطعم — لم تبدأ رحلة هذا الطلب
+                                                        {pendingSiblings > 0 && ` (+${pendingSiblings} طلب آخر بالانتظار)`}
+                                                    </div>
+                                                )}
                                                 <button
                                                     onClick={() => startDelivery(order.id)}
                                                     className="btn-primary"
                                                     style={{ width: '100%', background: 'var(--success)' }}
                                                 >
-                                                    <Bike size={18} /> ابدأ الرحلة الآن{batchCount > 1 ? ` (${batchCount} طلبات)` : ''}
+                                                    <Bike size={18} /> ابدأ الرحلة الآن
                                                 </button>
                                             </div>
                                             );

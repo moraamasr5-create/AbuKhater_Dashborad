@@ -861,47 +861,35 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Step 3: Start Delivery (Pilot Leaves -> Status Out)
-  // وعند أول بدء الرحلة لأي أوردر مسند له، يتم تفعيل الرحلة لجميع الأوردرات الأخرى المسندة إليه معاً
+  // Step 3: Start Delivery — one order at a time; pilot leaves restaurant (on_delivery) on first start
   const startDelivery = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order || !(order.deliveryId || order.pilotId) || order.status === 'active' || order.status === 'completed' || order.status === 'delivered') return;
+    if (!order || order.status !== 'driver_assigned' || !(order.deliveryId || order.pilotId)) return;
 
     const deliveryId = Number(order.deliveryId || order.pilotId);
     if (!Number.isFinite(deliveryId)) return;
 
-    const assignedOrders = orders.filter(o =>
-      Number(o.deliveryId || o.pilotId) === deliveryId &&
-      (o.status === 'driver_assigned' || o.id === orderId)
-    );
     const startTime = getSafeISOTime();
     const prevOrders = orders;
     const prevPilots = pilots;
 
-    setOrders(prev => prev.map(o => {
-      if (Number(o.deliveryId || o.pilotId) === deliveryId && (o.status === 'driver_assigned' || o.id === orderId)) {
-        return { ...o, status: 'active', startTime };
-      }
-      return o;
-    }));
+    setOrders(prev => prev.map(o =>
+      o.id === orderId ? { ...o, status: 'active', startTime } : o
+    ));
 
     setPilots(prev => prev.map(p =>
       Number(p.id) === deliveryId ? { ...p, state: 'on_delivery' } : p
     ));
 
-    assignedOrders.forEach(ao => {
-      logAction('DELIVERY_START', `Order #${ao.originalId || ao.id} out for delivery`, 'System');
-    });
+    logAction('DELIVERY_START', `Order #${order.originalId || order.id} out for delivery`, 'System');
 
     if (!order.supabaseId) return;
 
     pendingPilotUpdatesRef.current.add(String(deliveryId));
-    assignedOrders.forEach(ao => {
-      if (ao.supabaseId) pendingUpdatesRef.current.add(String(ao.supabaseId));
-    });
+    pendingUpdatesRef.current.add(String(order.supabaseId));
 
     try {
-      await supabaseService.startPilotTrip(deliveryId);
+      await supabaseService.startPilotTrip(order.supabaseId);
     } catch (e) {
       setOrders(prevOrders);
       setPilots(prevPilots);
@@ -909,9 +897,7 @@ export const AppProvider = ({ children }) => {
     } finally {
       setTimeout(() => {
         pendingPilotUpdatesRef.current.delete(String(deliveryId));
-        assignedOrders.forEach(ao => {
-          if (ao.supabaseId) pendingUpdatesRef.current.delete(String(ao.supabaseId));
-        });
+        pendingUpdatesRef.current.delete(String(order.supabaseId));
       }, 2000);
     }
   };
@@ -929,12 +915,12 @@ export const AppProvider = ({ children }) => {
     const prevOrders = orders;
     const prevPilots = pilots;
 
-    const otherActive = Number.isFinite(deliveryId) && orders.some(o =>
+    const otherPending = Number.isFinite(deliveryId) && orders.some(o =>
       Number(o.deliveryId || o.pilotId) === deliveryId &&
-      o.status === 'active' &&
-      o.id !== orderId
+      o.id !== orderId &&
+      (o.status === 'active' || o.status === 'driver_assigned')
     );
-    const nextPilotState = otherActive ? 'on_delivery' : 'available';
+    const nextPilotState = otherPending ? 'on_delivery' : 'available';
 
     setOrders(prev => prev.map(o =>
       o.id === orderId
@@ -983,12 +969,12 @@ export const AppProvider = ({ children }) => {
     const prevOrders = orders;
     const prevPilots = pilots;
 
-    const otherActive = Number.isFinite(deliveryId) && orders.some(o =>
+    const otherPending = Number.isFinite(deliveryId) && orders.some(o =>
       Number(o.deliveryId || o.pilotId) === deliveryId &&
-      o.status === 'active' &&
-      o.id !== orderId
+      o.id !== orderId &&
+      (o.status === 'active' || o.status === 'driver_assigned')
     );
-    const nextPilotState = otherActive ? 'on_delivery' : 'available';
+    const nextPilotState = otherPending ? 'on_delivery' : 'available';
 
     setOrders(prev => prev.map(o =>
       o.id === orderId
