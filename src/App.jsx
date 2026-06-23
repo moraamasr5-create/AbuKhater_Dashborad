@@ -9,6 +9,7 @@ import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
 import { uploadReservationReceipt } from './services/storageService';
+import { isPilotOnDelivery } from './utils/pilotState';
 
 export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
   if (file.size > 5 * 1024 * 1024) {
@@ -423,7 +424,7 @@ const { orders, pilots, activeStats, completeOrder, confirmOrder, assignPilot, u
   // Group active orders by pilot
   const activeOrders = orders.filter(o => o.status === 'active');
   const ordersByPilot = activeOrders.reduce((acc, o) => {
-    const key = String(o.pilotId);
+    const key = String(o.pilotId || o.deliveryId);
     if (!acc[key]) acc[key] = [];
     acc[key].push(o);
     return acc;
@@ -622,15 +623,15 @@ const { orders, pilots, activeStats, completeOrder, confirmOrder, assignPilot, u
           {/* Active Pilots Card */}
           <div className="card" style={{ borderRight: '4px solid var(--accent)' }}>
             <h4 style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
-              الطيارين بالخدمة ({activePilots.length}) • (متاح: {activePilots.filter(p => p.state === 'available').length} | بالخارج: {activePilots.filter(p => p.state === 'out').length})
+              الطيارين بالخدمة ({activePilots.length}) • (متاح: {activePilots.filter(p => p.state === 'available').length} | بالخارج: {activePilots.filter(p => isPilotOnDelivery(p.state)).length})
             </h4>
             <div className="grid" style={{ gap: '10px' }}>
               {activePilots.length > 0 ? activePilots.map(p => {
                 const currentLoad = orders.filter(o =>
-                  o.pilotId === p.id &&
+                  String(o.pilotId || o.deliveryId) === String(p.id) &&
                   (o.status === 'active' || o.status === 'driver_assigned')
                 ).length;
-                const isOut = p.state === 'out';
+                const isOut = isPilotOnDelivery(p.state);
 
                 return (
                   <div key={p.id} className="flex" style={{ justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>

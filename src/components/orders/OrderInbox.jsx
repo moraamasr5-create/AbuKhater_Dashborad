@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { Check, X, AlertCircle, UserPlus, RotateCcw, Clock, Bike, RefreshCw, ShoppingCart, ChevronDown, ChevronUp } from 'lucide-react';
 import { printerService } from '../../services/printerService';
 import { motion, AnimatePresence } from 'framer-motion'; // 🪄 استيراد مكتبة التحريك لعمل الـ Live Dashboard
+import { isPilotOnDelivery } from '../../utils/pilotState';
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
 
@@ -54,8 +55,8 @@ const OrderInbox = ({ onReedit }) => {
     // 🔴 تصفية الطلبات المعروضة بناءً على نوع المستخدم (ادمن او كاشير او طيار)
     const inboxOrders = orders.filter(o => {
         if (userRole === 'admin' || userRole === 'casher') {
-            // الادمن والكاشير بيشوفوا الطلبات في مراحل التجهيز والانتظار
-            return ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned'].includes(o.status);
+            // الادمن والكاشير بيشوفوا الطلبات في مراحل التجهيز والانتظار والتوصيل النشط
+            return ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned', 'active'].includes(o.status);
         } else {
             // الطيار بيشوف بس الطلبات اللي اتسندت ليه أو اللي "في الطريق" للتسليم
             return ['driver_assigned', 'active'].includes(o.status);
@@ -105,7 +106,7 @@ const OrderInbox = ({ onReedit }) => {
 
         // Validate pilot status
         const selectedPilotObj = pilots.find(p => String(p.id) === String(pilotId));
-        if (selectedPilotObj && selectedPilotObj.state === 'out') {
+        if (selectedPilotObj && isPilotOnDelivery(selectedPilotObj.state)) {
             alert('هذا الطيار في رحلة توصيل حالياً ولا يمكن إسناد طلب جديد له 🚫');
             return;
         }
@@ -197,6 +198,7 @@ const OrderInbox = ({ onReedit }) => {
                                 if (order.status === 'pending') { statusColor = 'var(--warning)'; statusBg = 'rgba(245, 158, 11, 0.05)'; }
                                 if (order.status === 'waiting_driver') { statusColor = 'var(--accent)'; statusBg = 'rgba(16, 185, 129, 0.05)'; }
                                 if (order.status === 'driver_assigned') { statusColor = '#3b82f6'; statusBg = 'rgba(59, 130, 246, 0.05)'; }
+                                if (order.status === 'active') { statusColor = 'var(--success)'; statusBg = 'rgba(16, 185, 129, 0.08)'; }
 
                                 const isSelectedPreview = isThermalPrintMode && previewOrder && previewOrder.id === order.id;
 
@@ -527,8 +529,8 @@ const OrderInbox = ({ onReedit }) => {
                                                     >
                                                         <option value="">اختر طيار...</option>
                                                         {availablePilots.map(p => (
-                                                            <option key={p.id} value={p.id} disabled={p.state === 'out'}>
-                                                                {p.name} {p.state === 'out' ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
+                                                            <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
+                                                                {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
                                                             </option>
                                                         ))}
                                                     </select>
@@ -546,20 +548,33 @@ const OrderInbox = ({ onReedit }) => {
                                         )}
 
                                         {/* Stage 3: Assigned -> Out (Admin or Assigned Driver) */}
-                                        {order.status === 'driver_assigned' && (
+                                        {order.status === 'driver_assigned' && (() => {
+                                            const pilotIdForOrder = order.pilotId || order.deliveryId;
+                                            const batchCount = orders.filter(o =>
+                                                String(o.pilotId || o.deliveryId) === String(pilotIdForOrder) &&
+                                                o.status === 'driver_assigned'
+                                            ).length;
+
+                                            return (
                                             <div style={{ textAlign: 'center' }}>
                                                 <div style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
                                                     الطيار: <strong>{pilots.find(p => String(p.id) === String(order.pilotId))?.name}</strong>
+                                                    {batchCount > 1 && (
+                                                        <div style={{ marginTop: '4px', color: 'var(--accent)', fontSize: '0.85rem' }}>
+                                                            {batchCount} طلبات مسندة — ستبدأ الرحلة لجميعها معاً
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <button
                                                     onClick={() => startDelivery(order.id)}
                                                     className="btn-primary"
                                                     style={{ width: '100%', background: 'var(--success)' }}
                                                 >
-                                                    <Bike size={18} /> ابدأ الرحلة الآن
+                                                    <Bike size={18} /> ابدأ الرحلة الآن{batchCount > 1 ? ` (${batchCount} طلبات)` : ''}
                                                 </button>
                                             </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         {/* Stage 4: Out -> Complete/Fail (Driver View or Admin/Casher Control) */}
                                         {order.status === 'active' && (userRole === 'admin' || userRole === 'casher' || userRole === 'driver') && (
