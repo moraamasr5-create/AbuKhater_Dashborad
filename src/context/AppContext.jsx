@@ -38,21 +38,30 @@ const sendToN8N = async (payload, type) => {
   }
 };
 
-const mergePilots = (prevPilots, fetchedPilots) => {
+const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => {
+  // حقول تُزامَن من Supabase — لا نُبقي النسخة المحلية إلا أثناء تحديث معلّق
+  const SYNC_FIELDS = ['shiftStatus', 'state', 'lastOpenedAt', 'lastClosedAt', 'totalMinutes', 'shiftUsed', 'lastReturnTime', 'ordersCount'];
+
   const mergedFetched = fetchedPilots.map(fp => {
-    const existing = prevPilots.find(p => p.id === fp.id);
+    const existing = prevPilots.find(p => String(p.id) === String(fp.id));
     if (!existing) return fp;
-    const LOCAL_PILOT_FIELDS = ['ordersCount', 'totalMinutes', 'balance', 'shiftStatus', 'state', 'lastReturnTime', 'shiftUsed', 'lastOpenedAt', 'shift'];
-    const mergedFields = {};
-    LOCAL_PILOT_FIELDS.forEach(f => {
-      if (existing[f] !== undefined) {
-        mergedFields[f] = existing[f];
-      }
-    });
-    return { ...fp, ...mergedFields };
+
+    if (pendingPilotIds.has(String(fp.id))) {
+      const overlay = {};
+      SYNC_FIELDS.forEach(f => {
+        if (existing[f] !== undefined) overlay[f] = existing[f];
+      });
+      return { ...fp, ...overlay, balance: existing.balance ?? 0 };
+    }
+
+    // مصدر الحقيقة: بيانات DB — نُبقي فقط الحقول المحلية غير المخزّنة في DB
+    return {
+      ...fp,
+      balance: existing.balance ?? fp.balance ?? 0,
+    };
   });
 
-  const localOnly = prevPilots.filter(p => !fetchedPilots.some(fp => fp.id === p.id));
+  const localOnly = prevPilots.filter(p => !fetchedPilots.some(fp => String(fp.id) === String(p.id)));
   return [...mergedFetched, ...localOnly];
 };
 
@@ -221,7 +230,18 @@ export const AppProvider = ({ children }) => {
   // 🔥 3. Real-time Dashboard (Supabase Live System)
   const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
+  const pendingPilotUpdatesRef = useRef(new Set()); // pilot ids with in-flight DB writes
   const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
+
+  const syncPilotState = (pilotId, stateUpdates) => {
+    pendingPilotUpdatesRef.current.add(String(pilotId));
+    return Promise.resolve(supabaseService.updatePilotState(pilotId, stateUpdates))
+      .finally(() => {
+        setTimeout(() => {
+          pendingPilotUpdatesRef.current.delete(String(pilotId));
+        }, 1500);
+      });
+  };
 
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
@@ -252,7 +272,7 @@ export const AppProvider = ({ children }) => {
           supabaseService.fetchReservations()
         ]);
 
-        if (fetchedPilots) setPilots(prev => mergePilots(prev, fetchedPilots));
+        if (fetchedPilots) setPilots(prev => mergePilots(prev, fetchedPilots, pendingPilotUpdatesRef.current));
         if (fetchedRes) setReservations(fetchedRes);
 
         if (fetchedOrders && fetchedOrders.length > 0) {
@@ -307,7 +327,7 @@ export const AppProvider = ({ children }) => {
 
     pilotsSub = supabaseService.subscribeToDrivers(() => {
       supabaseService.fetchDeliveryDrivers().then(fetched => {
-        if (fetched) setPilots(prev => mergePilots(prev, fetched));
+        if (fetched) setPilots(prev => mergePilots(prev, fetched, pendingPilotUpdatesRef.current));
       });
     });
 
@@ -831,7 +851,7 @@ export const AppProvider = ({ children }) => {
         ? { ...p, state: 'available' }
         : p
     ));
-    supabaseService.updatePilotState(pilotId, { state: 'available' });
+    syncPilotState(pilotId, { state: 'available' });
   };
 
   // Step 3: Start Delivery (Pilot Leaves -> Status Out)
@@ -866,7 +886,7 @@ export const AppProvider = ({ children }) => {
     ));
 
     // تحديث قاعدة البيانات لحالة الطيار
-    supabaseService.updatePilotState(pilotIdToUse, { state: 'on_delivery' });
+    syncPilotState(pilotIdToUse, { state: 'on_delivery' });
 
     // تحديث قاعدة البيانات لجميع الأوردرات المسندة معاً إلى "في الطريق للتسليم" (out_for_delivery)
     assignedOrders.forEach(ao => {
@@ -925,7 +945,7 @@ export const AppProvider = ({ children }) => {
         }
         : { state: 'on_delivery' };
 
-      supabaseService.updatePilotState(pilotIdToUse, returnUpdates);
+      syncPilotState(pilotIdToUse, returnUpdates);
     }
     logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
     sendToN8N({ ...order, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
@@ -976,7 +996,7 @@ export const AppProvider = ({ children }) => {
         returnUpdates.orders_count = orders.filter(o => String(o.pilotId) === String(pilotIdToUse) && o.status === 'completed' && o.id !== orderId).length;
       }
 
-      supabaseService.updatePilotState(order.pilotId || pilotIdToUse, returnUpdates);
+      syncPilotState(order.pilotId || pilotIdToUse, returnUpdates);
     }
     logAction('DELIVERY_FAIL', `Order #${orderId} failed delivery. Reason: ${reason}`, 'Supervisor');
     sendToN8N({ ...order, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }, 'ORDER_FAIL');
@@ -1004,39 +1024,40 @@ export const AppProvider = ({ children }) => {
     }
 
     let sessionMinutes = 0;
+    const closedAt = getSafeISOTime();
     if (newStatus === 'closed' && pilot.lastOpenedAt) {
-      sessionMinutes = calculateDelayMinutes(pilot.lastOpenedAt);
+      sessionMinutes = calculateDelayMinutes(pilot.lastOpenedAt, closedAt);
     }
 
-    // Call Supabase to update status
-    await supabaseService.updatePilotState(pilotId, {
+    // Call Supabase to update status — لا نُمرّر last_opened_at: null حتى لا يُمسح shift_started_at
+    await syncPilotState(pilotId, {
       shift_status: newStatus,
       ...(newStatus === 'open' ? {
         state: 'available',
         last_return_time: getSafeISOTime(),
-        last_opened_at: getSafeISOTime()
+        last_opened_at: getSafeISOTime(),
+        last_closed_at: null
       } : {
         state: 'off',
-        last_opened_at: null,
         shift_used: true,
-        total_minutes: (pilot.totalMinutes || 0) + sessionMinutes
+        total_minutes: (pilot.totalMinutes || 0) + sessionMinutes,
+        last_closed_at: closedAt
       })
     });
 
     // Optimistically update UI
     setPilots(prev => prev.map(p => {
       if (String(p.id) === String(pilotId)) {
-        const now = getNormalizedNow();
         let sessionMinutes = 0;
         if (newStatus === 'closed' && p.lastOpenedAt) {
-          sessionMinutes = calculateDelayMinutes(p.lastOpenedAt);
+          sessionMinutes = calculateDelayMinutes(p.lastOpenedAt, closedAt);
         }
 
         const updates = newStatus === 'open'
-          ? { state: 'available', lastReturnTime: getSafeISOTime(), lastOpenedAt: getSafeISOTime() }
+          ? { state: 'available', lastReturnTime: getSafeISOTime(), lastOpenedAt: getSafeISOTime(), lastClosedAt: null }
           : {
             state: 'off',
-            lastOpenedAt: null,
+            lastClosedAt: closedAt,
             shiftUsed: true,
             totalMinutes: (p.totalMinutes || 0) + sessionMinutes
           };
