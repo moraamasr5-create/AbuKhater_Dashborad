@@ -233,16 +233,6 @@ export const AppProvider = ({ children }) => {
   const pendingPilotUpdatesRef = useRef(new Set()); // pilot ids with in-flight DB writes
   const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
 
-  const syncPilotState = (pilotId, stateUpdates) => {
-    pendingPilotUpdatesRef.current.add(String(pilotId));
-    return Promise.resolve(supabaseService.updatePilotState(pilotId, stateUpdates))
-      .finally(() => {
-        setTimeout(() => {
-          pendingPilotUpdatesRef.current.delete(String(pilotId));
-        }, 1500);
-      });
-  };
-
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
    */
@@ -810,7 +800,7 @@ export const AppProvider = ({ children }) => {
   };
 
   // Step 2: Assign Driver (Locks Order, Ready to Print)
-  const assignPilot = (orderId, pilotId) => {
+  const assignPilot = async (orderId, pilotId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || ['driver_assigned', 'active', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(order.status)) return;
 
@@ -821,6 +811,11 @@ export const AppProvider = ({ children }) => {
       return;
     }
 
+    if (pilot.shiftStatus !== 'open') {
+      alert(`⚠️ خطأ: وردية الطيار ${pilot.name} غير مفتوحة!`);
+      return;
+    }
+
     if (pilot.state !== 'available') {
       const errorMsg = `Cannot assign order to pilot ${pilot.name} because their state is '${pilot.state}'.`;
       console.error(errorMsg);
@@ -828,180 +823,206 @@ export const AppProvider = ({ children }) => {
       return;
     }
 
-    const safeDeliveryId = !isNaN(Number(pilotId)) ? Number(pilotId) : null;
-
-    setOrders(prev => prev.map(o =>
-      o.id === orderId
-        ? { ...o, status: 'driver_assigned', pilotId, deliveryId: safeDeliveryId, assignedAt: getSafeISOTime() }
-        : o
-    ));
-    const pilotName = pilot.name || 'Unknown';
-    logAction('ORDER_ASSIGN', `Order #${orderId} assigned to ${pilotName}`, 'Supervisor');
-    if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'driver_assigned', null, {
-        pilot_id: String(pilotId),
-        pilot_name: pilotName,
-        delivery_id: safeDeliveryId
-      });
+    const deliveryId = Number(pilotId);
+    if (!Number.isFinite(deliveryId)) {
+      alert('⚠️ خطأ: معرف الطيار غير صالح');
+      return;
     }
 
-    // Set pilot's state to 'available' (pilot is still in the restaurant, and can receive up to 7 orders)
-    setPilots(prev => prev.map(p =>
-      String(p.id) === String(pilotId)
-        ? { ...p, state: 'available' }
-        : p
-    ));
-    syncPilotState(pilotId, { state: 'available' });
+    const pilotName = pilot.name || 'Unknown';
+    const assignedAt = getSafeISOTime();
+    const optimisticOrder = {
+      ...order,
+      status: 'driver_assigned',
+      pilotId: String(deliveryId),
+      deliveryId,
+      assignedAt
+    };
+
+    setOrders(prev => prev.map(o => (o.id === orderId ? optimisticOrder : o)));
+    logAction('ORDER_ASSIGN', `Order #${orderId} assigned to ${pilotName}`, 'Supervisor');
+
+    if (!order.supabaseId) return;
+
+    pendingUpdatesRef.current.add(String(order.supabaseId));
+    try {
+      await supabaseService.assignOrderToPilot(order.supabaseId, deliveryId, pilotName);
+    } catch (e) {
+      setOrders(prev => prev.map(o => (o.id === orderId ? order : o)));
+      const msg = e?.message || '';
+      if (msg.includes('not available')) alert(`⚠️ الطيار ${pilotName} غير متاح — ربما سُند لطلب آخر.`);
+      else if (msg.includes('shift is not open')) alert(`⚠️ وردية الطيار ${pilotName} غير مفتوحة.`);
+      else if (msg.includes('7 assigned')) alert(`⚠️ الطيار ${pilotName} وصل للحد الأقصى (7 طلبات).`);
+      else alert(`⚠️ فشل إسناد الطلب: ${msg || 'خطأ غير معروف'}`);
+    } finally {
+      setTimeout(() => {
+        pendingUpdatesRef.current.delete(String(order.supabaseId));
+      }, 2000);
+    }
   };
 
   // Step 3: Start Delivery (Pilot Leaves -> Status Out)
   // وعند أول بدء الرحلة لأي أوردر مسند له، يتم تفعيل الرحلة لجميع الأوردرات الأخرى المسندة إليه معاً
-  const startDelivery = (orderId) => {
+  const startDelivery = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || !(order.deliveryId || order.pilotId) || order.status === 'active' || order.status === 'completed' || order.status === 'delivered') return;
 
-    const pilotIdToUse = order.pilotId || order.deliveryId;
-    const nowTime = getCairoDateString(); // Cairo-based ISO timestamp or ISO string
+    const deliveryId = Number(order.deliveryId || order.pilotId);
+    if (!Number.isFinite(deliveryId)) return;
 
-    // جلب كل الأوردرات المسندة لهذا الطيار حالياً ولم تخرج بعد (في حالة driver_assigned) بما فيها الأوردر الحالي
-    const assignedOrders = orders.filter(o => 
-      String(o.pilotId || o.deliveryId) === String(pilotIdToUse) && 
+    const assignedOrders = orders.filter(o =>
+      Number(o.deliveryId || o.pilotId) === deliveryId &&
       (o.status === 'driver_assigned' || o.id === orderId)
     );
+    const startTime = getSafeISOTime();
+    const prevOrders = orders;
+    const prevPilots = pilots;
 
-    // تفعيل حالة التوصيل (active) لكل الأوردرات المسندة معاً
     setOrders(prev => prev.map(o => {
-      const isAssignedToThisPilot = String(o.pilotId || o.deliveryId) === String(pilotIdToUse);
-      if (isAssignedToThisPilot && (o.status === 'driver_assigned' || o.id === orderId)) {
-        return { ...o, status: 'active', startTime: getSafeISOTime() };
+      if (Number(o.deliveryId || o.pilotId) === deliveryId && (o.status === 'driver_assigned' || o.id === orderId)) {
+        return { ...o, status: 'active', startTime };
       }
       return o;
     }));
 
-    // تغيير حالة الطيار في القائمة إلى "خارج للتوصيل" (on_delivery)
     setPilots(prev => prev.map(p =>
-      String(p.id) === String(pilotIdToUse)
-        ? { ...p, state: 'on_delivery' }
-        : p
+      Number(p.id) === deliveryId ? { ...p, state: 'on_delivery' } : p
     ));
 
-    // تحديث قاعدة البيانات لحالة الطيار
-    syncPilotState(pilotIdToUse, { state: 'on_delivery' });
-
-    // تحديث قاعدة البيانات لجميع الأوردرات المسندة معاً إلى "في الطريق للتسليم" (out_for_delivery)
     assignedOrders.forEach(ao => {
       logAction('DELIVERY_START', `Order #${ao.originalId || ao.id} out for delivery`, 'System');
-      if (ao.supabaseId) {
-        updateExternalOrderStatus(ao.supabaseId, 'out_for_delivery');
-      }
     });
+
+    if (!order.supabaseId) return;
+
+    pendingPilotUpdatesRef.current.add(String(deliveryId));
+    assignedOrders.forEach(ao => {
+      if (ao.supabaseId) pendingUpdatesRef.current.add(String(ao.supabaseId));
+    });
+
+    try {
+      await supabaseService.startPilotTrip(deliveryId);
+    } catch (e) {
+      setOrders(prevOrders);
+      setPilots(prevPilots);
+      alert(`⚠️ فشل بدء الرحلة: ${e?.message || 'خطأ غير معروف'}`);
+    } finally {
+      setTimeout(() => {
+        pendingPilotUpdatesRef.current.delete(String(deliveryId));
+        assignedOrders.forEach(ao => {
+          if (ao.supabaseId) pendingUpdatesRef.current.delete(String(ao.supabaseId));
+        });
+      }, 2000);
+    }
   };
 
   // Step 4: Complete (Pilot Returns -> Status Available + Queue Update)
   /**
    * إتمام الطلب: يُعيد الطيار لقائمة الانتظار ويحدّث الحالة
    */
-  const completeOrder = (orderId) => {
+  const completeOrder = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || order.status === 'completed' || order.status === 'delivered') return;
 
     const nowTime = getSafeISOTime();
+    const deliveryId = Number(order.deliveryId || order.pilotId);
+    const prevOrders = orders;
+    const prevPilots = pilots;
+
+    const otherActive = Number.isFinite(deliveryId) && orders.some(o =>
+      Number(o.deliveryId || o.pilotId) === deliveryId &&
+      o.status === 'active' &&
+      o.id !== orderId
+    );
+    const nextPilotState = otherActive ? 'on_delivery' : 'available';
+
     setOrders(prev => prev.map(o =>
       o.id === orderId
         ? { ...o, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }
         : o
     ));
 
-    // Return pilot to queue only when no other active orders remain on the same trip
-    const pilotIdToUse = order.deliveryId || order.pilotId;
-    if (pilotIdToUse) {
-      const otherActive = orders.some(o =>
-        String(o.deliveryId || o.pilotId) === String(pilotIdToUse) &&
-        o.status === 'active' &&
-        o.id !== orderId
-      );
-      const nextState = otherActive ? 'on_delivery' : 'available';
-
+    if (Number.isFinite(deliveryId)) {
       setPilots(prev => prev.map(p => {
-        if (String(p.id) === String(pilotIdToUse)) {
-          const returnTimeUpdates = nextState === 'available'
-            ? { lastReturnTime: nowTime, ordersCount: (p.ordersCount || 0) + 1 }
-            : {};
-          return {
-            ...p,
-            state: nextState,
-            ...returnTimeUpdates
-          };
-        }
-        return p;
+        if (Number(p.id) !== deliveryId) return p;
+        const returnTimeUpdates = nextPilotState === 'available'
+          ? { lastReturnTime: nowTime, ordersCount: (p.ordersCount || 0) + 1 }
+          : {};
+        return { ...p, state: nextPilotState, ...returnTimeUpdates };
       }));
-
-      const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
-      const returnUpdates = nextState === 'available'
-        ? {
-          state: 'available',
-          last_return_time: nowTime,
-          orders_count: (targetPilot ? (targetPilot.ordersCount || 0) : 0) + 1
-        }
-        : { state: 'on_delivery' };
-
-      syncPilotState(pilotIdToUse, returnUpdates);
     }
+
     logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
     sendToN8N({ ...order, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
-    if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'delivered');
+
+    if (!order.supabaseId) return;
+
+    pendingUpdatesRef.current.add(String(order.supabaseId));
+    if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.add(String(deliveryId));
+
+    try {
+      await supabaseService.completeOrderDelivery(order.supabaseId);
+    } catch (e) {
+      setOrders(prevOrders);
+      setPilots(prevPilots);
+      alert(`⚠️ فشل إتمام التوصيل: ${e?.message || 'خطأ غير معروف'}`);
+    } finally {
+      setTimeout(() => {
+        pendingUpdatesRef.current.delete(String(order.supabaseId));
+        if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.delete(String(deliveryId));
+      }, 2000);
     }
   };
 
-  const failDelivery = (orderId, reason) => {
+  const failDelivery = async (orderId, reason) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || order.status === 'failed_delivery') return;
 
     const nowTime = getSafeISOTime();
+    const deliveryId = Number(order.deliveryId || order.pilotId);
+    const prevOrders = orders;
+    const prevPilots = pilots;
+
+    const otherActive = Number.isFinite(deliveryId) && orders.some(o =>
+      Number(o.deliveryId || o.pilotId) === deliveryId &&
+      o.status === 'active' &&
+      o.id !== orderId
+    );
+    const nextPilotState = otherActive ? 'on_delivery' : 'available';
+
     setOrders(prev => prev.map(o =>
       o.id === orderId
         ? { ...o, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }
         : o
     ));
 
-    // Return Pilot to Queue (Last Return Time = Now) only if they have no other active orders left
-    const pilotIdToUse = order.deliveryId || order.pilotId;
-    if (pilotIdToUse) {
-      const otherActive = orders.some(o => String(o.deliveryId || o.pilotId) === String(pilotIdToUse) && o.status === 'active' && o.id !== orderId);
-      const nextState = otherActive ? 'on_delivery' : 'available';
-
+    if (Number.isFinite(deliveryId)) {
       setPilots(prev => prev.map(p => {
-        if (String(p.id) === String(pilotIdToUse)) {
-          const returnTimeUpdates = nextState === 'available' ? { lastReturnTime: nowTime } : {};
-          return {
-            ...p,
-            state: nextState,
-            ...returnTimeUpdates
-          };
-        }
-        return p;
+        if (Number(p.id) !== deliveryId) return p;
+        const returnTimeUpdates = nextPilotState === 'available' ? { lastReturnTime: nowTime } : {};
+        return { ...p, state: nextPilotState, ...returnTimeUpdates };
       }));
-
-      const returnUpdates = nextState === 'available'
-        ? { state: 'available', last_return_time: nowTime }
-        : { state: 'on_delivery' };
-
-      const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
-      if (targetPilot) {
-        const currentActiveSession = (targetPilot.shiftStatus === 'open' && targetPilot.lastOpenedAt)
-          ? calculateDelayMinutes(targetPilot.lastOpenedAt)
-          : 0;
-        returnUpdates.total_minutes = (targetPilot.totalMinutes || 0) + currentActiveSession;
-        returnUpdates.orders_count = orders.filter(o => String(o.pilotId) === String(pilotIdToUse) && o.status === 'completed' && o.id !== orderId).length;
-      }
-
-      syncPilotState(order.pilotId || pilotIdToUse, returnUpdates);
     }
+
     logAction('DELIVERY_FAIL', `Order #${orderId} failed delivery. Reason: ${reason}`, 'Supervisor');
     sendToN8N({ ...order, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }, 'ORDER_FAIL');
-    if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'failed_delivery', reason);
+
+    if (!order.supabaseId) return;
+
+    pendingUpdatesRef.current.add(String(order.supabaseId));
+    if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.add(String(deliveryId));
+
+    try {
+      await supabaseService.failOrderDelivery(order.supabaseId, reason);
+    } catch (e) {
+      setOrders(prevOrders);
+      setPilots(prevPilots);
+      alert(`⚠️ فشل تسجيل فشل التوصيل: ${e?.message || 'خطأ غير معروف'}`);
+    } finally {
+      setTimeout(() => {
+        pendingUpdatesRef.current.delete(String(order.supabaseId));
+        if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.delete(String(deliveryId));
+      }, 2000);
     }
   };
 
@@ -1013,7 +1034,11 @@ export const AppProvider = ({ children }) => {
     const pilot = pilots.find(p => String(p.id) === String(pilotId));
     if (!pilot) return;
 
+    const deliveryId = Number(pilotId);
+    if (!Number.isFinite(deliveryId)) return;
+
     const newStatus = pilot.shiftStatus === 'open' ? 'closed' : 'open';
+    let forceReopen = false;
 
     if (newStatus === 'open' && pilot.shiftUsed) {
       const password = prompt('⚠️ الطيار فتح وردية مسبقاً! للضرورة القصوى أدخل كلمة سر الأدمن لفتحه مرة أخرى:');
@@ -1021,55 +1046,45 @@ export const AppProvider = ({ children }) => {
         alert('❌ كلمة السر غير صحيحة، تم إلغاء العملية.');
         return;
       }
+      forceReopen = true;
     }
 
-    let sessionMinutes = 0;
     const closedAt = getSafeISOTime();
-    if (newStatus === 'closed' && pilot.lastOpenedAt) {
-      sessionMinutes = calculateDelayMinutes(pilot.lastOpenedAt, closedAt);
-    }
+    const prevPilots = pilots;
 
-    // Call Supabase to update status — لا نُمرّر last_opened_at: null حتى لا يُمسح shift_started_at
-    await syncPilotState(pilotId, {
-      shift_status: newStatus,
-      ...(newStatus === 'open' ? {
-        state: 'available',
-        last_return_time: getSafeISOTime(),
-        last_opened_at: getSafeISOTime(),
-        last_closed_at: null
-      } : {
-        state: 'off',
-        shift_used: true,
-        total_minutes: (pilot.totalMinutes || 0) + sessionMinutes,
-        last_closed_at: closedAt
-      })
-    });
-
-    // Optimistically update UI
     setPilots(prev => prev.map(p => {
-      if (String(p.id) === String(pilotId)) {
-        let sessionMinutes = 0;
-        if (newStatus === 'closed' && p.lastOpenedAt) {
-          sessionMinutes = calculateDelayMinutes(p.lastOpenedAt, closedAt);
-        }
+      if (String(p.id) !== String(pilotId)) return p;
 
-        const updates = newStatus === 'open'
-          ? { state: 'available', lastReturnTime: getSafeISOTime(), lastOpenedAt: getSafeISOTime(), lastClosedAt: null }
-          : {
-            state: 'off',
-            lastClosedAt: closedAt,
-            shiftUsed: true,
-            totalMinutes: (p.totalMinutes || 0) + sessionMinutes
-          };
-
-        return {
-          ...p,
-          shiftStatus: newStatus,
-          ...updates
-        };
+      let sessionMinutes = 0;
+      if (newStatus === 'closed' && p.lastOpenedAt) {
+        sessionMinutes = calculateDelayMinutes(p.lastOpenedAt, closedAt);
       }
-      return p;
+
+      const updates = newStatus === 'open'
+        ? { state: 'available', lastReturnTime: getSafeISOTime(), lastOpenedAt: getSafeISOTime(), lastClosedAt: null }
+        : {
+          state: 'off',
+          lastClosedAt: closedAt,
+          shiftUsed: true,
+          totalMinutes: (p.totalMinutes || 0) + sessionMinutes
+        };
+
+      return { ...p, shiftStatus: newStatus, ...updates };
     }));
+
+    pendingPilotUpdatesRef.current.add(String(deliveryId));
+    try {
+      await supabaseService.togglePilotShift(deliveryId, forceReopen);
+    } catch (e) {
+      setPilots(prevPilots);
+      const msg = e?.message || '';
+      if (msg.includes('force reopen')) alert('⚠️ الطيار فتح وردية مسبقاً — يتطلب موافقة الأدمن.');
+      else alert(`⚠️ فشل تحديث وردية الطيار: ${msg || 'خطأ غير معروف'}`);
+    } finally {
+      setTimeout(() => {
+        pendingPilotUpdatesRef.current.delete(String(deliveryId));
+      }, 1500);
+    }
   };
 
   /**
