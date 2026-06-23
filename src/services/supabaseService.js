@@ -468,6 +468,7 @@ export const supabaseService = {
         shiftStatus: row.shift_started_at && !row.shift_ended_at ? 'open' : 'closed', // مشتق
         lastReturnTime: row.last_return_time || null,
         lastOpenedAt: row.shift_started_at || null,   // shift_started_at → lastOpenedAt
+        lastClosedAt: row.shift_ended_at || null,    // shift_ended_at → lastClosedAt
         totalMinutes: Number(row.total_minutes) || 0,
         ordersCount: Number(row.orders_count) || 0,
         shift: `${row.start_shift || '01:00'} - ${row.end_shift || '11:00'}`,
@@ -527,17 +528,23 @@ export const supabaseService = {
       if (stateUpdates.orders_count !== undefined) dbUpdates.orders_count = stateUpdates.orders_count;
       if (stateUpdates.shift_used !== undefined) dbUpdates.shift_used = stateUpdates.shift_used;
 
-      // shift_status 'open' → set shift_started_at; 'closed' → set shift_ended_at
+      // shift_status 'open' → set shift_started_at + clear shift_ended_at
+      // shift_status 'closed' → set shift_ended_at فقط (نُبقي shift_started_at)
       if (stateUpdates.shift_status === 'open') {
         dbUpdates.shift_started_at = new Date().toISOString();
         dbUpdates.shift_ended_at = null;
       } else if (stateUpdates.shift_status === 'closed') {
-        dbUpdates.shift_ended_at = new Date().toISOString();
+        dbUpdates.shift_ended_at = stateUpdates.last_closed_at || new Date().toISOString();
       }
 
-      // last_opened_at maps to shift_started_at
-      if (stateUpdates.last_opened_at !== undefined) {
+      // last_opened_at → shift_started_at (فقط عند تمرير وقت فعلي — لا نُصفّر وقت البداية عند الإغلاق)
+      if (stateUpdates.last_opened_at) {
         dbUpdates.shift_started_at = stateUpdates.last_opened_at;
+      }
+
+      // last_closed_at → shift_ended_at (عند الإغلاق الصريح)
+      if (stateUpdates.last_closed_at) {
+        dbUpdates.shift_ended_at = stateUpdates.last_closed_at;
       }
 
       if (!Object.keys(dbUpdates).length) return;
