@@ -70,6 +70,16 @@ export const processPendingSync = async () => {
         await supabaseService.createManualOrder(item.payload, true);
       } else if (item.action === 'updateOrderPaymentScreenshot') {
         await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
+      } else if (item.action === 'assignOrderToPilot') {
+        await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
+      } else if (item.action === 'startPilotTrip') {
+        await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
+      } else if (item.action === 'completeOrderDelivery') {
+        await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
+      } else if (item.action === 'failOrderDelivery') {
+        await supabaseService.failOrderDelivery(item.payload.orderId, item.payload.reason, item.payload.mutationId, true);
+      } else if (item.action === 'togglePilotShift') {
+        await supabaseService.togglePilotShift(item.payload.pilotId, item.payload.forceReopen, item.payload.mutationId, true);
       }
     } catch (e) {
       console.warn('⚠️ Offline sync item failed, keeping in queue:', item);
@@ -90,6 +100,12 @@ window.addEventListener('online', processPendingSync);
  * @param {object|null} queuePayload - البيانات التي ستُخزّن في الـ queue إذا فشلت
  * @param {boolean} skipQueue - تخطي الـ queue (للـ retry من الـ queue نفسها)
  */
+const newMutationId = () => (
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : `mut-${Date.now()}-${Math.random().toString(16).slice(2)}`
+);
+
 const withOfflineSupport = async (actionName, promiseFn, queuePayload, skipQueue = false) => {
   try {
     if (!navigator.onLine) throw new Error('Offline');
@@ -461,13 +477,14 @@ export const supabaseService = {
         id: row.id,
         name: row.name || 'طيار غير معروف',
         phone: row.phone || 'غير مسجل',
-        state: row.state || 'available',             // available | out | off
+        state: (row.state === 'out' ? 'on_delivery' : (row.state || 'available')), // available | on_delivery | off
         balance: 0,                                   // لا يوجد في الـ Schema، يُحسب محلياً
         vehicle: 'موتوسيكل',                          // لا يوجد في الـ Schema
         created_at: row.created_at,
         shiftStatus: row.shift_started_at && !row.shift_ended_at ? 'open' : 'closed', // مشتق
         lastReturnTime: row.last_return_time || null,
         lastOpenedAt: row.shift_started_at || null,   // shift_started_at → lastOpenedAt
+        lastClosedAt: row.shift_ended_at || null,    // shift_ended_at → lastClosedAt
         totalMinutes: Number(row.total_minutes) || 0,
         ordersCount: Number(row.orders_count) || 0,
         shift: `${row.start_shift || '01:00'} - ${row.end_shift || '11:00'}`,
@@ -527,17 +544,23 @@ export const supabaseService = {
       if (stateUpdates.orders_count !== undefined) dbUpdates.orders_count = stateUpdates.orders_count;
       if (stateUpdates.shift_used !== undefined) dbUpdates.shift_used = stateUpdates.shift_used;
 
-      // shift_status 'open' → set shift_started_at; 'closed' → set shift_ended_at
+      // shift_status 'open' → set shift_started_at + clear shift_ended_at
+      // shift_status 'closed' → set shift_ended_at فقط (نُبقي shift_started_at)
       if (stateUpdates.shift_status === 'open') {
         dbUpdates.shift_started_at = new Date().toISOString();
         dbUpdates.shift_ended_at = null;
       } else if (stateUpdates.shift_status === 'closed') {
-        dbUpdates.shift_ended_at = new Date().toISOString();
+        dbUpdates.shift_ended_at = stateUpdates.last_closed_at || new Date().toISOString();
       }
 
-      // last_opened_at maps to shift_started_at
-      if (stateUpdates.last_opened_at !== undefined) {
+      // last_opened_at → shift_started_at (فقط عند تمرير وقت فعلي — لا نُصفّر وقت البداية عند الإغلاق)
+      if (stateUpdates.last_opened_at) {
         dbUpdates.shift_started_at = stateUpdates.last_opened_at;
+      }
+
+      // last_closed_at → shift_ended_at (عند الإغلاق الصريح)
+      if (stateUpdates.last_closed_at) {
+        dbUpdates.shift_ended_at = stateUpdates.last_closed_at;
       }
 
       if (!Object.keys(dbUpdates).length) return;
@@ -552,6 +575,73 @@ export const supabaseService = {
 
   async updateDriverStatus(id, isOnline) {
     return this.updatePilotState(id, { shift_status: isOnline ? 'open' : 'closed' });
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 7.5 Pilot/order lifecycle RPCs (atomic — prevents assignment races)
+  // ─────────────────────────────────────────────────────────
+  async assignOrderToPilot(orderId, pilotId, pilotName, mutationId = null, skipQueue = false) {
+    const pMutationId = mutationId || newMutationId();
+    return withOfflineSupport('assignOrderToPilot', async () => {
+      const { data, error } = await supabase.rpc('assign_order_to_pilot', {
+        p_order_id: orderId,
+        p_pilot_id: pilotId,
+        p_pilot_name: pilotName,
+        p_mutation_id: pMutationId
+      });
+      if (error) throw error;
+      return data;
+    }, { orderId, pilotId, pilotName, mutationId: pMutationId }, skipQueue);
+  },
+
+  async startPilotTrip(orderId, mutationId = null, skipQueue = false) {
+    const pMutationId = mutationId || newMutationId();
+    return withOfflineSupport('startPilotTrip', async () => {
+      const { data, error } = await supabase.rpc('start_pilot_trip', {
+        p_order_id: orderId,
+        p_mutation_id: pMutationId
+      });
+      if (error) throw error;
+      return data;
+    }, { orderId, mutationId: pMutationId }, skipQueue);
+  },
+
+  async completeOrderDelivery(orderId, mutationId = null, skipQueue = false) {
+    const pMutationId = mutationId || newMutationId();
+    return withOfflineSupport('completeOrderDelivery', async () => {
+      const { data, error } = await supabase.rpc('complete_order_delivery', {
+        p_order_id: orderId,
+        p_mutation_id: pMutationId
+      });
+      if (error) throw error;
+      return data;
+    }, { orderId, mutationId: pMutationId }, skipQueue);
+  },
+
+  async failOrderDelivery(orderId, reason = null, mutationId = null, skipQueue = false) {
+    const pMutationId = mutationId || newMutationId();
+    return withOfflineSupport('failOrderDelivery', async () => {
+      const { data, error } = await supabase.rpc('fail_order_delivery', {
+        p_order_id: orderId,
+        p_reason: reason,
+        p_mutation_id: pMutationId
+      });
+      if (error) throw error;
+      return data;
+    }, { orderId, reason, mutationId: pMutationId }, skipQueue);
+  },
+
+  async togglePilotShift(pilotId, forceReopen = false, mutationId = null, skipQueue = false) {
+    const pMutationId = mutationId || newMutationId();
+    return withOfflineSupport('togglePilotShift', async () => {
+      const { data, error } = await supabase.rpc('toggle_pilot_shift', {
+        p_pilot_id: pilotId,
+        p_force_reopen: forceReopen,
+        p_mutation_id: pMutationId
+      });
+      if (error) throw error;
+      return data;
+    }, { pilotId, forceReopen, mutationId: pMutationId }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────

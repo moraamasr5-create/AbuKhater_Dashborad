@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { Check, X, AlertCircle, UserPlus, RotateCcw, Clock, Bike, RefreshCw, ShoppingCart, ChevronDown, ChevronUp } from 'lucide-react';
 import { printerService } from '../../services/printerService';
 import { motion, AnimatePresence } from 'framer-motion'; // 🪄 استيراد مكتبة التحريك لعمل الـ Live Dashboard
+import { isPilotOnDelivery } from '../../utils/pilotState';
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
 
@@ -54,8 +55,8 @@ const OrderInbox = ({ onReedit }) => {
     // 🔴 تصفية الطلبات المعروضة بناءً على نوع المستخدم (ادمن او كاشير او طيار)
     const inboxOrders = orders.filter(o => {
         if (userRole === 'admin' || userRole === 'casher') {
-            // الادمن والكاشير بيشوفوا الطلبات في مراحل التجهيز والانتظار
-            return ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned'].includes(o.status);
+            // الادمن والكاشير بيشوفوا الطلبات في مراحل التجهيز والانتظار والتوصيل النشط
+            return ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned', 'active'].includes(o.status);
         } else {
             // الطيار بيشوف بس الطلبات اللي اتسندت ليه أو اللي "في الطريق" للتسليم
             return ['driver_assigned', 'active'].includes(o.status);
@@ -105,7 +106,7 @@ const OrderInbox = ({ onReedit }) => {
 
         // Validate pilot status
         const selectedPilotObj = pilots.find(p => String(p.id) === String(pilotId));
-        if (selectedPilotObj && selectedPilotObj.state === 'out') {
+        if (selectedPilotObj && isPilotOnDelivery(selectedPilotObj.state)) {
             alert('هذا الطيار في رحلة توصيل حالياً ولا يمكن إسناد طلب جديد له 🚫');
             return;
         }
@@ -197,6 +198,13 @@ const OrderInbox = ({ onReedit }) => {
                                 if (order.status === 'pending') { statusColor = 'var(--warning)'; statusBg = 'rgba(245, 158, 11, 0.05)'; }
                                 if (order.status === 'waiting_driver') { statusColor = 'var(--accent)'; statusBg = 'rgba(16, 185, 129, 0.05)'; }
                                 if (order.status === 'driver_assigned') { statusColor = '#3b82f6'; statusBg = 'rgba(59, 130, 246, 0.05)'; }
+                                if (order.status === 'active') { statusColor = 'var(--success)'; statusBg = 'rgba(16, 185, 129, 0.08)'; }
+
+                                const pilotIdForBadge = order.pilotId || order.deliveryId;
+                                const orderPilot = pilotIdForBadge
+                                    ? pilots.find(p => String(p.id) === String(pilotIdForBadge))
+                                    : null;
+                                const showPilotOutBadge = order.status === 'driver_assigned' && isPilotOnDelivery(orderPilot?.state);
 
                                 const isSelectedPreview = isThermalPrintMode && previewOrder && previewOrder.id === order.id;
 
@@ -233,6 +241,15 @@ const OrderInbox = ({ onReedit }) => {
                                         <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                                             {new Date(order.timestamp).toLocaleTimeString('ar-EG')}
                                         </p>
+                                        {showPilotOutBadge && (
+                                            <div style={{
+                                                marginTop: '6px', fontSize: '0.72rem', color: 'var(--warning)',
+                                                background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                borderRadius: '6px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                            }}>
+                                                <Bike size={12} /> الطيار خارج — بانتظار بدء الرحلة
+                                            </div>
+                                        )}
                                         <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                                             {order.confirmedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>✔️ {new Date(order.confirmedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
                                             {order.assignedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>👤 {new Date(order.assignedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
@@ -527,8 +544,8 @@ const OrderInbox = ({ onReedit }) => {
                                                     >
                                                         <option value="">اختر طيار...</option>
                                                         {availablePilots.map(p => (
-                                                            <option key={p.id} value={p.id} disabled={p.state === 'out'}>
-                                                                {p.name} {p.state === 'out' ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
+                                                            <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
+                                                                {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
                                                             </option>
                                                         ))}
                                                     </select>
@@ -545,12 +562,32 @@ const OrderInbox = ({ onReedit }) => {
                                             </div>
                                         )}
 
-                                        {/* Stage 3: Assigned -> Out (Admin or Assigned Driver) */}
-                                        {order.status === 'driver_assigned' && (
+                                        {/* Stage 3: Assigned -> Out (one order per trip start) */}
+                                        {order.status === 'driver_assigned' && (() => {
+                                            const pilotIdForOrder = order.pilotId || order.deliveryId;
+                                            const assignedPilot = pilots.find(p => String(p.id) === String(pilotIdForOrder));
+                                            const pilotAlreadyOut = isPilotOnDelivery(assignedPilot?.state);
+                                            const pendingSiblings = orders.filter(o =>
+                                                String(o.pilotId || o.deliveryId) === String(pilotIdForOrder) &&
+                                                o.status === 'driver_assigned' &&
+                                                o.id !== order.id
+                                            ).length;
+
+                                            return (
                                             <div style={{ textAlign: 'center' }}>
                                                 <div style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
-                                                    الطيار: <strong>{pilots.find(p => String(p.id) === String(order.pilotId))?.name}</strong>
+                                                    الطيار: <strong>{assignedPilot?.name}</strong>
                                                 </div>
+                                                {pilotAlreadyOut && (
+                                                    <div style={{
+                                                        marginBottom: '8px', fontSize: '0.78rem', color: 'var(--warning)',
+                                                        background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                        borderRadius: '8px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                                    }}>
+                                                        <Bike size={14} /> الطيار خارج المطعم — لم تبدأ رحلة هذا الطلب
+                                                        {pendingSiblings > 0 && ` (+${pendingSiblings} طلب آخر بالانتظار)`}
+                                                    </div>
+                                                )}
                                                 <button
                                                     onClick={() => startDelivery(order.id)}
                                                     className="btn-primary"
@@ -559,7 +596,8 @@ const OrderInbox = ({ onReedit }) => {
                                                     <Bike size={18} /> ابدأ الرحلة الآن
                                                 </button>
                                             </div>
-                                        )}
+                                            );
+                                        })()}
 
                                         {/* Stage 4: Out -> Complete/Fail (Driver View or Admin/Casher Control) */}
                                         {order.status === 'active' && (userRole === 'admin' || userRole === 'casher' || userRole === 'driver') && (
