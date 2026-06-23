@@ -892,27 +892,38 @@ export const AppProvider = ({ children }) => {
         : o
     ));
 
-    // Return Pilot to Queue (Last Return Time = Now)
+    // Return pilot to queue only when no other active orders remain on the same trip
     const pilotIdToUse = order.deliveryId || order.pilotId;
     if (pilotIdToUse) {
+      const otherActive = orders.some(o =>
+        String(o.deliveryId || o.pilotId) === String(pilotIdToUse) &&
+        o.status === 'active' &&
+        o.id !== orderId
+      );
+      const nextState = otherActive ? 'on_delivery' : 'available';
+
       setPilots(prev => prev.map(p => {
         if (String(p.id) === String(pilotIdToUse)) {
+          const returnTimeUpdates = nextState === 'available'
+            ? { lastReturnTime: nowTime, ordersCount: (p.ordersCount || 0) + 1 }
+            : {};
           return {
             ...p,
-            state: 'available',
-            lastReturnTime: nowTime,
-            ordersCount: (p.ordersCount || 0) + 1
+            state: nextState,
+            ...returnTimeUpdates
           };
         }
         return p;
       }));
 
       const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
-      const returnUpdates = {
-        state: 'available',
-        last_return_time: nowTime,
-        orders_count: (targetPilot ? (targetPilot.ordersCount || 0) : 0) + 1
-      };
+      const returnUpdates = nextState === 'available'
+        ? {
+          state: 'available',
+          last_return_time: nowTime,
+          orders_count: (targetPilot ? (targetPilot.ordersCount || 0) : 0) + 1
+        }
+        : { state: 'on_delivery' };
 
       supabaseService.updatePilotState(pilotIdToUse, returnUpdates);
     }
@@ -938,7 +949,7 @@ export const AppProvider = ({ children }) => {
     const pilotIdToUse = order.deliveryId || order.pilotId;
     if (pilotIdToUse) {
       const otherActive = orders.some(o => String(o.deliveryId || o.pilotId) === String(pilotIdToUse) && o.status === 'active' && o.id !== orderId);
-      const nextState = otherActive ? 'out' : 'available';
+      const nextState = otherActive ? 'on_delivery' : 'available';
 
       setPilots(prev => prev.map(p => {
         if (String(p.id) === String(pilotIdToUse)) {
@@ -954,7 +965,7 @@ export const AppProvider = ({ children }) => {
 
       const returnUpdates = nextState === 'available'
         ? { state: 'available', last_return_time: nowTime }
-        : { state: 'out' };
+        : { state: 'on_delivery' };
 
       const targetPilot = pilots.find(p => String(p.id) === String(pilotIdToUse));
       if (targetPilot) {

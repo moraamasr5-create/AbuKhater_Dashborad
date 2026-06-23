@@ -461,7 +461,7 @@ export const supabaseService = {
         id: row.id,
         name: row.name || 'طيار غير معروف',
         phone: row.phone || 'غير مسجل',
-        state: row.state || 'available',             // available | out | off
+        state: (row.state === 'out' ? 'on_delivery' : (row.state || 'available')), // available | on_delivery | off
         balance: 0,                                   // لا يوجد في الـ Schema، يُحسب محلياً
         vehicle: 'موتوسيكل',                          // لا يوجد في الـ Schema
         created_at: row.created_at,
