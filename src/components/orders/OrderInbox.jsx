@@ -951,6 +951,107 @@ const OrderInbox = ({ onReedit }) => {
                 </div>
             )}
 
+            {/* 🚚 رحلات الدليفري الحالية */}
+            {(userRole === 'admin' || userRole === 'casher' || userRole === 'driver') && (
+                <div className="glass-card" style={{ borderTop: '4px solid var(--primary)', padding: '0', marginTop: '24px' }}>
+                    <div style={{ padding: '20px', borderBottom: '1px solid var(--border)' }}>
+                        <h3 className="flex" style={{ fontSize: '1.2rem', margin: 0, gap: '8px', alignItems: 'center' }}>
+                            <MapPin size={22} color="var(--primary)" /> رحلات الدليفري الحالية
+                        </h3>
+                    </div>
+
+                    <div className="flex flex-wrap" style={{ minHeight: '300px', gap: '0' }}>
+                        {/* Pilots List Side */}
+                        <div style={{ width: '100%', maxWidth: '280px', borderLeft: '1px solid var(--border)', padding: '20px' }}>
+                            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>الطيارين في الخارج:</h4>
+                            <div className="grid" style={{ gap: '8px' }}>
+                                {pilotsWithOrders.length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا يوجد طيارين في الخارج حالياً</p>
+                                ) : (
+                                    pilotsWithOrders.map(p => (
+                                        <button
+                                            key={p.id}
+                                            onClick={() => setViewPilotId(p.id)}
+                                            style={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'space-between',
+                                                padding: '12px',
+                                                borderRadius: '12px',
+                                                border: 'none',
+                                                background: viewPilotId === p.id ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
+                                                color: viewPilotId === p.id ? 'white' : 'var(--text-main)',
+                                                textAlign: 'right',
+                                                fontWeight: '700',
+                                                minHeight: '44px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            <span>{p.name}</span>
+                                            <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: '6px' }}>
+                                                {ordersByPilot[p.id]?.length || 0}
+                                            </span>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Orders Table Side */}
+                        <div style={{ flex: 1, minWidth: '300px', padding: '20px', overflowX: 'auto' }}>
+                            {viewPilotId && ordersByPilot[viewPilotId] ? (
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
+                                    <thead>
+                                        <tr style={{ textAlign: 'right', color: 'var(--text-muted)', borderBottom: '2px solid var(--border)' }}>
+                                            <th style={{ padding: '12px 8px' }}>بون #</th>
+                                            <th style={{ padding: '12px 8px' }}>العميل</th>
+                                            <th style={{ padding: '12px 8px' }}>المنطقة</th>
+                                            <th style={{ padding: '12px 8px' }}>الوقت</th>
+                                            <th style={{ padding: '12px 8px', textAlign: 'center' }}>إجراء</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {ordersByPilot[viewPilotId].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(order => {
+                                            const elapsed = getElapsedTime(order.startTime || order.timestamp);
+                                            const isDelayed = elapsed > 40;
+
+                                            return (
+                                                <tr key={order.id} style={{ borderBottom: '1px solid var(--border)', background: isDelayed ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
+                                                    <td style={{ padding: '16px 8px' }}>
+                                                        <span style={{ fontWeight: '800', color: 'var(--primary)' }}>#{order.originalId || order.id}</span>
+                                                        <button onClick={() => onReedit(order)} style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', marginRight: '4px', opacity: 0.6 }}>✏️</button>
+                                                    </td>
+                                                    <td style={{ padding: '16px 8px' }}>
+                                                        <p style={{ fontWeight: 'bold' }}>{order.customerName}</p>
+                                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{order.total > 0 ? `${order.total} ج.م` : ''}</p>
+                                                    </td>
+                                                    <td style={{ padding: '16px 8px' }}>{order.area}</td>
+                                                    <td style={{ padding: '16px 8px' }}>
+                                                        <span style={{ color: isDelayed ? 'var(--danger)' : elapsed > 25 ? 'var(--warning)' : 'var(--accent)', fontWeight: 'bold' }}>
+                                                            {elapsed} د
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '16px 8px' }}>
+                                                        <div className="flex" style={{ justifyContent: 'center', gap: '8px' }}>
+                                                            <button onClick={() => completeOrder(order.id)} style={{ padding: '6px 12px', background: 'var(--success)', border: 'none', color: 'white', fontSize: '0.85rem', borderRadius: '6px', cursor: 'pointer' }}>تسليم</button>
+                                                            <button onClick={() => handleFailDelivery(order.id)} style={{ padding: '6px 8px', background: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)', borderRadius: '6px', cursor: 'pointer' }}>❌</button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            ) : (
+                                <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-muted)' }}>
+                                    {pilotsWithOrders.length > 0 ? 'الرجاء اختيار طيار لعرض طلباته' : 'لا توجد رحلات نشطة حالياً'}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* 🖼️ Full Image Modal Preview */}
             <AnimatePresence>
                 {previewImage && (

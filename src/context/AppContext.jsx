@@ -268,7 +268,7 @@ export const AppProvider = ({ children }) => {
         if (fetchedOrders && fetchedOrders.length > 0) {
           setOrders(prev => {
             const newOrdersForAudio = fetchedOrders.filter(fo => {
-              const notInPrev = !prev.some(o => (o.originalId || o.id) === fo.originalId);
+              const notInPrev = !prev.some(o => o.supabaseId === fo.supabaseId);
               const isRecentlyCreated = fo.timestamp &&
                 (Date.now() - new Date(fo.timestamp).getTime()) < 3 * 60 * 1000;
               return notInPrev && isRecentlyCreated;
@@ -282,10 +282,15 @@ export const AppProvider = ({ children }) => {
             const LOCAL_ONLY_FIELDS = ['pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
 
             const mergedOrders = fetchedOrders.map(fo => {
-              const existing = prev.find(o => (o.originalId || o.id) === fo.originalId);
+              // Try to find the local order matching this fetched order uniquely by supabaseId first
+              let existing = prev.find(o => o.supabaseId === fo.supabaseId);
+              if (!existing) {
+                // Fallback to matching by originalId/id for pending manual orders that don't have a supabaseId yet
+                existing = prev.find(o => !o.supabaseId && (o.originalId || o.id) === fo.originalId);
+              }
               if (!existing) return fo;
 
-              const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId)) || pendingUpdatesRef.current.has(String(fo.originalId));
+              const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
               const localIsNewer = existing.confirmedAt || existing.assignedAt || existing.startTime;
 
               const mergedStatus = isPending ? existing.status : (localIsNewer ? existing.status : fo.status);
@@ -298,7 +303,7 @@ export const AppProvider = ({ children }) => {
               return { ...fo, ...localFields, status: mergedStatus };
             });
 
-            const manualOrders = prev.filter(p => !p.supabaseId && !fetchedOrders.some(fo => fo.originalId === (p.originalId || p.id)));
+            const manualOrders = prev.filter(p => !p.supabaseId);
 
             return [...mergedOrders, ...manualOrders];
           });
@@ -358,7 +363,17 @@ export const AppProvider = ({ children }) => {
     try {
       const fetchedOrders = await supabaseService.fetchOrders(currentShift?.id);
       setOrders(prev => {
-        const onlyNew = fetchedOrders.filter(fo => !prev.some(p => (p.originalId || p.id) === fo.originalId));
+        const onlyNew = fetchedOrders.filter(fo => {
+          // Check if it is already in prev uniquely by supabaseId
+          const existsBySupabaseId = prev.some(p => p.supabaseId === fo.supabaseId);
+          if (existsBySupabaseId) return false;
+
+          // If not in prev by supabaseId, verify if it matches a pending manual order
+          const existsByOriginalId = prev.some(p => !p.supabaseId && (p.originalId || p.id) === fo.originalId);
+          if (existsByOriginalId) return false;
+
+          return true;
+        });
         return [...onlyNew, ...prev];
       });
     } catch (e) {
