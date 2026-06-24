@@ -248,7 +248,7 @@ export const supabaseService = {
 
         return {
           supabaseId: row.id,
-          id: `EXT-${orderId}`,
+          id: `EXT-${row.id}`,
           originalId: String(orderId),
           type: row.order_type || 'delivery',
           source: row.source || 'online',
