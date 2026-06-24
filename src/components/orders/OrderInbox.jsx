@@ -264,590 +264,590 @@ const OrderInbox = ({ onReedit }) => {
                                         }}
                                     >
 
-                                    {/* Status Indicator Badge */}
-                                    <div style={{ position: 'absolute', top: '12px', right: '12px', background: statusColor, color: '#fff', fontSize: '0.7rem', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold', boxShadow: `0 2px 10px ${statusColor}80` }}>
-                                        {order.status === 'pending' ? 'طلب جديد' : order.status === 'waiting_driver' ? 'بانتظار الطيار' : order.status === 'active' ? 'في الطريق 🚚' : 'تم الإسناد'}
-                                    </div>
-
-                                    {/* 1. Order ID & Badge */}
-                                    <div>
-                                        <h3 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--primary)' }}>#{order.originalId || order.id} {order.type === 'talabat' && <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', background: '#ff5722', color: 'white', padding: '2px', borderRadius: '4px' }}>Talabat</span>}</h3>
-                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                            {new Date(order.timestamp).toLocaleTimeString('ar-EG')}
-                                        </p>
-                                        {showPilotOutBadge && (
-                                            <div style={{
-                                                marginTop: '6px', fontSize: '0.72rem', color: 'var(--warning)',
-                                                background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)',
-                                                borderRadius: '6px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
-                                            }}>
-                                                <Bike size={12} /> الطيار خارج — بانتظار بدء الرحلة
-                                            </div>
-                                        )}
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
-                                            {order.confirmedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>✔️ {new Date(order.confirmedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                            {order.assignedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>👤 {new Date(order.assignedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                            {order.startTime && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>🚚 {new Date(order.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                            {order.deliveredAt && <span style={{ background: 'rgba(74, 222, 128, 0.1)', color: '#4ade80', padding: '2px 6px', borderRadius: '4px' }}>🏁 {new Date(order.deliveredAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
-                                            {order.failedAt && <span style={{ background: 'rgba(248, 113, 113, 0.1)', color: '#f87171', padding: '2px 6px', borderRadius: '4px' }}>❌ {new Date(order.failedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                        {/* Status Indicator Badge */}
+                                        <div style={{ position: 'absolute', top: '12px', right: '12px', background: statusColor, color: '#fff', fontSize: '0.7rem', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold', boxShadow: `0 2px 10px ${statusColor}80` }}>
+                                            {order.status === 'pending' ? 'طلب جديد' : order.status === 'waiting_driver' ? 'بانتظار الطيار' : order.status === 'active' ? 'في الطريق 🚚' : 'تم الإسناد'}
                                         </div>
 
-                                        {/* 📍 Zone & Distance Badge */}
-                                        {isOnline && normalized.lat && normalized.lng && (
-                                            <div style={{ marginTop: '8px' }}>
-                                                {(() => {
-                                                    const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, normalized.lat, normalized.lng);
-                                                    const zoneCfg = getZone(dist);
-                                                    return (
-                                                        <div style={{
-                                                            display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                                            padding: '4px 10px', borderRadius: '12px', background: `${zoneCfg.color}15`,
-                                                            border: `1px solid ${zoneCfg.color}30`, color: zoneCfg.color, fontSize: '0.75rem', fontWeight: 'bold'
-                                                        }}>
-                                                            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: zoneCfg.color }}></div>
-                                                            نطاق {zoneCfg.id} • {dist} كم
-                                                        </div>
-                                                    );
-                                                })()}
-                                            </div>
-                                        )}
-
-                                        {isInGracePeriod && <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>Grace: {timeLeft}s</span>}
-                                    </div>
-
-                                    {/* 2. Customer Info */}
-                                    <div>
-                                        {isOnline ? (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                                {/* 1. Header (Name + Phones Badge) */}
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
-                                                    <h4 style={{ margin: '0', fontWeight: '900', fontSize: '1.5rem', color: 'var(--primary)', textShadow: '0 0 15px rgba(79, 70, 229, 0.2)' }}>
-                                                        🧍 {normalized.name}
-                                                    </h4>
-                                                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                                                        <a href={`tel:${normalized.phone}`} style={{
-                                                            fontSize: '0.85rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6',
-                                                            padding: '4px 12px', borderRadius: '20px', textDecoration: 'none', border: '1px solid rgba(59, 130, 246, 0.2)',
-                                                            display: 'flex', alignItems: 'center', gap: '4px'
-                                                        }}>
-                                                            📞 {normalized.phone}
-                                                        </a>
-                                                        {normalized.phone2 && (
-                                                            <a href={`tel:${normalized.phone2}`} style={{
-                                                                fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)',
-                                                                padding: '4px 12px', borderRadius: '20px', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.1)'
-                                                            }}>
-                                                                📞 {normalized.phone2}
-                                                            </a>
-                                                        )}
-                                                    </div>
+                                        {/* 1. Order ID & Badge */}
+                                        <div>
+                                            <h3 style={{ fontSize: '1.4rem', fontWeight: 'bold', color: 'var(--primary)' }}>#{order.originalId || order.id} {order.type === 'talabat' && <span style={{ fontSize: '0.6rem', verticalAlign: 'middle', background: '#ff5722', color: 'white', padding: '2px', borderRadius: '4px' }}>Talabat</span>}</h3>
+                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                {new Date(order.timestamp).toLocaleTimeString('ar-EG')}
+                                            </p>
+                                            {showPilotOutBadge && (
+                                                <div style={{
+                                                    marginTop: '6px', fontSize: '0.72rem', color: 'var(--warning)',
+                                                    background: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.3)',
+                                                    borderRadius: '6px', padding: '3px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                                }}>
+                                                    <Bike size={12} /> الطيار خارج — بانتظار بدء الرحلة
                                                 </div>
+                                            )}
+                                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
+                                                {order.confirmedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>✔️ {new Date(order.confirmedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                {order.assignedAt && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>👤 {new Date(order.assignedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                {order.startTime && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: '4px' }}>🚚 {new Date(order.startTime).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                {order.deliveredAt && <span style={{ background: 'rgba(74, 222, 128, 0.1)', color: '#4ade80', padding: '2px 6px', borderRadius: '4px' }}>🏁 {new Date(order.deliveredAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                                {order.failedAt && <span style={{ background: 'rgba(248, 113, 113, 0.1)', color: '#f87171', padding: '2px 6px', borderRadius: '4px' }}>❌ {new Date(order.failedAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>}
+                                            </div>
 
-                                                {/* 2. Address (Max 2 lines, ellipsis) */}
-                                                <p style={{
-                                                    margin: '0', fontSize: '1rem', color: 'var(--text-muted)', lineHeight: '1.4',
-                                                    display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
-                                                }} title={normalized.address}>
-                                                    📍 {normalized.address}
-                                                </p>
-
-                                                {/* 3. Actions Row (Badges + Location + Screenshot) */}
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
-                                                    {/* 💳 Payment Method Badge */}
+                                            {/* 📍 Zone & Distance Badge */}
+                                            {isOnline && normalized.lat && normalized.lng && (
+                                                <div style={{ marginTop: '8px' }}>
                                                     {(() => {
-                                                        const method = (normalized.paymentMethod || "").toLowerCase();
-                                                        let badge = { text: "💳 Online", color: "var(--text-muted)", bg: "rgba(255,255,255,0.05)", border: "rgba(255,255,255,0.1)", glow: "transparent" };
-
-                                                        if (method === 'cash') badge = { text: "💵 كاش", color: "#10b981", bg: "rgba(16, 185, 129, 0.15)", border: "rgba(16, 185, 129, 0.2)", glow: "rgba(16, 185, 129, 0.1)" };
-                                                        else if (method === 'vodafone_cash' || method.includes('vodafone')) badge = { text: "📱 فودافون", color: "#ef4444", bg: "rgba(239, 68, 68, 0.15)", border: "rgba(239, 68, 68, 0.2)", glow: "rgba(239, 68, 68, 0.1)" };
-                                                        else if (method === 'instapay') badge = { text: "⚡ InstaPay", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.15)", border: "rgba(59, 130, 246, 0.2)", glow: "rgba(59, 130, 246, 0.1)" };
-
+                                                        const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, normalized.lat, normalized.lng);
+                                                        const zoneCfg = getZone(dist);
                                                         return (
                                                             <div style={{
-                                                                padding: '6px 16px', borderRadius: '30px', fontSize: '0.85rem', fontWeight: '800',
-                                                                background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
-                                                                boxShadow: `0 0 10px ${badge.glow}`
+                                                                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                                padding: '4px 10px', borderRadius: '12px', background: `${zoneCfg.color}15`,
+                                                                border: `1px solid ${zoneCfg.color}30`, color: zoneCfg.color, fontSize: '0.75rem', fontWeight: 'bold'
                                                             }}>
-                                                                {badge.text}
+                                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: zoneCfg.color }}></div>
+                                                                نطاق {zoneCfg.id} • {dist} كم
                                                             </div>
                                                         );
                                                     })()}
-
-                                                    {/* 🟡 Location Button */}
-                                                    {normalized.lat && normalized.lng && (
-                                                        <button
-                                                            onClick={() => window.open(`https://www.google.com/maps?q=${normalized.lat},${normalized.lng}`, '_blank')}
-                                                            className="btn-primary hover-scale"
-                                                            style={{
-                                                                padding: '6px 16px', fontSize: '0.85rem', background: '#f59e0b',
-                                                                color: 'white', borderRadius: '30px', border: 'none', fontWeight: 'bold',
-                                                                boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)', display: 'flex', alignItems: 'center', gap: '6px'
-                                                            }}
-                                                        >
-                                                            🟡 اللوكيشن
-                                                        </button>
-                                                    )}
-
-                                                    {/* 🖼️ Mini Preview Thumbnail */}
-                                                    {normalized.screenshot && (
-                                                        <div
-                                                            onClick={() => setPreviewImage(normalized.screenshot)}
-                                                            className="hover-scale"
-                                                            style={{
-                                                                width: '42px', height: '42px', borderRadius: '10px', overflow: 'hidden',
-                                                                cursor: 'pointer', border: '2px solid rgba(255,255,255,0.1)',
-                                                                boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                                                            }}
-                                                        >
-                                                            <img src={normalized.screenshot} alt="preview" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                        </div>
-                                                    )}
                                                 </div>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <h4 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                    {order.customerName || order.customer?.name || "عميل غير معروف"}
-                                                    {order.total === 0 && (
-                                                        <span style={{ fontSize: '0.6rem', background: 'var(--danger)', color: 'white', padding: '2px 6px', borderRadius: '4px', animation: 'pulse 2s infinite' }}>⚠️ راجع الطلب</span>
-                                                    )}
-                                                </h4>
-                                                <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                                                    {order.area || order.customer?.address || "غير مسجل"}
-                                                </p>
+                                            )}
 
-                                                {/* 📍 Zone & Distance Badge for Manual Orders */}
-                                                {order.lat && order.lng && (
-                                                    <div style={{ marginTop: '8px' }}>
+                                            {isInGracePeriod && <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>Grace: {timeLeft}s</span>}
+                                        </div>
+
+                                        {/* 2. Customer Info */}
+                                        <div>
+                                            {isOnline ? (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                                    {/* 1. Header (Name + Phones Badge) */}
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
+                                                        <h4 style={{ margin: '0', fontWeight: '900', fontSize: '1.5rem', color: 'var(--primary)', textShadow: '0 0 15px rgba(79, 70, 229, 0.2)' }}>
+                                                            🧍 {normalized.name}
+                                                        </h4>
+                                                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                            <a href={`tel:${normalized.phone}`} style={{
+                                                                fontSize: '0.85rem', fontWeight: 'bold', background: 'rgba(59, 130, 246, 0.1)', color: '#3b82f6',
+                                                                padding: '4px 12px', borderRadius: '20px', textDecoration: 'none', border: '1px solid rgba(59, 130, 246, 0.2)',
+                                                                display: 'flex', alignItems: 'center', gap: '4px'
+                                                            }}>
+                                                                📞 {normalized.phone}
+                                                            </a>
+                                                            {normalized.phone2 && (
+                                                                <a href={`tel:${normalized.phone2}`} style={{
+                                                                    fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)',
+                                                                    padding: '4px 12px', borderRadius: '20px', textDecoration: 'none', border: '1px solid rgba(255,255,255,0.1)'
+                                                                }}>
+                                                                    📞 {normalized.phone2}
+                                                                </a>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    {/* 2. Address (Max 2 lines, ellipsis) */}
+                                                    <p style={{
+                                                        margin: '0', fontSize: '1rem', color: 'var(--text-muted)', lineHeight: '1.4',
+                                                        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
+                                                    }} title={normalized.address}>
+                                                        📍 {normalized.address}
+                                                    </p>
+
+                                                    {/* 3. Actions Row (Badges + Location + Screenshot) */}
+                                                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                                                        {/* 💳 Payment Method Badge */}
                                                         {(() => {
-                                                            const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, order.lat, order.lng);
-                                                            const zoneCfg = getZone(dist);
+                                                            const method = (normalized.paymentMethod || "").toLowerCase();
+                                                            let badge = { text: "💳 Online", color: "var(--text-muted)", bg: "rgba(255,255,255,0.05)", border: "rgba(255,255,255,0.1)", glow: "transparent" };
+
+                                                            if (method === 'cash') badge = { text: "💵 كاش", color: "#10b981", bg: "rgba(16, 185, 129, 0.15)", border: "rgba(16, 185, 129, 0.2)", glow: "rgba(16, 185, 129, 0.1)" };
+                                                            else if (method === 'vodafone_cash' || method.includes('vodafone')) badge = { text: "📱 فودافون", color: "#ef4444", bg: "rgba(239, 68, 68, 0.15)", border: "rgba(239, 68, 68, 0.2)", glow: "rgba(239, 68, 68, 0.1)" };
+                                                            else if (method === 'instapay') badge = { text: "⚡ InstaPay", color: "#3b82f6", bg: "rgba(59, 130, 246, 0.15)", border: "rgba(59, 130, 246, 0.2)", glow: "rgba(59, 130, 246, 0.1)" };
+
                                                             return (
                                                                 <div style={{
-                                                                    display: 'inline-flex', alignItems: 'center', gap: '6px',
-                                                                    padding: '4px 10px', borderRadius: '12px', background: `${zoneCfg.color}15`,
-                                                                    border: `1px solid ${zoneCfg.color}30`, color: zoneCfg.color, fontSize: '0.75rem', fontWeight: 'bold'
+                                                                    padding: '6px 16px', borderRadius: '30px', fontSize: '0.85rem', fontWeight: '800',
+                                                                    background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                                                                    boxShadow: `0 0 10px ${badge.glow}`
                                                                 }}>
-                                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: zoneCfg.color }}></div>
-                                                                    نطاق {zoneCfg.id} • {dist} كم
+                                                                    {badge.text}
                                                                 </div>
                                                             );
                                                         })()}
-                                                    </div>
-                                                )}
 
-                                                <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                                                        {/* 🟡 Location Button */}
+                                                        {normalized.lat && normalized.lng && (
+                                                            <button
+                                                                onClick={() => window.open(`https://www.google.com/maps?q=${normalized.lat},${normalized.lng}`, '_blank')}
+                                                                className="btn-primary hover-scale"
+                                                                style={{
+                                                                    padding: '6px 16px', fontSize: '0.85rem', background: '#f59e0b',
+                                                                    color: 'white', borderRadius: '30px', border: 'none', fontWeight: 'bold',
+                                                                    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.4)', display: 'flex', alignItems: 'center', gap: '6px'
+                                                                }}
+                                                            >
+                                                                🟡 اللوكيشن
+                                                            </button>
+                                                        )}
 
-                                                    {/* 💵 Payment Badge */}
-                                                    {(() => {
-                                                        const method = (order.payment?.method || order.paymentMethod || "غير محدد").toLowerCase();
-                                                        const isCash = method.includes('cash') && !method.includes('vodafone');
-                                                        const isVF = method.includes('vodafone') || method.includes('v-cash') || method.includes('فودافون');
-
-                                                        return (
-                                                            <div style={{
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '6px',
-                                                                padding: '4px 10px',
-                                                                borderRadius: '20px',
-                                                                fontSize: '0.8rem',
-                                                                fontWeight: '600',
-                                                                background: isCash ? 'rgba(16, 185, 129, 0.15)' : isVF ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.05)',
-                                                                color: isCash ? '#10b981' : isVF ? '#a78bfa' : 'var(--text-muted)',
-                                                                border: `1px solid ${isCash ? 'rgba(16, 185, 129, 0.2)' : isVF ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.1)'}`
-                                                            }}>
-                                                                {isCash ? '💵 كاش' : isVF ? '📱 فودافون كاش' : `💳 ${method}`}
+                                                        {/* 🖼️ Mini Preview Thumbnail */}
+                                                        {normalized.screenshot && (
+                                                            <div
+                                                                onClick={() => setPreviewImage(normalized.screenshot)}
+                                                                className="hover-scale"
+                                                                style={{
+                                                                    width: '42px', height: '42px', borderRadius: '10px', overflow: 'hidden',
+                                                                    cursor: 'pointer', border: '2px solid rgba(255,255,255,0.1)',
+                                                                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                                                                }}
+                                                            >
+                                                                <img src={normalized.screenshot} alt="preview" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                             </div>
-                                                        );
-                                                    })()}
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <h4 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        {order.customerName || order.customer?.name || "عميل غير معروف"}
+                                                        {order.total === 0 && (
+                                                            <span style={{ fontSize: '0.6rem', background: 'var(--danger)', color: 'white', padding: '2px 6px', borderRadius: '4px', animation: 'pulse 2s infinite' }}>⚠️ راجع الطلب</span>
+                                                        )}
+                                                    </h4>
+                                                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                                        {order.area || order.customer?.address || "غير مسجل"}
+                                                    </p>
 
-                                                    {/* 🖼️ Mini Preview Thumbnail */}
-                                                    {paymentScreenshot && (
-                                                        <div
-                                                            onClick={() => setPreviewImage(paymentScreenshot)}
-                                                            className="hover-scale"
-                                                            style={{
-                                                                width: '45px',
-                                                                height: '45px',
-                                                                borderRadius: '8px',
-                                                                overflow: 'hidden',
-                                                                cursor: 'pointer',
-                                                                border: '2px solid var(--border)'
-                                                            }}
-                                                            title="عرض صورة التحويل"
-                                                        >
-                                                            <img
-                                                                src={paymentScreenshot}
-                                                                alt="preview"
-                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                            />
-                                                        </div>
-                                                    )}
-
-                                                    {receiptUploadStatus === 'uploading' && (
-                                                        <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>⏳ جاري رفع الإيصال...</span>
-                                                    )}
-
-                                                    {receiptUploadStatus === 'failed' && (
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                retryReceiptUpload(order.id);
-                                                            }}
-                                                            style={{
-                                                                padding: '4px 10px',
-                                                                borderRadius: '8px',
-                                                                fontSize: '0.75rem',
-                                                                fontWeight: 'bold',
-                                                                background: 'rgba(239, 68, 68, 0.15)',
-                                                                color: 'var(--danger)',
-                                                                border: '1px solid var(--danger)',
-                                                                cursor: 'pointer'
-                                                            }}
-                                                        >
-                                                            🔄 إعادة رفع الإيصال
-                                                        </button>
-                                                    )}
-
-                                                    {/* 📍 Location Button (Prominent Map Access) */}
+                                                    {/* 📍 Zone & Distance Badge for Manual Orders */}
                                                     {order.lat && order.lng && (
+                                                        <div style={{ marginTop: '8px' }}>
+                                                            {(() => {
+                                                                const dist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, order.lat, order.lng);
+                                                                const zoneCfg = getZone(dist);
+                                                                return (
+                                                                    <div style={{
+                                                                        display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                                                        padding: '4px 10px', borderRadius: '12px', background: `${zoneCfg.color}15`,
+                                                                        border: `1px solid ${zoneCfg.color}30`, color: zoneCfg.color, fontSize: '0.75rem', fontWeight: 'bold'
+                                                                    }}>
+                                                                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: zoneCfg.color }}></div>
+                                                                        نطاق {zoneCfg.id} • {dist} كم
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                        </div>
+                                                    )}
+
+                                                    <div style={{ marginTop: '10px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+
+                                                        {/* 💵 Payment Badge */}
+                                                        {(() => {
+                                                            const method = (order.payment?.method || order.paymentMethod || "غير محدد").toLowerCase();
+                                                            const isCash = method.includes('cash') && !method.includes('vodafone');
+                                                            const isVF = method.includes('vodafone') || method.includes('v-cash') || method.includes('فودافون');
+
+                                                            return (
+                                                                <div style={{
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: '6px',
+                                                                    padding: '4px 10px',
+                                                                    borderRadius: '20px',
+                                                                    fontSize: '0.8rem',
+                                                                    fontWeight: '600',
+                                                                    background: isCash ? 'rgba(16, 185, 129, 0.15)' : isVF ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.05)',
+                                                                    color: isCash ? '#10b981' : isVF ? '#a78bfa' : 'var(--text-muted)',
+                                                                    border: `1px solid ${isCash ? 'rgba(16, 185, 129, 0.2)' : isVF ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.1)'}`
+                                                                }}>
+                                                                    {isCash ? '💵 كاش' : isVF ? '📱 فودافون كاش' : `💳 ${method}`}
+                                                                </div>
+                                                            );
+                                                        })()}
+
+                                                        {/* 🖼️ Mini Preview Thumbnail */}
+                                                        {paymentScreenshot && (
+                                                            <div
+                                                                onClick={() => setPreviewImage(paymentScreenshot)}
+                                                                className="hover-scale"
+                                                                style={{
+                                                                    width: '45px',
+                                                                    height: '45px',
+                                                                    borderRadius: '8px',
+                                                                    overflow: 'hidden',
+                                                                    cursor: 'pointer',
+                                                                    border: '2px solid var(--border)'
+                                                                }}
+                                                                title="عرض صورة التحويل"
+                                                            >
+                                                                <img
+                                                                    src={paymentScreenshot}
+                                                                    alt="preview"
+                                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                />
+                                                            </div>
+                                                        )}
+
+                                                        {receiptUploadStatus === 'uploading' && (
+                                                            <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>⏳ جاري رفع الإيصال...</span>
+                                                        )}
+
+                                                        {receiptUploadStatus === 'failed' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    retryReceiptUpload(order.id);
+                                                                }}
+                                                                style={{
+                                                                    padding: '4px 10px',
+                                                                    borderRadius: '8px',
+                                                                    fontSize: '0.75rem',
+                                                                    fontWeight: 'bold',
+                                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                                    color: 'var(--danger)',
+                                                                    border: '1px solid var(--danger)',
+                                                                    cursor: 'pointer'
+                                                                }}
+                                                            >
+                                                                🔄 إعادة رفع الإيصال
+                                                            </button>
+                                                        )}
+
+                                                        {/* 📍 Location Button (Prominent Map Access) */}
+                                                        {order.lat && order.lng && (
+                                                            <button
+                                                                onClick={() => window.open(`https://www.google.com/maps?q=${order.lat},${order.lng}`, '_blank')}
+                                                                className="btn-primary hover-scale"
+                                                                style={{
+                                                                    padding: '8px 16px',
+                                                                    fontSize: '0.8rem',
+                                                                    background: 'var(--primary)',
+                                                                    color: 'white',
+                                                                    borderRadius: '20px',
+                                                                    gap: '6px',
+                                                                    boxShadow: '0 4px 10px rgba(79, 70, 229, 0.3)'
+                                                                }}
+                                                                title="فتح الموقع على الخريطة"
+                                                            >
+                                                                📍 عرض الموقع
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+
+                                        {/* 3. Workflow Action Area */}
+                                        <div>
+                                            {/* Stage 1: Pending -> Confirm (Admin/Casher) */}
+                                            {(order.status === 'pending' || order.status === 'pending_timer') && (userRole === 'admin' || userRole === 'casher') && (
+                                                <div style={{ display: 'flex', gap: '10px' }}>
+                                                    {isInGracePeriod ? (
                                                         <button
-                                                            onClick={() => window.open(`https://www.google.com/maps?q=${order.lat},${order.lng}`, '_blank')}
-                                                            className="btn-primary hover-scale"
-                                                            style={{
-                                                                padding: '8px 16px',
-                                                                fontSize: '0.8rem',
-                                                                background: 'var(--primary)',
-                                                                color: 'white',
-                                                                borderRadius: '20px',
-                                                                gap: '6px',
-                                                                boxShadow: '0 4px 10px rgba(79, 70, 229, 0.3)'
-                                                            }}
-                                                            title="فتح الموقع على الخريطة"
+                                                            onClick={() => onReedit(order)}
+                                                            className="btn-primary"
+                                                            style={{ width: '100%', background: 'var(--warning)', color: 'black' }}
                                                         >
-                                                            📍 عرض الموقع
+                                                            <RotateCcw size={18} /> الرجوع خطوة للتعديل
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => confirmOrder(order.id)}
+                                                            className="btn-primary"
+                                                            style={{ width: '100%' }}
+                                                        >
+                                                            <Check size={18} /> تأكيد وقبول
                                                         </button>
                                                     )}
+                                                    <button onClick={() => handleCancel(order.id)} className="btn-danger-outline"><X size={18} /></button>
                                                 </div>
-                                            </>
-                                        )}
-                                    </div>
+                                            )}
 
-                                    {/* 3. Workflow Action Area */}
-                                    <div>
-                                        {/* Stage 1: Pending -> Confirm (Admin/Casher) */}
-                                        {(order.status === 'pending' || order.status === 'pending_timer') && (userRole === 'admin' || userRole === 'casher') && (
-                                            <div style={{ display: 'flex', gap: '10px' }}>
-                                                {isInGracePeriod ? (
-                                                    <button
-                                                        onClick={() => onReedit(order)}
-                                                        className="btn-primary"
-                                                        style={{ width: '100%', background: 'var(--warning)', color: 'black' }}
-                                                    >
-                                                        <RotateCcw size={18} /> الرجوع خطوة للتعديل
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() => confirmOrder(order.id)}
-                                                        className="btn-primary"
-                                                        style={{ width: '100%' }}
-                                                    >
-                                                        <Check size={18} /> تأكيد وقبول
-                                                    </button>
-                                                )}
-                                                <button onClick={() => handleCancel(order.id)} className="btn-danger-outline"><X size={18} /></button>
-                                            </div>
-                                        )}
-
-                                        {/* Stage 2: Waiting Driver -> Assign (Admin/Casher) */}
-                                        {order.status === 'waiting_driver' && (userRole === 'admin' || userRole === 'casher') && (
-                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                {suggestedPilot && (
-                                                    <div style={{ fontSize: '0.8rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                                        <span style={{ fontWeight: 'bold' }}>⭐ مقترح:</span> {suggestedPilot.name}
-                                                    </div>
-                                                )}
-                                                <div style={{ display: 'flex', gap: '8px' }}>
-                                                    <select
-                                                        className="glass-card"
-                                                        style={{ flex: 1, padding: '8px', background: '#1f2937', color: 'white', border: '1px solid var(--border)' }}
-                                                        onChange={(e) => setSelectedPilot({ ...selectedPilot, [order.id]: e.target.value })}
-                                                        value={selectedPilot[order.id] || suggestedPilot?.id || ''}
-                                                    >
-                                                        <option value="">اختر طيار...</option>
-                                                        {availablePilots.map(p => (
-                                                            <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
-                                                                {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
-                                                            </option>
-                                                        ))}
-                                                    </select>
-                                                    <button
-                                                        onClick={() => handleAssignAndPrint(order.id)}
-                                                        disabled={!selectedPilot[order.id] && !suggestedPilot}
-                                                        className="btn-primary"
-                                                        style={{ background: 'var(--accent)' }}
-                                                        title="إسناد وطباعة البون"
-                                                    >
-                                                        <UserPlus size={18} />
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {/* Stage 3: Assigned -> Out (one order per trip start) */}
-                                        {order.status === 'driver_assigned' && (() => {
-                                            const pilotIdForOrder = order.pilotId || order.deliveryId;
-                                            const assignedPilot = pilots.find(p => String(p.id) === String(pilotIdForOrder));
-                                            const pilotAlreadyOut = isPilotOnDelivery(assignedPilot?.state);
-                                            const pendingSiblings = orders.filter(o =>
-                                                String(o.pilotId || o.deliveryId) === String(pilotIdForOrder) &&
-                                                o.status === 'driver_assigned' &&
-                                                o.id !== order.id
-                                            ).length;
-
-                                            return (
-                                            <div style={{ textAlign: 'center' }}>
-                                                <div style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
-                                                    الطيار: <strong>{assignedPilot?.name}</strong>
-                                                </div>
-                                                {pilotAlreadyOut && (
-                                                    <div style={{
-                                                        marginBottom: '8px', fontSize: '0.78rem', color: 'var(--warning)',
-                                                        background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
-                                                        borderRadius: '8px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
-                                                    }}>
-                                                        <Bike size={14} /> الطيار خارج المطعم — لم تبدأ رحلة هذا الطلب
-                                                        {pendingSiblings > 0 && ` (+${pendingSiblings} طلب آخر بالانتظار)`}
-                                                    </div>
-                                                )}
-                                                <button
-                                                    onClick={() => startDelivery(order.id)}
-                                                    className="btn-primary"
-                                                    style={{ width: '100%', background: 'var(--success)' }}
-                                                >
-                                                    <Bike size={18} /> ابدأ الرحلة الآن
-                                                </button>
-                                            </div>
-                                            );
-                                        })()}
-
-                                        {/* Stage 4: Out -> Complete/Fail (Driver View or Admin/Casher Control) */}
-                                        {order.status === 'active' && (userRole === 'admin' || userRole === 'casher' || userRole === 'driver') && (
-                                            <div style={{ display: 'flex', gap: '10px' }}>
-                                                <button
-                                                    onClick={() => completeOrder(order.id)}
-                                                    className="btn-primary"
-                                                    style={{ flex: 2, background: 'var(--success)' }}
-                                                >
-                                                    <Check size={18} /> تم التسليم
-                                                </button>
-                                                <button
-                                                    onClick={() => {
-                                                        const reason = prompt('سبب فشل التوصيل:');
-                                                        if (reason) failDelivery(order.id, reason);
-                                                    }}
-                                                    className="btn-danger-outline"
-                                                    style={{ flex: 1 }}
-                                                >
-                                                    <X size={18} /> فشل
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
-                                        <button onClick={() => handlePrint(order)} style={{ background: 'none', border: 'none', cursor: 'pointer' }} title="طباعة نسخة"><span style={{ fontSize: '1.2rem' }}>🖨️</span></button>
-                                        {!isInGracePeriod && order.status !== 'pending' && (
-                                            <button onClick={() => handleCancel(order.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'white' }} title="إلغاء الطلب"><X size={20} /></button>
-                                        )}
-                                    </div>
-
-                                    {/* 🛒 سلة المشتريات (Cart Expandable Section) */}
-                                    {order.items && order.items.length > 0 && (
-                                        <div style={{ gridColumn: '1 / -1', marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
-                                            <button
-                                                onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                                                style={{
-                                                    background: 'rgba(79, 70, 229, 0.1)', color: 'var(--primary)', border: '1px solid rgba(79, 70, 229, 0.2)',
-                                                    padding: '8px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px',
-                                                    width: 'fit-content', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease'
-                                                }}
-                                                className="hover-scale"
-                                            >
-                                                <ShoppingCart size={18} />
-                                                <span>عرض الطلبات ({order.items?.length || 0})</span>
-                                                {expandedOrderId === order.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                                            </button>
-
-                                            <AnimatePresence>
-                                                {expandedOrderId === order.id && (
-                                                    <motion.div
-                                                        initial={{ opacity: 0, height: 0 }}
-                                                        animate={{ opacity: 1, height: 'auto' }}
-                                                        exit={{ opacity: 0, height: 0 }}
-                                                        style={{ overflow: 'hidden', marginTop: '12px' }}
-                                                    >
-                                                        <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
-                                                            <h5 style={{ color: 'var(--text-muted)', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>تفاصيل المنتجات</h5>
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                                                {order.items?.map((item, idx) => (
-                                                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
-                                                                        <div>
-                                                                            <span style={{ fontWeight: 'bold', color: 'var(--text-main)' }}>{item.name}</span>
-                                                                            {item.category && <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>{item.category}</span>}
-                                                                        </div>
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{item.count}x</span>
-                                                                            <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{item.price} ج</span>
-                                                                            <span style={{ fontWeight: 'bold', color: 'var(--accent)', minWidth: '50px', textAlign: 'right' }}>{(item.count || 1) * (item.price || 0)} ج</span>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                            <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
-                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>المجموع (Subtotal): <strong style={{ color: 'var(--text-main)' }}>{order.subtotal || Math.max(0, order.total - (order.deliveryFee || 0))} ج.م</strong></div>
-                                                                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>التوصيل (Delivery): <strong style={{ color: 'var(--text-main)' }}>{order.deliveryFee || 0} ج.م</strong></div>
-                                                                {order.serviceFee > 0 && <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>الخدمة (Service): <strong style={{ color: 'var(--text-main)' }}>{order.serviceFee} ج.م</strong></div>}
-                                                                <div style={{ color: 'var(--accent)', fontSize: '1.2rem', marginTop: '4px', fontWeight: '900' }}>الإجمالي (Total): {order.total} ج.م</div>
-                                                                {Number(order.paidNow) > 0 && (
-                                                                    <div style={{ color: '#10b981', fontSize: '1rem', fontWeight: 'bold' }}>المدفوع (Paid Now): {order.paidNow} ج.م</div>
-                                                                )}
-                                                                {Number(order.remainingAmount) > 0 && (
-                                                                    <div style={{ color: '#ef4444', fontSize: '1.1rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>الباقي (Remaining): {order.remainingAmount} ج.م</div>
-                                                                )}
-                                                            </div>
+                                            {/* Stage 2: Waiting Driver -> Assign (Admin/Casher) */}
+                                            {order.status === 'waiting_driver' && (userRole === 'admin' || userRole === 'casher') && (
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                    {suggestedPilot && (
+                                                        <div style={{ fontSize: '0.8rem', color: 'var(--accent)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                            <span style={{ fontWeight: 'bold' }}>⭐ مقترح:</span> {suggestedPilot.name}
                                                         </div>
-                                                    </motion.div>
-                                                )}
-                                            </AnimatePresence>
+                                                    )}
+                                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                                        <select
+                                                            className="glass-card"
+                                                            style={{ flex: 1, padding: '8px', background: '#1f2937', color: 'white', border: '1px solid var(--border)' }}
+                                                            onChange={(e) => setSelectedPilot({ ...selectedPilot, [order.id]: e.target.value })}
+                                                            value={selectedPilot[order.id] || suggestedPilot?.id || ''}
+                                                        >
+                                                            <option value="">اختر طيار...</option>
+                                                            {availablePilots.map(p => (
+                                                                <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
+                                                                    {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح)'} - {p.ordersCount || 0} طلبات
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={() => handleAssignAndPrint(order.id)}
+                                                            disabled={!selectedPilot[order.id] && !suggestedPilot}
+                                                            className="btn-primary"
+                                                            style={{ background: 'var(--accent)' }}
+                                                            title="إسناد وطباعة البون"
+                                                        >
+                                                            <UserPlus size={18} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Stage 3: Assigned -> Out (one order per trip start) */}
+                                            {order.status === 'driver_assigned' && (() => {
+                                                const pilotIdForOrder = order.pilotId || order.deliveryId;
+                                                const assignedPilot = pilots.find(p => String(p.id) === String(pilotIdForOrder));
+                                                const pilotAlreadyOut = isPilotOnDelivery(assignedPilot?.state);
+                                                const pendingSiblings = orders.filter(o =>
+                                                    String(o.pilotId || o.deliveryId) === String(pilotIdForOrder) &&
+                                                    o.status === 'driver_assigned' &&
+                                                    o.id !== order.id
+                                                ).length;
+
+                                                return (
+                                                    <div style={{ textAlign: 'center' }}>
+                                                        <div style={{ marginBottom: '8px', fontSize: '0.9rem' }}>
+                                                            الطيار: <strong>{assignedPilot?.name}</strong>
+                                                        </div>
+                                                        {pilotAlreadyOut && (
+                                                            <div style={{
+                                                                marginBottom: '8px', fontSize: '0.78rem', color: 'var(--warning)',
+                                                                background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.25)',
+                                                                borderRadius: '8px', padding: '4px 8px', display: 'inline-flex', alignItems: 'center', gap: '4px'
+                                                            }}>
+                                                                <Bike size={14} /> الطيار خارج المطعم — لم تبدأ رحلة هذا الطلب
+                                                                {pendingSiblings > 0 && ` (+${pendingSiblings} طلب آخر بالانتظار)`}
+                                                            </div>
+                                                        )}
+                                                        <button
+                                                            onClick={() => startDelivery(order.id)}
+                                                            className="btn-primary"
+                                                            style={{ width: '100%', background: 'var(--success)' }}
+                                                        >
+                                                            <Bike size={18} /> ابدأ الرحلة الآن
+                                                        </button>
+                                                    </div>
+                                                );
+                                            })()}
+
+                                            {/* Stage 4: Out -> Complete/Fail (Driver View or Admin/Casher Control) */}
+                                            {order.status === 'active' && (userRole === 'admin' || userRole === 'casher' || userRole === 'driver') && (
+                                                <div style={{ display: 'flex', gap: '10px' }}>
+                                                    <button
+                                                        onClick={() => completeOrder(order.id)}
+                                                        className="btn-primary"
+                                                        style={{ flex: 2, background: 'var(--success)' }}
+                                                    >
+                                                        <Check size={18} /> تم التسليم
+                                                    </button>
+                                                    <button
+                                                        onClick={() => {
+                                                            const reason = prompt('سبب فشل التوصيل:');
+                                                            if (reason) failDelivery(order.id, reason);
+                                                        }}
+                                                        className="btn-danger-outline"
+                                                        style={{ flex: 1 }}
+                                                    >
+                                                        <X size={18} /> فشل
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
-                                    )}
 
-                                </motion.div>
-                            );
-                        })}
-                    </AnimatePresence>
-                </div>
+                                        <div style={{ display: 'flex', gap: '8px', flexDirection: 'column', alignItems: 'center' }}>
+                                            <button onClick={() => handlePrint(order)} style={{ background: 'none', border: 'none', cursor: 'pointer' }} title="طباعة نسخة"><span style={{ fontSize: '1.2rem' }}>🖨️</span></button>
+                                            {!isInGracePeriod && order.status !== 'pending' && (
+                                                <button onClick={() => handleCancel(order.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'white' }} title="إلغاء الطلب"><X size={20} /></button>
+                                            )}
+                                        </div>
 
-                {isThermalPrintMode && previewOrder && (
-                    <div className="no-print" style={{ position: 'sticky', top: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                        <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                            <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
-                                <span>🖨️ معاينة البون الحراري</span>
-                            </h3>
-                            
-                            <div className="thermal-receipt-simulator">
-                                <div className="header">
-                                    <div className="title">مطعم أبو خاطر</div>
-                                    <div className="subtitle">إدارة وتوصيل الطلبات</div>
-                                    <div className="dashed-line"></div>
-                                    <div className="bold" style={{ fontSize: '15px' }}>فاتورة رقم #{previewOrder.originalId || previewOrder.id}</div>
-                                </div>
-                                
-                                <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                                    <div><strong>التاريخ:</strong> {new Date(previewOrder.timestamp || Date.now()).toLocaleString('ar-EG')}</div>
-                                    <div><strong>العميل:</strong> {previewOrder.customerName || 'عميل'}</div>
-                                    <div><strong>الهاتف:</strong> {previewOrder.phone || 'غير مسجل'}</div>
-                                    {previewOrder.area && <div><strong>العنوان:</strong> {previewOrder.area}</div>}
-                                    <div><strong>الدفع:</strong> {previewOrder.paymentMethod || 'كاش'}</div>
-                                    {previewOrder.pilotId && (
-                                        <div><strong>الطيار:</strong> {pilots.find(p => String(p.id) === String(previewOrder.pilotId))?.name || 'غير معروف'}</div>
-                                    )}
-                                </div>
-                                
-                                <div className="solid-line"></div>
-                                
-                                {previewOrder.items && previewOrder.items.length > 0 ? (
-                                    <table className="items-table">
-                                        <thead>
-                                            <tr>
-                                                <th style={{ textAlign: 'right' }}>الصنف</th>
-                                                <th style={{ width: '30px', textAlign: 'center' }}>العدد</th>
-                                                <th style={{ width: '50px', textAlign: 'left' }}>الإجمالي</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {previewOrder.items.map((item, idx) => (
-                                                <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                                                    <td>{item.name}</td>
-                                                    <td style={{ textAlign: 'center' }}>{item.count || item.quantity || 1}</td>
-                                                    <td style={{ textAlign: 'left' }}>{((item.count || item.quantity || 1) * (item.price || 0))} ج</td>
+                                        {/* 🛒 سلة المشتريات (Cart Expandable Section) */}
+                                        {order.items && order.items.length > 0 && (
+                                            <div style={{ gridColumn: '1 / -1', marginTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                                                <button
+                                                    onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                                                    style={{
+                                                        background: 'rgba(79, 70, 229, 0.1)', color: 'var(--primary)', border: '1px solid rgba(79, 70, 229, 0.2)',
+                                                        padding: '8px 16px', borderRadius: '12px', display: 'flex', alignItems: 'center', gap: '8px',
+                                                        width: 'fit-content', cursor: 'pointer', fontWeight: 'bold', transition: 'all 0.2s ease'
+                                                    }}
+                                                    className="hover-scale"
+                                                >
+                                                    <ShoppingCart size={18} />
+                                                    <span>عرض الطلبات ({order.items?.length || 0})</span>
+                                                    {expandedOrderId === order.id ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                </button>
+
+                                                <AnimatePresence>
+                                                    {expandedOrderId === order.id && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: 'auto' }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            style={{ overflow: 'hidden', marginTop: '12px' }}
+                                                        >
+                                                            <div style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '12px', padding: '16px', border: '1px solid var(--border)' }}>
+                                                                <h5 style={{ color: 'var(--text-muted)', marginBottom: '12px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '8px' }}>تفاصيل المنتجات</h5>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                                                    {order.items?.map((item, idx) => (
+                                                                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '8px 12px', borderRadius: '8px' }}>
+                                                                            <div>
+                                                                                <span style={{ fontWeight: 'bold', color: 'var(--text-main)' }}>{item.name}</span>
+                                                                                {item.category && <span style={{ marginLeft: '8px', fontSize: '0.75rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>{item.category}</span>}
+                                                                            </div>
+                                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{item.count}x</span>
+                                                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>{item.price} ج</span>
+                                                                                <span style={{ fontWeight: 'bold', color: 'var(--accent)', minWidth: '50px', textAlign: 'right' }}>{(item.count || 1) * (item.price || 0)} ج</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                                <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px dashed rgba(255,255,255,0.1)', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
+                                                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>المجموع (Subtotal): <strong style={{ color: 'var(--text-main)' }}>{order.subtotal || Math.max(0, order.total - (order.deliveryFee || 0))} ج.م</strong></div>
+                                                                    <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>التوصيل (Delivery): <strong style={{ color: 'var(--text-main)' }}>{order.deliveryFee || 0} ج.م</strong></div>
+                                                                    {order.serviceFee > 0 && <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>الخدمة (Service): <strong style={{ color: 'var(--text-main)' }}>{order.serviceFee} ج.م</strong></div>}
+                                                                    <div style={{ color: 'var(--accent)', fontSize: '1.2rem', marginTop: '4px', fontWeight: '900' }}>الإجمالي (Total): {order.total} ج.م</div>
+                                                                    {Number(order.paidNow) > 0 && (
+                                                                        <div style={{ color: '#10b981', fontSize: '1rem', fontWeight: 'bold' }}>المدفوع (Paid Now): {order.paidNow} ج.م</div>
+                                                                    )}
+                                                                    {Number(order.remainingAmount) > 0 && (
+                                                                        <div style={{ color: '#ef4444', fontSize: '1.1rem', fontWeight: 'bold', background: 'rgba(239, 68, 68, 0.15)', padding: '4px 10px', borderRadius: '8px', border: '1px solid rgba(239, 68, 68, 0.3)' }}>الباقي (Remaining): {order.remainingAmount} ج.م</div>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        )}
+
+                                    </motion.div>
+                                );
+                            })}
+                        </AnimatePresence>
+                    </div>
+
+                    {isThermalPrintMode && previewOrder && (
+                        <div className="no-print" style={{ position: 'sticky', top: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                                <h3 style={{ fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
+                                    <span>🖨️ معاينة البون الحراري</span>
+                                </h3>
+
+                                <div className="thermal-receipt-simulator">
+                                    <div className="header">
+                                        <div className="title">مطعم أبو خاطر</div>
+                                        <div className="subtitle">إدارة وتوصيل الطلبات</div>
+                                        <div className="dashed-line"></div>
+                                        <div className="bold" style={{ fontSize: '15px' }}>فاتورة رقم #{previewOrder.originalId || previewOrder.id}</div>
+                                    </div>
+
+                                    <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                        <div><strong>التاريخ:</strong> {new Date(previewOrder.timestamp || Date.now()).toLocaleString('ar-EG')}</div>
+                                        <div><strong>العميل:</strong> {previewOrder.customerName || 'عميل'}</div>
+                                        <div><strong>الهاتف:</strong> {previewOrder.phone || 'غير مسجل'}</div>
+                                        {previewOrder.area && <div><strong>العنوان:</strong> {previewOrder.area}</div>}
+                                        <div><strong>الدفع:</strong> {previewOrder.paymentMethod || 'كاش'}</div>
+                                        {previewOrder.pilotId && (
+                                            <div><strong>الطيار:</strong> {pilots.find(p => String(p.id) === String(previewOrder.pilotId))?.name || 'غير معروف'}</div>
+                                        )}
+                                    </div>
+
+                                    <div className="solid-line"></div>
+
+                                    {previewOrder.items && previewOrder.items.length > 0 ? (
+                                        <table className="items-table">
+                                            <thead>
+                                                <tr>
+                                                    <th style={{ textAlign: 'right' }}>الصنف</th>
+                                                    <th style={{ width: '30px', textAlign: 'center' }}>العدد</th>
+                                                    <th style={{ width: '50px', textAlign: 'left' }}>الإجمالي</th>
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                ) : (
-                                    <div style={{ fontSize: '11px', margin: '8px 0', whiteSpace: 'pre-wrap' }}>
-                                        <strong>الأصناف:</strong> {previewOrder.itemsDescription || 'لا توجد تفاصيل'}
-                                    </div>
-                                )}
-                                
-                                <div className="solid-line"></div>
-                                
-                                <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>المجموع:</span>
-                                        <span>{previewOrder.subtotal || Math.max(0, previewOrder.total - (previewOrder.deliveryFee || 0))} ج.م</span>
-                                    </div>
-                                    {previewOrder.deliveryFee > 0 && (
+                                            </thead>
+                                            <tbody>
+                                                {previewOrder.items.map((item, idx) => (
+                                                    <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                                                        <td>{item.name}</td>
+                                                        <td style={{ textAlign: 'center' }}>{item.count || item.quantity || 1}</td>
+                                                        <td style={{ textAlign: 'left' }}>{((item.count || item.quantity || 1) * (item.price || 0))} ج</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    ) : (
+                                        <div style={{ fontSize: '11px', margin: '8px 0', whiteSpace: 'pre-wrap' }}>
+                                            <strong>الأصناف:</strong> {previewOrder.itemsDescription || 'لا توجد تفاصيل'}
+                                        </div>
+                                    )}
+
+                                    <div className="solid-line"></div>
+
+                                    <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span>التوصيل:</span>
-                                            <span>{previewOrder.deliveryFee} ج.م</span>
+                                            <span>المجموع:</span>
+                                            <span>{previewOrder.subtotal || Math.max(0, previewOrder.total - (previewOrder.deliveryFee || 0))} ج.م</span>
                                         </div>
-                                    )}
-                                    {previewOrder.serviceFee > 0 && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                                            <span>الخدمة:</span>
-                                            <span>{previewOrder.serviceFee} ج.م</span>
+                                        {previewOrder.deliveryFee > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>التوصيل:</span>
+                                                <span>{previewOrder.deliveryFee} ج.م</span>
+                                            </div>
+                                        )}
+                                        {previewOrder.serviceFee > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>الخدمة:</span>
+                                                <span>{previewOrder.serviceFee} ج.م</span>
+                                            </div>
+                                        )}
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '2px' }}>
+                                            <span>الإجمالي النهائي:</span>
+                                            <span>{previewOrder.total} ج.م</span>
                                         </div>
-                                    )}
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '900', fontSize: '13px', borderTop: '1px solid #000', paddingTop: '4px', marginTop: '2px' }}>
-                                        <span>الإجمالي النهائي:</span>
-                                        <span>{previewOrder.total} ج.م</span>
+                                        {Number(previewOrder.paidNow) > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontWeight: 'bold' }}>
+                                                <span>المدفوع:</span>
+                                                <span>{previewOrder.paidNow} ج.م</span>
+                                            </div>
+                                        )}
+                                        {Number(previewOrder.remainingAmount) > 0 && (
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444', fontWeight: 'bold' }}>
+                                                <span>المتبقي:</span>
+                                                <span>{previewOrder.remainingAmount} ج.م</span>
+                                            </div>
+                                        )}
                                     </div>
-                                    {Number(previewOrder.paidNow) > 0 && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#10b981', fontWeight: 'bold' }}>
-                                            <span>المدفوع:</span>
-                                            <span>{previewOrder.paidNow} ج.م</span>
-                                        </div>
-                                    )}
-                                    {Number(previewOrder.remainingAmount) > 0 && (
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', color: '#ef4444', fontWeight: 'bold' }}>
-                                            <span>المتبقي:</span>
-                                            <span>{previewOrder.remainingAmount} ج.م</span>
-                                        </div>
-                                    )}
+
+                                    <div className="dashed-line"></div>
+
+                                    <div style={{ textAlign: 'center', fontSize: '10px', color: '#666' }}>
+                                        نظام إدارة دليفري أبو خاطر
+                                    </div>
                                 </div>
-                                
-                                <div className="dashed-line"></div>
-                                
-                                <div style={{ textAlign: 'center', fontSize: '10px', color: '#666' }}>
-                                    نظام إدارة دليفري أبو خاطر
+
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
+                                    <button
+                                        onClick={() => printerService.printCashierReceipt(previewOrder, true)}
+                                        className="btn-primary hover-scale"
+                                        style={{ background: 'var(--accent)', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', padding: '10px' }}
+                                    >
+                                        📄 طباعة العميل
+                                    </button>
+                                    <button
+                                        onClick={() => handlePrint(previewOrder)}
+                                        className="btn-primary hover-scale"
+                                        style={{ background: 'var(--primary)', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', padding: '10px' }}
+                                    >
+                                        👨‍🍳 طباعة المطبخ
+                                    </button>
                                 </div>
-                            </div>
-                            
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginTop: '4px' }}>
-                                <button
-                                    onClick={() => printerService.printCashierReceipt(previewOrder, true)}
-                                    className="btn-primary hover-scale"
-                                    style={{ background: 'var(--accent)', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', padding: '10px' }}
-                                >
-                                    📄 طباعة العميل
-                                </button>
-                                <button
-                                    onClick={() => handlePrint(previewOrder)}
-                                    className="btn-primary hover-scale"
-                                    style={{ background: 'var(--primary)', color: 'white', fontWeight: 'bold', fontSize: '0.85rem', padding: '10px' }}
-                                >
-                                    👨‍🍳 طباعة المطبخ
-                                </button>
                             </div>
                         </div>
-                    </div>
-                )}
-            </div>
+                    )}
+                </div>
             )}
 
             {/* 🚚 رحلات الدليفري الحالية */}
@@ -855,7 +855,7 @@ const OrderInbox = ({ onReedit }) => {
                 <div className="glass-card" style={{ borderTop: '4px solid var(--primary)', padding: '0', marginTop: '24px' }}>
                     <div style={{ padding: '20px', borderBottom: '1px solid var(--border)' }}>
                         <h3 className="flex" style={{ fontSize: '1.2rem', margin: 0, gap: '8px', alignItems: 'center' }}>
-                            <MapPin size={22} color="var(--primary)" /> رحلات الدليفري الحالية
+                            <MapPin size={22} color="var(--primary)" />!! رحلات الدليفري الحالية
                         </h3>
                     </div>
 
