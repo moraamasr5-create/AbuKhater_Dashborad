@@ -229,6 +229,9 @@ export const supabaseService = {
         else if (rawStatus === 'تم الإسناد للطيار') mappedStatus = 'driver_assigned';
         else if (rawStatus === 'في الطريق للتسليم') mappedStatus = 'active';
         else if (rawStatus === 'تم التوصيل' || rawStatus === 'delivered') mappedStatus = 'completed';
+        // نقوم بإضافة هذين السطرين قبل فلترة الحالة في دالة fetchOrders:
+        else if (rawStatus.startsWith('ملغي') || rawStatus === 'ملغي') mappedStatus = 'cancelled';
+        else if (rawStatus.startsWith('فشل التوصيل') || rawStatus === 'فشل التوصيل') mappedStatus = 'failed_delivery';
         else if (['pending', 'waiting_driver', 'driver_assigned', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(rawStatus)) {
           mappedStatus = rawStatus === 'delivered' ? 'completed' : rawStatus;
         }
