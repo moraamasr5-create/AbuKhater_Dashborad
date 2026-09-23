@@ -249,7 +249,7 @@ export const AppProvider = ({ children }) => {
 
     let ordersSub, pilotsSub, resSub;
 
-    const fetchInitialData = async () => {
+    const fetchInitialData = async (trigger = 'mount') => {
       try {
         const [fetchedOrders, fetchedPilots, fetchedRes] = await Promise.all([
           supabaseService.fetchOrders(currentShift?.id),
@@ -271,23 +271,31 @@ export const AppProvider = ({ children }) => {
 
             if (newOrdersForAudio.length > 0) {
               new Audio(API_CONFIG.SOUNDS.NEW_ORDER).play().catch(() => { });
-              logAction('LIVE_SYNC', `Supabase Sync: Received ${newOrdersForAudio.length} new orders`, 'System');
+              logAction('LIVE_SYNC', `Supabase: وصول ${newOrdersForAudio.length} طلب جديد`, 'System');
+            } else if (trigger === 'realtime') {
+              logAction('LIVE_SYNC', `Supabase Realtime: تحديث فوري لحظي`, 'System');
             }
 
-            const LOCAL_ONLY_FIELDS = ['pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
+            // 🛡️ LOCAL_ONLY_FIELDS: حقول تشغيلية محلية لا يتم مسحها إطلاقاً أثناء استلام بيانات Supabase
+            const LOCAL_ONLY_FIELDS = [
+              'pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 
+              'startTime', 'endTime', 'failureReason', 'cancellationReason', 
+              'cancelledAt', 'logs', 'shiftId', 'notes', 'internalNotes', 
+              'customerNotes', 'receiptUploadStatus', 'originalId'
+            ];
             const matchedPrevIds = new Set();
 
             const mergedOrders = fetchedOrders.map(fo => {
-              // Try to find the local order matching this fetched order uniquely by supabaseId first
+              // البحث عن الطلب المحلي المطابق أولاً بـ supabaseId ثم بـ originalId للطلبات اليدوية
               let existing = prev.find(o => o.supabaseId === fo.supabaseId);
               if (!existing) {
-                // Fallback to matching by originalId/id for pending manual orders that don't have a supabaseId yet
                 existing = prev.find(o => !o.supabaseId && (o.originalId || o.id) === fo.originalId);
               }
               if (!existing) return fo;
 
               matchedPrevIds.add(existing.id);
 
+              // 🛡️ حماية ضد Race Condition: إذا كان هناك تعديل قيد التنفيذ لم ينتهِ في السيرفر
               const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
               const localIsNewer = existing.confirmedAt || existing.assignedAt || existing.startTime;
 
@@ -298,7 +306,15 @@ export const AppProvider = ({ children }) => {
                 if (existing[f] !== undefined) localFields[f] = existing[f];
               });
 
-              return { ...fo, ...localFields, status: mergedStatus };
+              // دمج حقيقي (Merge وليس Full-Replace) للحفاظ على أي بيانات محلية وملاحظات
+              return {
+                ...existing,
+                ...fo,
+                ...localFields,
+                id: existing.id || fo.id,
+                originalId: existing.originalId || fo.originalId,
+                status: mergedStatus
+              };
             });
 
             const unmatchedManualOrders = prev.filter(p => !p.supabaseId && !matchedPrevIds.has(p.id));
@@ -311,11 +327,12 @@ export const AppProvider = ({ children }) => {
       }
     };
 
-    fetchInitialData();
+    // التحميل المبدئي عند بدء الشيفت
+    fetchInitialData('mount');
 
-    // 🚀 Subscribing to Realtime Database Changes
+    // 🚀 القناة الأساسية: التحديث اللحظي عبر WebSocket (Primary Realtime Channel)
     ordersSub = supabaseService.subscribeToOrders(() => {
-      fetchInitialData(); // Re-fetch all data gently on change
+      fetchInitialData('realtime');
     });
 
     pilotsSub = supabaseService.subscribeToDrivers(() => {
@@ -328,8 +345,10 @@ export const AppProvider = ({ children }) => {
       supabaseService.fetchReservations().then(setReservations);
     });
 
-    // Fallback polling just in case WebSocket drops
-    const pollTimer = setInterval(fetchInitialData, 30000);
+    // 🛡️ شبكة الأمان الصامتة: Polling كل 30 ثانية في الخلفية لضمان عدم ضياع أي طلب في حال انقطاع WebSocket
+    const pollTimer = setInterval(() => {
+      fetchInitialData('silent_poll');
+    }, 30000);
 
     return () => {
       clearInterval(pollTimer);
