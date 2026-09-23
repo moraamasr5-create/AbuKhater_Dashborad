@@ -38,6 +38,9 @@ const ConnectionBanner = () => {
           fontWeight: '600',
           boxShadow: '0 4px 15px rgba(0,0,0,0.2)',
           zIndex: 100,
+          position: 'sticky',
+          top: '0px',
+          backdropFilter: 'blur(10px)',
           background: connectionStatus === 'disconnected'
             ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.3) 100%)'
             : connectionStatus === 'reconnecting'
