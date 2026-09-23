@@ -18,25 +18,16 @@ import {
   capShiftMinutes
 } from '../utils/shiftLogic';
 import {
+  calculatePilotShiftSummary,
+  isOrderAssignedToPilot
+} from '../utils/pilotCalculations';
+import {
   isShiftOperationAllowed,
   isAutoCloseTimeNow,
   DEFAULT_SHIFT_OPEN_TIME,
   DEFAULT_SHIFT_CLOSE_TIME
 } from '../utils/shiftGovernance';
 import { safeParseOrder } from '../utils/safeOrderParser';
-
-/**
- * 🔴 الدالة دي هي المسؤولة عن إرسال أي تحديث عام للبيانات لـ Supabase
- */
-const sendToN8N = async (payload, type) => {
-  try {
-    if (type === 'SHIFT_CLOSE') {
-      await supabaseService.saveShiftReport(payload);
-    }
-  } catch (e) {
-    console.error('Supabase Integration Error:', e);
-  }
-};
 
 const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => {
   // حقول تُزامَن من Supabase — لا نُبقي النسخة المحلية إلا أثناء تحديث معلّق
@@ -237,6 +228,10 @@ export const AppProvider = ({ children }) => {
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
    */
   const updateExternalOrderStatus = async (orderId, newStatus, reason = null, extraFields = {}) => {
+    if (!orderId) {
+      console.warn('⚠️ updateExternalOrderStatus skipped: orderId (supabaseId) is missing');
+      return;
+    }
     pendingUpdatesRef.current.add(String(orderId));
     try {
       await supabaseService.updateOrderStatus(orderId, newStatus, reason, extraFields);
@@ -280,6 +275,7 @@ export const AppProvider = ({ children }) => {
             }
 
             const LOCAL_ONLY_FIELDS = ['pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
+            const matchedPrevIds = new Set();
 
             const mergedOrders = fetchedOrders.map(fo => {
               // Try to find the local order matching this fetched order uniquely by supabaseId first
@@ -289,6 +285,8 @@ export const AppProvider = ({ children }) => {
                 existing = prev.find(o => !o.supabaseId && (o.originalId || o.id) === fo.originalId);
               }
               if (!existing) return fo;
+
+              matchedPrevIds.add(existing.id);
 
               const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
               const localIsNewer = existing.confirmedAt || existing.assignedAt || existing.startTime;
@@ -303,9 +301,9 @@ export const AppProvider = ({ children }) => {
               return { ...fo, ...localFields, status: mergedStatus };
             });
 
-            const manualOrders = prev.filter(p => !p.supabaseId);
+            const unmatchedManualOrders = prev.filter(p => !p.supabaseId && !matchedPrevIds.has(p.id));
 
-            return [...mergedOrders, ...manualOrders];
+            return [...mergedOrders, ...unmatchedManualOrders];
           });
         }
       } catch (err) {
@@ -347,7 +345,7 @@ export const AppProvider = ({ children }) => {
     setPilots(prev => {
       let changed = false;
       const updated = prev.map(p => {
-        const finishedCount = orders.filter(o => String(o.pilotId) === String(p.id) && (o.status === 'completed' || o.status === 'delivered')).length;
+        const finishedCount = orders.filter(o => isOrderAssignedToPilot(o, p.id) && (o.status === 'completed' || o.status === 'delivered')).length;
         if (p.ordersCount !== finishedCount) {
           changed = true;
           return { ...p, ordersCount: finishedCount };
@@ -560,7 +558,6 @@ export const AppProvider = ({ children }) => {
       setDailyReports(prev => [snapshot, ...prev]);
 
       logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
-      sendToN8N(snapshot, 'SHIFT_CLOSE');
 
       // Bulk reset all pilots in the Supabase delivery table
       const allPilotIds = pilots.map(p => p.id);
@@ -629,12 +626,14 @@ export const AppProvider = ({ children }) => {
    * يحفظ طلب الكول سنتر/التابلت في Supabase أولاً ثم يرفع الإيصال بشكل غير متزامن
    */
   const persistManualOrderToSupabase = async (localOrderId, orderPayload) => {
-    const persistableSources = ['manual', 'talabat'];
-    if (!persistableSources.includes(orderPayload.source)) return;
+    const persistableSources = ['manual', 'talabat', 'external', 'trip', 'restaurant'];
+    const source = orderPayload.source || (orderPayload.type === 'trip' ? 'external' : 'manual');
+    if (!persistableSources.includes(source)) return;
 
     try {
       const row = await supabaseService.createManualOrder({
         ...orderPayload,
+        source,
         shiftId: currentShift?.id
       });
 
@@ -717,9 +716,17 @@ export const AppProvider = ({ children }) => {
 
     setOrders(prev => [newOrder, ...prev]);
     logAction('ORDER_CREATE', `Order #${orderData.id} created`, 'Operator');
-    sendToN8N(newOrder, 'ORDER_CREATE');
 
-    persistManualOrderToSupabase(finalId, { ...orderFields, id: orderData.id });
+    persistManualOrderToSupabase(finalId, {
+      ...orderFields,
+      id: orderData.id,
+      source: orderData.source || (orderData.type === 'trip' ? 'external' : 'manual'),
+      total: totalAmount,
+      deliveryFee,
+      serviceFee,
+      paidNow,
+      remainingAmount
+    });
 
     setTimeout(() => {
       setOrders(currentOrders => currentOrders.map(o =>
@@ -785,7 +792,6 @@ export const AppProvider = ({ children }) => {
         : o
     ));
     logAction('ORDER_CANCEL', `Order #${orderId} cancelled. Reason: ${reason}`, 'Supervisor');
-    sendToN8N({ ...order, status: 'cancelled', cancellationReason: reason }, 'ORDER_CANCEL');
     if (order.supabaseId) {
       updateExternalOrderStatus(order.supabaseId, 'cancelled', reason);
     }
@@ -954,7 +960,6 @@ export const AppProvider = ({ children }) => {
     }
 
     logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
-    sendToN8N({ ...order, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
 
     if (!order.supabaseId) return;
 
@@ -1006,7 +1011,6 @@ export const AppProvider = ({ children }) => {
     }
 
     logAction('DELIVERY_FAIL', `Order #${orderId} failed delivery. Reason: ${reason}`, 'Supervisor');
-    sendToN8N({ ...order, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }, 'ORDER_FAIL');
 
     if (!order.supabaseId) return;
 
@@ -1093,81 +1097,13 @@ export const AppProvider = ({ children }) => {
    * يُستدعى في كل render للـ Dashboard
    */
   const activeStats = () => {
-    const finishedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered');
-    const failedOrders = orders.filter(o => o.status === 'failed_delivery');
-
     const pilotPerformance = pilots.map(p => {
-      const pOrders = finishedOrders.filter(o => String(o.pilotId) === String(p.id));
-      const pFailed = failedOrders.filter(o => String(o.pilotId) === String(p.id));
-
       // Calculate current active minutes if still open
       const currentActiveSession = (p.shiftStatus === 'open' && p.lastOpenedAt)
         ? calculateDelayMinutes(p.lastOpenedAt)
         : 0;
 
-      const totalMinutes = (p.totalMinutes || 0) + currentActiveSession;
-
-      let feeEarnings = 0;
-      let restaurantEarnings = 0;
-      let talabatEarnings = 0;
-      let onlineEarnings = 0;
-      let tripEarnings = 0;
-      let ordersCount = 0;
-      let tripsCount = 0;
-      let restaurantOrdersCount = 0;
-      let talabatOrdersCount = 0;
-      let onlineOrdersCount = 0;
-
-      [...pOrders, ...pFailed].forEach(o => {
-        const fee = Number(o.deliveryFee) || 0;
-        const source = o.source || (o.type === 'trip' ? 'external' : o.type === 'talabat' || o.type === 'external' ? 'talabat' : 'manual');
-        const isCompleted = o.status === 'completed' || o.status === 'delivered';
-
-        if (source === 'external') {
-          if (isCompleted) {
-            feeEarnings += fee;
-            tripEarnings += fee;
-          }
-          tripsCount++;
-        } else {
-          const share = fee / 2;
-          if (isCompleted) {
-            feeEarnings += share;
-            ordersCount++;
-          }
-
-          if (source === 'online') {
-            if (isCompleted) onlineEarnings += share;
-            onlineOrdersCount++;
-          } else if (source === 'talabat') {
-            if (isCompleted) talabatEarnings += share;
-            talabatOrdersCount++;
-          } else {
-            if (isCompleted) restaurantEarnings += share;
-            restaurantOrdersCount++;
-          }
-        }
-      });
-
-      const attendancePay = Math.floor(capShiftMinutes(totalMinutes) / 35) * 15;
-
-      return {
-        ...p,
-        ordersCount,
-        tripsCount,
-        restaurantOrdersCount,
-        talabatOrdersCount,
-        onlineOrdersCount,
-        failedCount: pFailed.length,
-        totalMinutes,
-        feeEarnings,
-        restaurantEarnings,
-        talabatEarnings,
-        onlineEarnings,
-        tripEarnings,
-        attendancePay,
-        totalEarnings: feeEarnings + attendancePay
-      };
+      return calculatePilotShiftSummary(p, orders, currentActiveSession);
     });
 
     const delays = orders
@@ -1243,7 +1179,6 @@ export const AppProvider = ({ children }) => {
 
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'confirmed', refNumber: refNum, paymentProof, confirmedAt: getSafeISOTime() } : r));
     logAction('RES_CONFIRM', `Reservation ${id} confirmed with Ref: ${refNum}`, 'Manager');
-    sendToN8N({ ...existing, status: 'confirmed', refNumber: refNum, paymentProof }, 'RESERVATION_CONFIRM');
   };
 
   const deleteReservation = async (id) => {
@@ -1332,7 +1267,7 @@ export const AppProvider = ({ children }) => {
       activeStats: computedStats,
       recalcStats: activeStats,     // expose raw function for manual recalc if needed
       assignPilot, startDelivery, getSuggestedPilot,
-      sendToN8N, syncExternalOrders
+      syncExternalOrders
     }}>
       {children}
     </AppContext.Provider>

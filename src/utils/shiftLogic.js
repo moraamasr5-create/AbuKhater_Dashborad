@@ -13,7 +13,7 @@ import {
   isAutoCloseTimeNow,
   DEFAULT_SHIFT_OPEN_TIME,
   DEFAULT_SHIFT_CLOSE_TIME
-} from './shiftGovernance';
+} from './shiftGovernance.js';
 
 // أقصي مدة شيفت طيار = 12 ساعة = 720 دقيقة
 export const MAX_SHIFT_MINUTES = 12 * 60; // 720

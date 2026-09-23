@@ -539,25 +539,24 @@ const OrderInbox = ({ onReedit }) => {
                                         <div>
                                             {/* Stage 1: Pending -> Confirm (Admin/Casher) */}
                                             {(order.status === 'pending' || order.status === 'pending_timer') && (userRole === 'admin' || userRole === 'casher') && (
-                                                <div style={{ display: 'flex', gap: '10px' }}>
-                                                    {isInGracePeriod ? (
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <button
+                                                        onClick={() => confirmOrder(order.id)}
+                                                        className="btn-primary"
+                                                        style={{ flex: 1, minWidth: '120px' }}
+                                                    >
+                                                        <Check size={18} /> تأكيد وقبول
+                                                    </button>
+                                                    {isInGracePeriod && (
                                                         <button
                                                             onClick={() => onReedit(order)}
-                                                            className="btn-primary"
-                                                            style={{ width: '100%', background: 'var(--warning)', color: 'black' }}
+                                                            style={{ background: 'var(--warning)', color: 'black', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                            title="تعديل تفاصيل الطلب خلال مهلة المراجعة"
                                                         >
-                                                            <RotateCcw size={18} /> الرجوع خطوة للتعديل
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => confirmOrder(order.id)}
-                                                            className="btn-primary"
-                                                            style={{ width: '100%' }}
-                                                        >
-                                                            <Check size={18} /> تأكيد وقبول
+                                                            <RotateCcw size={16} /> تعديل ({timeLeft}ث)
                                                         </button>
                                                     )}
-                                                    <button onClick={() => handleCancel(order.id)} className="btn-danger-outline"><X size={18} /></button>
+                                                    <button onClick={() => handleCancel(order.id)} className="btn-danger-outline" title="إلغاء الطلب"><X size={18} /></button>
                                                 </div>
                                             )}
 

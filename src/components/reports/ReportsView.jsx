@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FileText, Download, Trash2, Calendar, Clock, DollarSign, Bike, TrendingUp, Home, Globe, Printer, UtensilsCrossed } from 'lucide-react';
+import { calculateOrderPilotShare, isOrderAssignedToPilot } from '../../utils/pilotCalculations';
 
 const displayDate = (dateStr) => {
   if (!dateStr) return '';
@@ -181,7 +182,7 @@ const ReportsView = () => {
   const getPilotOrders = (pilotId) => {
     // Filter orders for the current shift and specific pilot (Only completed, delivered or failed)
     return orders
-      .filter(o => String(o.pilotId) === String(pilotId) && (o.status === 'completed' || o.status === 'delivered' || o.status === 'failed_delivery'))
+      .filter(o => isOrderAssignedToPilot(o, pilotId) && (o.status === 'completed' || o.status === 'delivered' || o.status === 'failed_delivery'))
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   };
 
@@ -192,7 +193,7 @@ const ReportsView = () => {
 
     const ordersHtml = pOrders.map(o => {
       const isFailed = o.status === 'failed_delivery';
-      const share = isFailed ? 0 : (o.type === 'trip' ? o.deliveryFee : (o.deliveryFee / 2));
+      const share = calculateOrderPilotShare(o);
       return `
                 <tr style="border-bottom: 1px solid #eee; ${isFailed ? 'color: #888; text-decoration: line-through;' : ''}">
                     <td style="padding: 4px 2px; text-align: right;">#${o.originalId || o.id}</td>
@@ -388,7 +389,7 @@ const ReportsView = () => {
                   ) : (
                     getPilotOrders(selectedPilotDetails.id).map(order => {
                       const isFailed = order.status === 'failed_delivery';
-                      const pilotShare = isFailed ? 0 : (order.type === 'trip' ? order.deliveryFee : (order.deliveryFee / 2));
+                      const pilotShare = calculateOrderPilotShare(order);
 
                       return (
                         <tr key={order.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', opacity: isFailed ? 0.6 : 1 }}>

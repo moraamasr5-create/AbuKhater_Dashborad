@@ -690,7 +690,7 @@ const getDeliveryFee = typeof window.getDeliveryFee === 'function' ? window.getD
 };
 
 const ManualOrderForm = ({ onClose, initialData }) => {
-  const { addOrder, sendToN8N } = useApp();
+  const { addOrder } = useApp();
   const [isCompressing, setIsCompressing] = useState(false);
   const [formData, setFormData] = useState(initialData?.formData || {
     receiptNo: '', customerName: '', phone: '', area: '',
@@ -801,12 +801,6 @@ const ManualOrderForm = ({ onClose, initialData }) => {
     if (!formData.receiptNo) return alert('أدخل رقم البون للطباعة');
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) return;
-
-    sendToN8N({
-      id: formData.receiptNo, customer: formData.customerName,
-      items: selectedItems, notes: formData.itemsDescription,
-      type: 'KITCHEN_TICKET_PRINT'
-    }, 'PRINT_JOB');
 
     const htmlContent = `
       <!DOCTYPE html>
