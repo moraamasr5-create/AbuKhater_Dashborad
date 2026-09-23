@@ -4,6 +4,7 @@ import Sidebar from './components/layout/Sidebar';
 import OrderInbox from './components/orders/OrderInbox';
 import ReportsView from './components/reports/ReportsView';
 import FeedbackView from './components/feedback/FeedbackView';
+import SettingsView from './components/settings/SettingsView';
 import Login from './components/auth/Login';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
@@ -1892,6 +1893,7 @@ function App() {
             {activeTab === 'reservations' && (userRole === 'casher') && <ReservationView />}
             {activeTab === 'feedback' && userRole === 'admin' && <FeedbackView />}
             {activeTab === 'reports' && userRole === 'admin' && <ReportsView />}
+            {activeTab === 'settings' && userRole === 'admin' && <SettingsView />}
           </div>
 
           {/* 🛡️ Modern minimal Ownership Footer */}

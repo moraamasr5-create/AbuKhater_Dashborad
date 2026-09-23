@@ -33,6 +33,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
         { id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
         { id: 'feedback', label: 'الشكاوى والمقترحات', icon: MessageSquare, roles: ['admin'] },
         { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin'] },
+        { id: 'settings', label: 'الإعدادات والأسعار', icon: Settings, roles: ['admin'] },
     ];
 
     const menuItems = allMenuItems.filter(item => item.roles.includes(userRole));

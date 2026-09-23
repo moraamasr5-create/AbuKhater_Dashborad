@@ -854,6 +854,71 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
+  // 11.6 Restaurant Settings (إعدادات المطعم والأسعار والتوصيل)
+  // ─────────────────────────────────────────────────────────
+  async fetchRestaurantSettings() {
+    return withOfflineSupport('fetchRestaurantSettings', async () => {
+      let map = {};
+      try {
+        const { data, error } = await supabase
+          .from('restaurant_settings')
+          .select('key, value');
+        if (!error && data && data.length > 0) {
+          data.forEach(row => { map[row.key] = row.value; });
+          return map;
+        }
+      } catch (e) {
+        console.warn('[RestaurantSettings] Falling back to app_config:', e?.message);
+      }
+
+      const { data: acData, error: acError } = await supabase
+        .from('app_config')
+        .select('key, value');
+      if (acError) throw acError;
+
+      (acData || []).forEach(row => { map[row.key] = row.value; });
+      return map;
+    }, null);
+  },
+
+  async updateRestaurantSetting(key, value, skipQueue = false) {
+    return withOfflineSupport('updateRestaurantSetting', async () => {
+      const now = new Date().toISOString();
+      const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+      // Save to app_config
+      const { error: acErr } = await supabase
+        .from('app_config')
+        .upsert({ key, value: valStr, updated_at: now }, { onConflict: 'key' });
+      if (acErr) console.warn('[RestaurantSettings] app_config error:', acErr.message);
+
+      // Attempt to save to restaurant_settings
+      try {
+        await supabase
+          .from('restaurant_settings')
+          .upsert({ key, value: valStr, updated_at: now }, { onConflict: 'key' });
+      } catch (e) {
+        // Silently catch if RLS restricts restaurant_settings table
+      }
+    }, { key, value }, skipQueue);
+  },
+
+  subscribeToRestaurantSettings(callback) {
+    const channelId = `restaurant-settings-rt-${Date.now()}`;
+    return supabase
+      .channel(channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, payload => {
+        console.log('🔄 Realtime RestaurantSettings:', payload);
+        callback(payload);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, payload => {
+        console.log('🔄 Realtime RestaurantSettings (via app_config):', payload);
+        callback(payload);
+      })
+      .subscribe();
+  },
+
+  // ─────────────────────────────────────────────────────────
   // 12. fetchFeedbacks (جدول feedback)
   // ─────────────────────────────────────────────────────────
   async fetchFeedbacks() {
