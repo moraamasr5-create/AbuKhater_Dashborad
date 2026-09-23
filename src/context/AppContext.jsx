@@ -295,16 +295,23 @@ export const AppProvider = ({ children }) => {
 
               matchedPrevIds.add(existing.id);
 
-              // 🛡️ حماية ضد Race Condition: إذا كان هناك تعديل قيد التنفيذ لم ينتهِ في السيرفر
+              // 🛡️ حماية ضد Race Condition دون تجميد الحالة للأبد:
+              // 1. إذا كان الطلب قيد التحديث في الـ DB حالياً (isPending)
+              // 2. إذا كان الطلب محلياً في فترة مهلة التراجع والتعديل (pending_timer)
+              // 3. عدا ذلك: حالة Supabase (fo.status) هي المصدر الحقيقي المعتمد المتزامن بين جميع الأجهزة
               const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
-              const localIsNewer = existing.confirmedAt || existing.assignedAt || existing.startTime;
+              const isInGracePeriod = existing.status === 'pending_timer';
 
-              const mergedStatus = isPending ? existing.status : (localIsNewer ? existing.status : fo.status);
+              const mergedStatus = (isPending || isInGracePeriod) ? existing.status : fo.status;
 
               const localFields = {};
               LOCAL_ONLY_FIELDS.forEach(f => {
                 if (existing[f] !== undefined) localFields[f] = existing[f];
               });
+
+              // إسناد الطيار: إذا كان قيد التحديث محلياً نُبقي المحلي، وإلا فبيانات السيرفر هي المعتمدة
+              const effectivePilotId = isPending ? (existing.pilotId || fo.pilotId) : (fo.pilotId || existing.pilotId);
+              const effectiveDeliveryId = isPending ? (existing.deliveryId || fo.deliveryId) : (fo.deliveryId || existing.deliveryId);
 
               // دمج حقيقي (Merge وليس Full-Replace) للحفاظ على أي بيانات محلية وملاحظات
               return {
@@ -313,6 +320,8 @@ export const AppProvider = ({ children }) => {
                 ...localFields,
                 id: existing.id || fo.id,
                 originalId: existing.originalId || fo.originalId,
+                pilotId: effectivePilotId,
+                deliveryId: effectiveDeliveryId,
                 status: mergedStatus
               };
             });
