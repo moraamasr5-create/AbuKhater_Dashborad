@@ -6,6 +6,7 @@ import ReportsView from './components/reports/ReportsView';
 import FeedbackView from './components/feedback/FeedbackView';
 import SettingsView from './components/settings/SettingsView';
 import Login from './components/auth/Login';
+import ConnectionBanner from './components/common/ConnectionBanner';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
@@ -1842,6 +1843,7 @@ function App() {
       />
       <main className="main-content">
         <div className="app-container">
+          <ConnectionBanner />
           {/* 🔴 أزرار الإضافة - مسموحة للكاشير فقط */}
           {isShiftOpen && userRole === 'casher' && (
             <div className="flex flex-wrap" style={{ marginBottom: '24px', gap: '12px' }}>

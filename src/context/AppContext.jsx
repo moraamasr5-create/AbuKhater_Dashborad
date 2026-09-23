@@ -1,7 +1,16 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { API_CONFIG } from '../config/apiConfig';
-import { supabaseService, processPendingSync } from '../services/supabaseService';
+import {
+  supabaseService,
+  processPendingSync,
+  getPendingQueue,
+  savePendingQueue,
+  getFailedQueue,
+  clearFailedQueue,
+  retryFailedQueue,
+  onQueueChange
+} from '../services/supabaseService';
 import { attachReceiptToOrder } from '../services/storageService';
 import { printerService } from '../services/printerService';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
@@ -218,11 +227,36 @@ export const AppProvider = ({ children }) => {
     return () => clearInterval(timer);
   }, [currentShift]);
 
-  // 🔥 3. Real-time Dashboard (Supabase Live System)
+  // 🔥 3. Real-time Dashboard & Offline Resilience (Supabase Live System)
   const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
   const pendingPilotUpdatesRef = useRef(new Set()); // pilot ids with in-flight DB writes
   const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
+
+  // 🌐 إدارة حالة الاتصال وطابور المزامنة المحلي
+  const [connectionStatus, setConnectionStatus] = useState(navigator.onLine ? 'connected' : 'disconnected');
+  const [queueStatus, setQueueStatus] = useState({ pending: 0, failed: 0 });
+  const [failedQueueItems, setFailedQueueItems] = useState([]);
+
+  useEffect(() => {
+    // 1. مراقبة طابور العمليات المعلقة والفاشلة نهائياً
+    const unsubQueue = onQueueChange((status) => {
+      setQueueStatus(status);
+      setFailedQueueItems(getFailedQueue());
+    });
+
+    const handleOffline = () => {
+      console.warn('🔴 انقطع الاتصال بالإنترنت');
+      setConnectionStatus('disconnected');
+    };
+
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      unsubQueue();
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
@@ -331,36 +365,92 @@ export const AppProvider = ({ children }) => {
             return [...mergedOrders, ...unmatchedManualOrders];
           });
         }
+        return fetchedOrders;
       } catch (err) {
         console.error('📡 Supabase Fetch Error:', err);
+        return null;
       }
     };
+
+    // 🌐 معالجة عودة الاتصال المرتبة: الطابور أولاً ثم الجلب (Queue First, Then Fetch)
+    const handleReconnect = async () => {
+      console.log('🌐 استشعار عودة الاتصال: معالجة طابور العمليات المحفوظة أولاً...');
+      setConnectionStatus('reconnecting');
+      try {
+        await processPendingSync();
+      } catch (e) {
+        console.warn('⚠️ خطأ أثناء تفريغ الطابور:', e);
+      }
+      await fetchInitialData('reconnect');
+      setConnectionStatus('connected');
+    };
+
+    const handleOnline = () => {
+      handleReconnect();
+    };
+
+    window.addEventListener('online', handleOnline);
 
     // التحميل المبدئي عند بدء الشيفت
     fetchInitialData('mount');
 
-    // 🚀 القناة الأساسية: التحديث اللحظي عبر WebSocket (Primary Realtime Channel)
-    ordersSub = supabaseService.subscribeToOrders(() => {
-      fetchInitialData('realtime');
-    });
+    // 🚀 القناة الأساسية: التحديث اللحظي عبر WebSocket مع تتبع حالة الاتصال
+    ordersSub = supabaseService.subscribeToOrders(
+      () => {
+        fetchInitialData('realtime');
+      },
+      (status) => {
+        if (status === 'SUBSCRIBED') {
+          if (connectionStatus !== 'connected') {
+            handleReconnect();
+          }
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
 
-    pilotsSub = supabaseService.subscribeToDrivers(() => {
-      supabaseService.fetchDeliveryDrivers().then(fetched => {
-        if (fetched) setPilots(prev => mergePilots(prev, fetched, pendingPilotUpdatesRef.current));
-      });
-    });
+    pilotsSub = supabaseService.subscribeToDrivers(
+      () => {
+        supabaseService.fetchDeliveryDrivers().then(fetched => {
+          if (fetched) setPilots(prev => mergePilots(prev, fetched, pendingPilotUpdatesRef.current));
+        });
+      },
+      (status) => {
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
 
-    resSub = supabaseService.subscribeToReservations(() => {
-      supabaseService.fetchReservations().then(setReservations);
-    });
+    resSub = supabaseService.subscribeToReservations(
+      () => {
+        supabaseService.fetchReservations().then(setReservations);
+      },
+      (status) => {
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
 
-    // 🛡️ شبكة الأمان الصامتة: Polling كل 30 ثانية في الخلفية لضمان عدم ضياع أي طلب في حال انقطاع WebSocket
-    const pollTimer = setInterval(() => {
-      fetchInitialData('silent_poll');
+    // 🛡️ شبكة الأمان الصامتة: Polling كل 30 ثانية في الخلفية
+    const pollTimer = setInterval(async () => {
+      if (!navigator.onLine) {
+        setConnectionStatus('disconnected');
+        return;
+      }
+      const fetched = await fetchInitialData('silent_poll');
+      if (fetched === null && !navigator.onLine) {
+        setConnectionStatus('disconnected');
+      } else if (fetched !== null && connectionStatus === 'disconnected') {
+        setConnectionStatus('connected');
+      }
     }, 30000);
 
     return () => {
       clearInterval(pollTimer);
+      window.removeEventListener('online', handleOnline);
       if (ordersSub) ordersSub.unsubscribe();
       if (pilotsSub) pilotsSub.unsubscribe();
       if (resSub) resSub.unsubscribe();
@@ -1295,7 +1385,14 @@ export const AppProvider = ({ children }) => {
       activeStats: computedStats,
       recalcStats: activeStats,     // expose raw function for manual recalc if needed
       assignPilot, startDelivery, getSuggestedPilot,
-      syncExternalOrders
+      syncExternalOrders,
+      // 🌐 حالة الاتصال والعمليات المعلقة والفاشلة
+      connectionStatus,
+      pendingQueueCount: queueStatus.pending,
+      failedQueueCount: queueStatus.failed,
+      failedQueueItems,
+      clearFailedQueue,
+      retryFailedQueue
     }}>
       {children}
     </AppContext.Provider>

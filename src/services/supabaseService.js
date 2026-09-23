@@ -7,11 +7,13 @@ import { safeGetItem, safeSetItem } from '../utils/safeStorage';
 // ============================================================
 
 const QUEUE_KEY = 'delivery_pending_sync';
+const FAILED_QUEUE_KEY = 'delivery_failed_sync';
+export const MAX_QUEUE_RETRIES = 3;
 
 /**
  * يقرأ قائمة العمليات المنتظرة من localStorage
  */
-const getPendingQueue = () => {
+export const getPendingQueue = () => {
   try { return JSON.parse(safeGetItem(QUEUE_KEY)) || []; }
   catch { return []; }
 };
@@ -19,8 +21,50 @@ const getPendingQueue = () => {
 /**
  * يحفظ قائمة العمليات المنتظرة في localStorage
  */
-const savePendingQueue = (queue) => {
+export const savePendingQueue = (queue) => {
   safeSetItem(QUEUE_KEY, JSON.stringify(queue));
+  notifyQueueChange();
+};
+
+/**
+ * يقرأ قائمة العمليات التي فشلت نهائياً وتحتاج تدخل يدوي
+ */
+export const getFailedQueue = () => {
+  try { return JSON.parse(safeGetItem(FAILED_QUEUE_KEY)) || []; }
+  catch { return []; }
+};
+
+/**
+ * يحفظ قائمة العمليات الفاشلة نهائياً
+ */
+export const saveFailedQueue = (queue) => {
+  safeSetItem(FAILED_QUEUE_KEY, JSON.stringify(queue));
+  notifyQueueChange();
+};
+
+/**
+ * مسح قائمة العمليات الفاشلة بعد مراجعة الكاشير
+ */
+export const clearFailedQueue = () => {
+  safeSetItem(FAILED_QUEUE_KEY, JSON.stringify([]));
+  notifyQueueChange();
+};
+
+/**
+ * نظام إشعار المشتركين بتغيرات الطابور
+ */
+const queueListeners = new Set();
+export const onQueueChange = (callback) => {
+  queueListeners.add(callback);
+  callback({ pending: getPendingQueue().length, failed: getFailedQueue().length });
+  return () => queueListeners.delete(callback);
+};
+
+const notifyQueueChange = () => {
+  const status = { pending: getPendingQueue().length, failed: getFailedQueue().length };
+  queueListeners.forEach(fn => {
+    try { fn(status); } catch (e) { console.error('Queue listener error:', e); }
+  });
 };
 
 /**
@@ -28,70 +72,136 @@ const savePendingQueue = (queue) => {
  */
 const queueSync = (action, payload) => {
   const q = getPendingQueue();
-  q.push({ action, payload, id: Date.now() });
+  q.push({
+    action,
+    payload,
+    id: Date.now(),
+    retries: 0,
+    createdAt: new Date().toISOString()
+  });
   savePendingQueue(q);
 };
 
 /**
  * يعيد تشغيل العمليات المنتظرة في القائمة عند عودة الاتصال بالإنترنت
- * يُستدعى تلقائياً عند أي reconnect
+ * يمنع التكرار اللانهائي وينقل العمليات الفاشلة نهائياً إلى failedQueue مع توضيح السبب
  */
+let isSyncing = false;
 export const processPendingSync = async () => {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || isSyncing) return { processed: 0, remaining: 0, failed: 0 };
   const q = getPendingQueue();
-  if (!q.length) return;
+  if (!q.length) return { processed: 0, remaining: 0, failed: getFailedQueue().length };
 
+  isSyncing = true;
   console.log(`🔄 Processing ${q.length} pending offline syncs...`);
   const remainingQueue = [];
+  const failedQueue = getFailedQueue();
+  let processedCount = 0;
 
-  for (const item of q) {
-    try {
-      if (item.action === 'updateOrderStatus') {
-        await supabaseService.updateOrderStatus(item.payload.supabaseId, item.payload.newStatus, item.payload.reason, item.payload.extraFields, true);
-      } else if (item.action === 'updatePilotState') {
-        await supabaseService.updatePilotState(item.payload.id, item.payload.stateUpdates, true);
-      } else if (item.action === 'saveShiftReport') {
-        await supabaseService.saveShiftReport(item.payload, true);
-      } else if (item.action === 'createShift') {
-        await supabaseService.createShift(item.payload, true);
-      } else if (item.action === 'updateMenuAvailability') {
-        await supabaseService.updateMenuAvailability(item.payload.itemName, item.payload.isAvailable, true);
-      } else if (item.action === 'updateAppConfig') {
-        await supabaseService.updateAppConfig(item.payload.key, item.payload.value, true);
-      } else if (item.action === 'createReservation') {
-        await supabaseService.createReservation(item.payload, true);
-      } else if (item.action === 'updateReservationStatus') {
-        await supabaseService.updateReservationStatus(item.payload.id, item.payload.newStatus, item.payload.refNum, item.payload.paymentProof, true);
-      } else if (item.action === 'deleteReservation') {
-        await supabaseService.deleteReservation(item.payload.id, true);
-      } else if (item.action === 'resetAllPilots') {
-        await supabaseService.resetAllPilots(item.payload.pilotIds, true);
-      } else if (item.action === 'createManualOrder') {
-        await supabaseService.createManualOrder(item.payload, true);
-      } else if (item.action === 'updateOrderPaymentScreenshot') {
-        await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
-      } else if (item.action === 'assignOrderToPilot') {
-        await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
-      } else if (item.action === 'startPilotTrip') {
-        await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
-      } else if (item.action === 'completeOrderDelivery') {
-        await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
-      } else if (item.action === 'failOrderDelivery') {
-        await supabaseService.failOrderDelivery(item.payload.orderId, item.payload.reason, item.payload.mutationId, true);
-      } else if (item.action === 'togglePilotShift') {
-        await supabaseService.togglePilotShift(item.payload.pilotId, item.payload.forceReopen, item.payload.mutationId, true);
+  try {
+    for (const item of q) {
+      const currentRetries = (item.retries || 0) + 1;
+      try {
+        if (item.action === 'updateOrderStatus') {
+          await supabaseService.updateOrderStatus(item.payload.supabaseId, item.payload.newStatus, item.payload.reason, item.payload.extraFields, true);
+        } else if (item.action === 'updatePilotState') {
+          await supabaseService.updatePilotState(item.payload.id, item.payload.stateUpdates, true);
+        } else if (item.action === 'saveShiftReport') {
+          await supabaseService.saveShiftReport(item.payload, true);
+        } else if (item.action === 'createShift') {
+          await supabaseService.createShift(item.payload, true);
+        } else if (item.action === 'updateMenuAvailability') {
+          await supabaseService.updateMenuAvailability(item.payload.itemName, item.payload.isAvailable, true);
+        } else if (item.action === 'updateAppConfig') {
+          await supabaseService.updateAppConfig(item.payload.key, item.payload.value, true);
+        } else if (item.action === 'createReservation') {
+          await supabaseService.createReservation(item.payload, true);
+        } else if (item.action === 'updateReservationStatus') {
+          await supabaseService.updateReservationStatus(item.payload.id, item.payload.newStatus, item.payload.refNum, item.payload.paymentProof, true);
+        } else if (item.action === 'deleteReservation') {
+          await supabaseService.deleteReservation(item.payload.id, true);
+        } else if (item.action === 'resetAllPilots') {
+          await supabaseService.resetAllPilots(item.payload.pilotIds, true);
+        } else if (item.action === 'createManualOrder') {
+          await supabaseService.createManualOrder(item.payload, true);
+        } else if (item.action === 'updateOrderPaymentScreenshot') {
+          await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
+        } else if (item.action === 'assignOrderToPilot') {
+          await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
+        } else if (item.action === 'startPilotTrip') {
+          await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
+        } else if (item.action === 'completeOrderDelivery') {
+          await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
+        } else if (item.action === 'failOrderDelivery') {
+          await supabaseService.failOrderDelivery(item.payload.orderId, item.payload.reason, item.payload.mutationId, true);
+        } else if (item.action === 'togglePilotShift') {
+          await supabaseService.togglePilotShift(item.payload.pilotId, item.payload.forceReopen, item.payload.mutationId, true);
+        }
+        processedCount++;
+      } catch (e) {
+        const errMsg = e?.message || String(e);
+        const isPermanent = (
+          currentRetries >= MAX_QUEUE_RETRIES ||
+          e?.code === 'P0001' ||
+          errMsg.includes('not found') ||
+          errMsg.includes('violates foreign key') ||
+          errMsg.includes('duplicate key')
+        );
+
+        if (isPermanent) {
+          console.error(`❌ [Offline Sync] Item permanently failed (${item.action}):`, errMsg);
+          failedQueue.push({
+            ...item,
+            retries: currentRetries,
+            failedAt: new Date().toISOString(),
+            error: errMsg
+          });
+        } else {
+          console.warn(`⚠️ [Offline Sync] Item failed (attempt ${currentRetries}/${MAX_QUEUE_RETRIES}), keeping in queue:`, item);
+          remainingQueue.push({
+            ...item,
+            retries: currentRetries,
+            lastError: errMsg
+          });
+        }
       }
-    } catch (e) {
-      console.warn('⚠️ Offline sync item failed, keeping in queue:', item);
-      remainingQueue.push(item);
     }
-  }
 
-  savePendingQueue(remainingQueue);
+    safeSetItem(QUEUE_KEY, JSON.stringify(remainingQueue));
+    safeSetItem(FAILED_QUEUE_KEY, JSON.stringify(failedQueue));
+    notifyQueueChange();
+
+    return {
+      processed: processedCount,
+      remaining: remainingQueue.length,
+      failed: failedQueue.length
+    };
+  } finally {
+    isSyncing = false;
+  }
+};
+
+/**
+ * يعيد محاولة جميع العمليات الفاشلة نهائياً بنقلها إلى طابور الانتظار
+ */
+export const retryFailedQueue = async () => {
+  const failed = getFailedQueue();
+  if (!failed.length) return { processed: 0, remaining: 0, failed: 0 };
+  const pending = getPendingQueue();
+  const resetItems = failed.map(item => ({
+    ...item,
+    retries: 0,
+    lastError: null
+  }));
+  savePendingQueue([...pending, ...resetItems]);
+  clearFailedQueue();
+  return processPendingSync();
 };
 
 // يعيد المحاولة تلقائياً عند عودة الاتصال
-window.addEventListener('online', processPendingSync);
+window.addEventListener('online', () => {
+  processPendingSync();
+});
 
 /**
  * Wrapper مشترك: يُشغّل أي Supabase call مع fallback صامت عند انقطاع الاتصال
@@ -944,7 +1054,7 @@ export const supabaseService = {
   // 13. Realtime Subscriptions
   // ─────────────────────────────────────────────────────────
 
-  subscribeToOrders(callback) {
+  subscribeToOrders(callback, onStatusChange = null) {
     const channelId = `orders-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -952,10 +1062,12 @@ export const supabaseService = {
         console.log('🔄 Realtime Order:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
   },
 
-  subscribeToReservations(callback) {
+  subscribeToReservations(callback, onStatusChange = null) {
     const channelId = `reservations-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -963,10 +1075,12 @@ export const supabaseService = {
         console.log('🔄 Realtime Reservation:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
   },
 
-  subscribeToDrivers(callback) {
+  subscribeToDrivers(callback, onStatusChange = null) {
     const channelId = `delivery-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -974,6 +1088,8 @@ export const supabaseService = {
         console.log('🔄 Realtime Driver:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
   }
 };
