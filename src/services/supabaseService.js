@@ -924,40 +924,79 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 11. Menu Availability (جدول menu_availability)
-  //     item_name UNIQUE, is_available bool
+  // 11. Menu Items & Availability (جدول menu_items الرسمي)
   // ─────────────────────────────────────────────────────────
 
   /**
-   * يجلب كل حالات الإتاحة من menu_availability
+   * يجلب كافة أصناف المنيو مع التصنيفات للوحة التحكم
+   */
+  async fetchMenuItemsAdmin() {
+    return withOfflineSupport('fetchMenuItemsAdmin', async () => {
+      const { data, error } = await supabase.rpc('get_menu_items_admin');
+      if (error) throw error;
+      return data || [];
+    }, null);
+  },
+
+  /**
+   * يحدّث حالة صنف في المنيو (available, out_of_stock, paused, hidden)
+   */
+  async updateMenuItemStatus(itemId, status, skipQueue = false) {
+    if (!itemId) return;
+    return withOfflineSupport('updateMenuItemStatus', async () => {
+      const { data, error } = await supabase.rpc('update_menu_item_status', {
+        p_item_id: itemId,
+        p_status: status
+      });
+      if (error) throw error;
+      return data;
+    }, { itemId, status }, skipQueue);
+  },
+
+  /**
+   * تبديل إتاحة الصنف (متاح / غير متاح)
+   */
+  async toggleMenuItemAvailability(itemId, isAvailable, skipQueue = false) {
+    if (!itemId) return;
+    return withOfflineSupport('toggleMenuItemAvailability', async () => {
+      const { data, error } = await supabase.rpc('toggle_menu_item_availability', {
+        p_item_id: itemId,
+        p_is_available: Boolean(isAvailable)
+      });
+      if (error) throw error;
+      return data;
+    }, { itemId, isAvailable }, skipQueue);
+  },
+
+  /**
+   * [Legacy Compatibility] يجلب كل حالات الإتاحة معتمدة على جدول menu_items
    * يُعيد Map { itemName: boolean }
    */
   async fetchMenuAvailability() {
     return withOfflineSupport('fetchMenuAvailability', async () => {
       const { data, error } = await supabase
-        .from('menu_availability')
-        .select('item_name, is_available');
+        .from('menu_items')
+        .select('name, status');
       if (error) throw error;
 
       const map = {};
-      (data || []).forEach(row => { map[row.item_name] = row.is_available; });
+      (data || []).forEach(row => {
+        map[row.name] = (row.status === 'available');
+      });
       return map;
     }, null);
   },
 
   /**
-   * يحدّث أو يضيف حالة إتاحة عنصر في القائمة
-   * @param {string} itemName - اسم العنصر
-   * @param {boolean} isAvailable - متاح أم لا
+   * [Legacy Compatibility] يحدّث إتاحة عنصر بالاسم في menu_items
    */
   async updateMenuAvailability(itemName, isAvailable, skipQueue = false) {
     return withOfflineSupport('updateMenuAvailability', async () => {
+      const newStatus = isAvailable ? 'available' : 'out_of_stock';
       const { error } = await supabase
-        .from('menu_availability')
-        .upsert(
-          { item_name: itemName, is_available: isAvailable, updated_at: new Date().toISOString() },
-          { onConflict: 'item_name' }
-        );
+        .from('menu_items')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('name', itemName);
       if (error) throw error;
     }, { itemName, isAvailable }, skipQueue);
   },

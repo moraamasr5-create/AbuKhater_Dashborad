@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Settings, Save, RefreshCw, Power, DollarSign, MapPin, 
   CreditCard, Clock, AlertCircle, CheckCircle2, Shield, Plus, Trash2,
-  Truck, Calendar, Percent
+  Truck, Calendar, Percent, UtensilsCrossed, Search, Check, X, Filter
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 
@@ -26,9 +26,18 @@ const DEFAULT_AREAS = [
 ];
 
 const SettingsView = () => {
+  const [activeSubTab, setActiveSubTab] = useState('general'); // 'general' | 'menu_items'
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
+
+  // Menu items states
+  const [menuItems, setMenuItems] = useState([]);
+  const [loadingMenu, setLoadingMenu] = useState(false);
+  const [menuSearch, setMenuSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [updatingItemId, setUpdatingItemId] = useState(null);
 
   // Form states - General & Shift
   const [isOpen, setIsOpen] = useState(true);
@@ -206,6 +215,70 @@ const SettingsView = () => {
     setNewAreaZone(1);
   };
 
+  const loadMenuItems = async () => {
+    try {
+      setLoadingMenu(true);
+      const items = await supabaseService.fetchMenuItemsAdmin();
+      setMenuItems(items || []);
+    } catch (err) {
+      console.error('Failed to load menu items:', err);
+      showFeedback('error', 'حدث خطأ أثناء تحميل أصناف المنيو');
+    } finally {
+      setLoadingMenu(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'menu_items') {
+      loadMenuItems();
+    }
+  }, [activeSubTab]);
+
+  const handleToggleItemAvailability = async (item) => {
+    try {
+      setUpdatingItemId(item.id);
+      const isCurrentlyAvailable = (item.status === 'available');
+      const newStatus = isCurrentlyAvailable ? 'out_of_stock' : 'available';
+      // Optimistic update
+      setMenuItems(prev => prev.map(it => it.id === item.id ? { ...it, status: newStatus, isAvailable: (newStatus === 'available') } : it));
+      await supabaseService.toggleMenuItemAvailability(item.id, !isCurrentlyAvailable);
+      showFeedback('success', `تم تغيير حالة الصنف "${item.name}" إلى ${!isCurrentlyAvailable ? 'متاح' : 'نفذت الكمية'} بنجاح`);
+    } catch (err) {
+      console.error('Failed to toggle item availability:', err);
+      showFeedback('error', `فشل تحديث حالة الصنف: ${err.message}`);
+      loadMenuItems(); // rollback
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  const handleUpdateItemStatus = async (itemId, newStatus) => {
+    try {
+      setUpdatingItemId(itemId);
+      setMenuItems(prev => prev.map(it => it.id === itemId ? { ...it, status: newStatus, isAvailable: (newStatus === 'available') } : it));
+      await supabaseService.updateMenuItemStatus(itemId, newStatus);
+      showFeedback('success', 'تم تحديث حالة الصنف بنجاح');
+    } catch (err) {
+      console.error('Failed to update status:', err);
+      showFeedback('error', `فشل تحديث الحالة: ${err.message}`);
+      loadMenuItems();
+    } finally {
+      setUpdatingItemId(null);
+    }
+  };
+
+  // Filtered menu items
+  const filteredMenuItems = menuItems.filter(item => {
+    const matchesSearch = !menuSearch || (item.name && item.name.toLowerCase().includes(menuSearch.toLowerCase())) || (item.description && item.description.toLowerCase().includes(menuSearch.toLowerCase()));
+    const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory || item.categorySlug === selectedCategory || item.categoryName === selectedCategory;
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'available' && item.status === 'available') || (statusFilter === 'out_of_stock' && item.status === 'out_of_stock') || (statusFilter === 'paused' && item.status === 'paused') || (statusFilter === 'hidden' && item.status === 'hidden');
+    return matchesSearch && matchesCategory && matchesStatus;
+  });
+
+  const categoriesList = Array.from(
+    new Map(menuItems.filter(i => i.categoryId).map(i => [i.categoryId, { id: i.categoryId, name: i.categoryName || 'عام', slug: i.categorySlug }])).values()
+  );
+
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
@@ -222,32 +295,113 @@ const SettingsView = () => {
         <div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Settings size={28} color="var(--primary)" />
-            <span>إعدادات النظام والأسعار والتوصيل</span>
+            <span>إعدادات النظام والأسعار والمنيو</span>
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-            تتحكم هذه الصفحة مباشرة في محرك إنشاء الطلبات (create_order) والمنيو والأسعار.
+            تتحكم هذه الصفحة مباشرة في محرك إنشاء الطلبات (create_order) وإتاحة أصناف المنيو وقواعد التوصيل.
           </p>
         </div>
 
+        {activeSubTab === 'general' ? (
+          <button
+            onClick={handleSaveAll}
+            disabled={saving}
+            className="btn-primary"
+            style={{
+              background: 'var(--accent)',
+              color: 'white',
+              padding: '12px 24px',
+              fontSize: '1rem',
+              fontWeight: 'bold',
+              boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderRadius: '12px'
+            }}
+          >
+            {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
+            <span>{saving ? 'جاري الحفظ...' : 'حفظ التعديلات الآن'}</span>
+          </button>
+        ) : (
+          <button
+            onClick={loadMenuItems}
+            disabled={loadingMenu}
+            className="btn-primary"
+            style={{
+              background: 'rgba(255, 255, 255, 0.1)',
+              color: 'white',
+              padding: '10px 18px',
+              fontSize: '0.9rem',
+              fontWeight: 'bold',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              borderRadius: '10px',
+              border: '1px solid var(--border)'
+            }}
+          >
+            <RefreshCw className={loadingMenu ? 'animate-spin' : ''} size={18} />
+            <span>تحديث المنيو</span>
+          </button>
+        )}
+      </div>
+
+      {/* Sub Tab Navigation */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', flexWrap: 'wrap' }}>
         <button
-          onClick={handleSaveAll}
-          disabled={saving}
-          className="btn-primary"
+          type="button"
+          onClick={() => setActiveSubTab('general')}
           style={{
-            background: 'var(--accent)',
-            color: 'white',
-            padding: '12px 24px',
-            fontSize: '1rem',
+            background: activeSubTab === 'general' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+            color: activeSubTab === 'general' ? '#000' : 'white',
             fontWeight: 'bold',
-            boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             gap: '8px',
-            borderRadius: '12px'
+            transition: 'all 0.2s'
           }}
         >
-          {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-          <span>{saving ? 'جاري الحفظ...' : 'حفظ التعديلات الآن'}</span>
+          <Settings size={18} />
+          <span>إعدادات النظام والأسعار والتوصيل</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setActiveSubTab('menu_items');
+            loadMenuItems();
+          }}
+          style={{
+            background: activeSubTab === 'menu_items' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+            color: activeSubTab === 'menu_items' ? '#000' : 'white',
+            fontWeight: 'bold',
+            padding: '10px 20px',
+            borderRadius: '10px',
+            border: 'none',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            transition: 'all 0.2s'
+          }}
+        >
+          <UtensilsCrossed size={18} />
+          <span>إدارة إتاحة أصناف المنيو</span>
+          {menuItems.length > 0 && (
+            <span style={{
+              background: activeSubTab === 'menu_items' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)',
+              padding: '2px 8px',
+              borderRadius: '12px',
+              fontSize: '0.75rem'
+            }}>
+              {menuItems.filter(i => i.status === 'available').length}/{menuItems.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -270,7 +424,10 @@ const SettingsView = () => {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
+      {/* Tab 1: General Settings & Delivery */}
+      {activeSubTab === 'general' && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         
         {/* Card 1: حالة المطعم ومواعيد الوردية */}
         <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
@@ -718,6 +875,226 @@ const SettingsView = () => {
           </table>
         </div>
       </div>
+    </>
+  )}
+
+  {/* Tab 2: Menu Items & Availability Management */}
+  {activeSubTab === 'menu_items' && (
+    <div>
+      {/* Controls Bar: Search, Category, Status */}
+      <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+          
+          {/* Search */}
+          <div style={{ position: 'relative', flex: '1 1 240px' }}>
+            <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+            <input
+              type="text"
+              placeholder="ابحث عن صنف بالاسم أو الوصف..."
+              value={menuSearch}
+              onChange={(e) => setMenuSearch(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 38px 10px 14px',
+                borderRadius: '10px',
+                background: 'rgba(255, 255, 255, 0.05)',
+                border: '1px solid var(--border)',
+                color: 'white',
+                fontSize: '0.9rem'
+              }}
+            />
+          </div>
+
+          {/* Category Filter */}
+          <div style={{ flex: '0 1 200px' }}>
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '10px',
+                background: '#1e293b',
+                border: '1px solid var(--border)',
+                color: 'white',
+                fontSize: '0.9rem'
+              }}
+            >
+              <option value="all">جميع التصنيفات ({categoriesList.length})</option>
+              {categoriesList.map(cat => (
+                <option key={cat.id} value={cat.id}>{cat.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'all', label: 'الكل' },
+              { id: 'available', label: '🟢 متاح' },
+              { id: 'out_of_stock', label: '🔴 نفذت الكمية' },
+              { id: 'paused', label: '⏸️ موقوف' }
+            ].map(st => (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setStatusFilter(st.id)}
+                style={{
+                  background: statusFilter === st.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
+                  color: statusFilter === st.id ? '#000' : 'white',
+                  border: '1px solid var(--border)',
+                  padding: '8px 14px',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}
+              >
+                {st.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary counters */}
+        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          <span>إجمالي المعروض: <strong style={{ color: 'white' }}>{filteredMenuItems.length}</strong></span>
+          <span>المتاح: <strong style={{ color: '#34d399' }}>{menuItems.filter(i => i.status === 'available').length}</strong></span>
+          <span>نفذت الكمية: <strong style={{ color: '#f87171' }}>{menuItems.filter(i => i.status === 'out_of_stock').length}</strong></span>
+          <span>موقوف / مخفي: <strong style={{ color: '#fbbf24' }}>{menuItems.filter(i => i.status === 'paused' || i.status === 'hidden').length}</strong></span>
+        </div>
+      </div>
+
+      {/* Menu Items Grid */}
+      {loadingMenu ? (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '12px' }}>
+          <RefreshCw className="animate-spin" size={32} color="var(--primary)" />
+          <p style={{ color: 'var(--text-muted)' }}>جاري جلب أصناف المنيو من الخادم...</p>
+        </div>
+      ) : filteredMenuItems.length === 0 ? (
+        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '40px', textAlign: 'center' }}>
+          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>لا توجد أصناف تطابق معايير البحث.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          {filteredMenuItems.map(item => {
+            const isAvailable = item.status === 'available';
+            const isUpdating = updatingItemId === item.id;
+
+            return (
+              <div
+                key={item.id}
+                className="card"
+                style={{
+                  background: 'var(--card-bg)',
+                  border: `1px solid ${isAvailable ? 'rgba(52, 211, 153, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                  borderRadius: '14px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  opacity: isAvailable ? 1 : 0.75,
+                  transition: 'all 0.2s'
+                }}
+              >
+                <div>
+                  {/* Top Row: Category badge & Price */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: '#94a3b8',
+                      padding: '3px 8px',
+                      borderRadius: '6px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}>
+                      {item.categoryName || 'عام'}
+                    </span>
+                    
+                    <span style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--primary)' }}>
+                      {item.price} <small style={{ fontSize: '0.75rem' }}>ج.م</small>
+                    </span>
+                  </div>
+
+                  {/* Item Name */}
+                  <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: 'white', marginBottom: '6px' }}>
+                    {item.name}
+                  </h3>
+
+                  {/* Description */}
+                  {item.description && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {item.description}
+                    </p>
+                  )}
+                </div>
+
+                {/* Bottom Controls */}
+                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+                  {/* Detailed status select */}
+                  <select
+                    value={item.status}
+                    onChange={(e) => handleUpdateItemStatus(item.id, e.target.value)}
+                    disabled={isUpdating}
+                    style={{
+                      flex: '1',
+                      padding: '6px 8px',
+                      borderRadius: '8px',
+                      background: '#1e293b',
+                      border: '1px solid var(--border)',
+                      color: isAvailable ? '#34d399' : '#f87171',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    <option value="available">🟢 متاح للطلب</option>
+                    <option value="out_of_stock">🔴 نفذت الكمية</option>
+                    <option value="paused">⏸️ موقوف مؤقتًا</option>
+                    <option value="hidden">👁️ مخفي</option>
+                  </select>
+
+                  {/* Quick Toggle Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleToggleItemAvailability(item)}
+                    disabled={isUpdating}
+                    style={{
+                      background: isAvailable ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                      color: isAvailable ? '#f87171' : '#34d399',
+                      border: `1px solid ${isAvailable ? '#ef4444' : '#10b981'}`,
+                      padding: '6px 12px',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 'bold',
+                      cursor: isUpdating ? 'wait' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                    title={isAvailable ? 'تعطيل الصنف (نفذت الكمية)' : 'إتاحة الصنف للطلب'}
+                  >
+                    {isUpdating ? (
+                      <RefreshCw className="animate-spin" size={14} />
+                    ) : isAvailable ? (
+                      <>
+                        <X size={14} />
+                        <span>تعطيل</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check size={14} />
+                        <span>إتاحة</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  )}
     </div>
   );
 };
