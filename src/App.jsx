@@ -8,7 +8,7 @@ import SettingsView from './components/settings/SettingsView';
 import Login from './components/auth/Login';
 import ConnectionBanner from './components/common/ConnectionBanner';
 import { useApp } from './context/AppContext';
-import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
+import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, AlertCircle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2, Phone, Check, UserPlus } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
 import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
 import { isPilotOnDelivery } from './utils/pilotState';
