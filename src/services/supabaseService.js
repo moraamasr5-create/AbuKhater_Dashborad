@@ -1214,6 +1214,16 @@ export const supabaseService = {
       await supabase.auth.signOut();
     } catch (e) {
       console.warn('[Auth] SignOut warning:', e?.message);
+    } finally {
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          Object.keys(window.localStorage).forEach(key => {
+            if (key.startsWith('sb-') || key.includes('supabase.auth.token')) {
+              window.localStorage.removeItem(key);
+            }
+          });
+        }
+      } catch {}
     }
   },
 

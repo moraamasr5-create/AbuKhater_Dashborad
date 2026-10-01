@@ -202,13 +202,13 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 {/* 🚪 صف الأزرار السفلية (تسجيل الخروج + مفتاح الأمان الصغير للأدمن) */}
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                     <button
+                        type="button"
                         onClick={async () => {
-                            if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-                                await logoutStaff();
-                            }
+                            closeSidebar();
+                            await logoutStaff();
                         }}
                         className="btn-primary"
-                        style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
+                        style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', cursor: 'pointer' }}
                     >
                         <LogOut size={18} />
                         <span>تسجيل الخروج</span>

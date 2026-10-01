@@ -144,10 +144,15 @@ export const AppProvider = ({ children }) => {
   };
 
   const logoutStaff = async () => {
-    await supabaseService.signOutStaff();
-    setCurrentUser(null);
-    setCurrentStaff(null);
-    setUserRole('');
+    try {
+      await supabaseService.signOutStaff();
+    } catch (e) {
+      console.warn('[Auth] logoutStaff error:', e?.message);
+    } finally {
+      setCurrentUser(null);
+      setCurrentStaff(null);
+      setUserRole('');
+    }
   };
 
   const [orders, setOrders] = useState([]);
