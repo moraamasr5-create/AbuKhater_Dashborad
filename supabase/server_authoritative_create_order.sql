@@ -44,8 +44,8 @@ DROP POLICY IF EXISTS delivery_zones_modify_staff ON public.delivery_zones;
 CREATE POLICY delivery_zones_modify_staff ON public.delivery_zones
   FOR ALL
   TO authenticated
-  USING (public.is_admin() OR public.has_role('casher'))
-  WITH CHECK (public.is_admin() OR public.has_role('casher'));
+  USING (public.has_role('admin') OR public.has_role('casher'))
+  WITH CHECK (public.has_role('admin') OR public.has_role('casher'));
 
 GRANT SELECT ON public.delivery_zones TO anon, authenticated;
 GRANT ALL ON public.delivery_zones TO authenticated;
@@ -81,6 +81,7 @@ CREATE TABLE IF NOT EXISTS public.restaurant_settings (
   updated_at  timestamptz DEFAULT now()
 );
 
+ALTER TABLE public.restaurant_settings ADD COLUMN IF NOT EXISTS description text;
 ALTER TABLE public.restaurant_settings ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow anon read restaurant_settings" ON public.restaurant_settings;
@@ -90,8 +91,8 @@ CREATE POLICY "Allow anon read restaurant_settings" ON public.restaurant_setting
 DROP POLICY IF EXISTS "Allow dashboard modify restaurant_settings" ON public.restaurant_settings;
 CREATE POLICY "Allow dashboard modify restaurant_settings" ON public.restaurant_settings
   FOR ALL TO authenticated
-  USING (public.is_admin() OR public.has_role('casher'))
-  WITH CHECK (public.is_admin() OR public.has_role('casher'));
+  USING (public.has_role('admin') OR public.has_role('casher'))
+  WITH CHECK (public.has_role('admin') OR public.has_role('casher'));
 
 INSERT INTO public.restaurant_settings (key, value, description) VALUES
   ('is_restaurant_open',               'true',                  'حالة فتح/إغلاق المطعم لاستقبال الطلبات'),
@@ -339,7 +340,7 @@ BEGIN
     END IF;
 
     -- Authoritative server price
-    v_unit_price := COALESCE(v_menu_item.base_price, v_menu_item.price, 0.0);
+    v_unit_price := COALESCE(v_menu_item.price, 0.0);
     v_line_total := v_unit_price * v_item_qty;
     v_subtotal   := v_subtotal + v_line_total;
 
@@ -502,7 +503,6 @@ BEGIN
   INSERT INTO public.order_items (
     order_id,
     item_id,
-    product_id,
     product_name,
     quantity,
     unit_price,
@@ -511,7 +511,6 @@ BEGIN
   SELECT
     v_new_order_id,
     (item->>'item_id')::uuid,
-    (item->>'item_id')::text,
     (item->>'name')::text,
     (item->>'quantity')::int,
     (item->>'unit_price')::numeric,
