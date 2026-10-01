@@ -788,6 +788,8 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
     return acc;
   }, {});
 
+  const pilotsWithOrders = pilots.filter(p => ordersByPilot[String(p.id)]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* 🚀 Header: Greeting & Shift Indicator */}

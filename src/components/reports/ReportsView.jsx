@@ -17,7 +17,7 @@ const displayDate = (dateStr) => {
 };
 
 const ReportsView = () => {
-  const { currentShift, dailyReports, activeStats, closeShift, openShift, isShiftOpen, orders, reservations } = useApp();
+  const { currentShift, dailyReports, activeStats, closeShift, openShift, isShiftOpen, orders, reservations, userRole } = useApp();
   const [selectedPilotDetails, setSelectedPilotDetails] = React.useState(null);
   const [showDues, setShowDues] = React.useState(false);
   const [showArchives, setShowArchives] = React.useState(false);
