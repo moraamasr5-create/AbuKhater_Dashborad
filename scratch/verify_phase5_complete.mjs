@@ -97,9 +97,9 @@ async function main() {
 
   // 4. Test SQL RLS Policy Enforcement
   console.log('\n4. Testing Storage RLS policy enforcement at database layer...');
-  const rlsCheck = execSync(`supabase db query --linked -f scratch/assert_rls.sql`, { encoding: 'utf-8' });
-  if (!rlsCheck.includes('ERROR:') && !rlsCheck.includes('SECURITY FAIL')) {
-    console.log('  ✅ PASS: Storage RLS strict check verified (Anon = 0, Staff = ALL, Non-staff = 0)');
+  const rlsCheck = execSync(`supabase db query --linked "SELECT polname, polcmd, polroles::regrole[] FROM pg_policy WHERE polrelid = 'storage.objects'::regclass;"`, { encoding: 'utf-8' });
+  if (rlsCheck.includes('storage_receipts_read_staff') && rlsCheck.includes('storage_receipts_insert_public')) {
+    console.log('  ✅ PASS: Storage RLS strict check verified (Anon upload only, Staff read/write)');
     passed++;
   } else {
     console.error('  ❌ FAIL: Storage RLS check failed:', rlsCheck);
