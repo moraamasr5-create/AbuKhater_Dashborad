@@ -1727,7 +1727,7 @@ function App() {
   const [activeModal, setActiveModal] = useState('none');
   const [reeditData, setReeditData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { isShiftOpen, deleteOrder, userRole, setUserRole } = useApp();
+  const { isShiftOpen, deleteOrder, userRole, setUserRole, isAuthLoading } = useApp();
 
   // 🟢 حماية لضمان الصلاحيات للأدوار المختلفة
   useEffect(() => {
@@ -1817,6 +1817,16 @@ function App() {
       window.removeEventListener('keydown', handleEsc);
     };
   }, []);
+
+  if (isAuthLoading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#090d16', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px', color: 'white', fontFamily: 'Cairo, sans-serif' }}>
+        <div style={{ width: '48px', height: '48px', border: '3px solid rgba(16, 185, 129, 0.2)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>جاري التحقق من هوية وصلاحيات الموظف...</p>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
+      </div>
+    );
+  }
 
   if (!userRole) {
     return <Login onLoginSuccess={(role) => setActiveTab(role === 'admin' ? 'dashboard' : 'inbox')} />;

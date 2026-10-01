@@ -1,6 +1,7 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import { supabase } from './supabase/supabaseClient';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
+import { capShiftMinutes } from '../utils/shiftLogic';
 
 // ============================================================
 // OFFLINE SYNC QUEUE
@@ -598,7 +599,7 @@ export const supabaseService = {
         lastReturnTime: row.last_return_time || null,
         lastOpenedAt: row.shift_started_at || null,   // shift_started_at → lastOpenedAt
         lastClosedAt: row.shift_ended_at || null,    // shift_ended_at → lastClosedAt
-        totalMinutes: Number(row.total_minutes) || 0,
+        totalMinutes: capShiftMinutes(Number(row.total_minutes) || 0),
         ordersCount: Number(row.orders_count) || 0,
         shift: `${row.start_shift || '01:00'} - ${row.end_shift || '11:00'}`,
         numberMotor: row.number_motor || '',
@@ -1091,5 +1092,86 @@ export const supabaseService = {
       .subscribe((status, err) => {
         if (onStatusChange) onStatusChange(status, err);
       });
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 14. Authentication & Staff Roles (Supabase Auth)
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * تسجيل دخول موظف عبر Supabase Auth والتحقق من دوره وحالته
+   */
+  async signInStaff({ email, password }) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    
+    const profile = await this.getCurrentStaffProfile(data.user.id);
+    if (!profile) {
+      await supabase.auth.signOut();
+      throw new Error('هذا الحساب ليس لديه صلاحية وصول إلى لوحة التحكم (Staff Role Required).');
+    }
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      throw new Error('تم تعطيل هذا الحساب من قبل الإدارة.');
+    }
+
+    return { user: data.user, profile };
+  },
+
+  /**
+   * تسجيل خروج الموظف وإنهاء الجلسة
+   */
+  async signOutStaff() {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('[Auth] SignOut warning:', e?.message);
+    }
+  },
+
+  /**
+   * جلب الملف التعريفي والدور الموثق للموظف من السيرفر
+   */
+  async getCurrentStaffProfile(userId = null) {
+    try {
+      const targetUid = userId || (await supabase.auth.getUser())?.data?.user?.id;
+      if (!targetUid) return null;
+
+      // First try the RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_staff_profile');
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        return rpcData[0];
+      }
+
+      // Fallback to direct query on staff_roles
+      const { data, error } = await supabase
+        .from('staff_roles')
+        .select('*')
+        .eq('user_id', targetUid)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[StaffProfile] Error fetching profile:', error.message);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.warn('[StaffProfile] Exception fetching profile:', e?.message);
+      return null;
+    }
+  },
+
+  /**
+   * الاستماع لتغيرات جلسة المستخدم من Supabase Auth
+   */
+  onAuthStateChange(callback) {
+    return supabase.auth.onAuthStateChange(async (event, session) => {
+      let profile = null;
+      if (session?.user) {
+        profile = await this.getCurrentStaffProfile(session.user.id);
+      }
+      callback(event, session, profile);
+    });
   }
 };
+

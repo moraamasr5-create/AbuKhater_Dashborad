@@ -66,11 +66,11 @@ const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => 
 };
 
 export const AppProvider = ({ children }) => {
-  // 🔴 نظام الأدوار (Role System)
-  // بنحدد هنا إذا كان المستخدم 'admin' (مدير) أو 'casher' (كاشير) أو '' (غير مسجل دخول)
-  const [userRole, setUserRole] = useState(() => {
-    return sessionStorage.getItem('b_delivery_session_user') || '';
-  });
+  // 🔐 نظام المصادقة والأدوار الموثقة من السيرفر (Supabase Auth & Staff RBAC)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentStaff, setCurrentStaff] = useState(null);
+  const [userRole, setUserRole] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const [isThermalPrintMode, setIsThermalPrintMode] = useState(() => {
     return safeGetItem('is_thermal_print_mode') === 'true';
@@ -85,24 +85,69 @@ export const AppProvider = ({ children }) => {
     }
   }, [isThermalPrintMode]);
 
-  // حفظ الدور في المتصفح ودور الجلسة
+  // 🔐 استعادة جلسة Supabase Auth والتحقق من صلاحية الموظف في السيرفر
   useEffect(() => {
-    if (userRole) {
-      sessionStorage.setItem('b_delivery_session_user', userRole);
-    } else {
-      sessionStorage.removeItem('b_delivery_session_user');
-    }
-  }, [userRole]);
+    let isMounted = true;
 
-  // تهيئة كلمات المرور الافتراضية إذا لم تكن موجودة
-  useEffect(() => {
-    if (!safeGetItem('b_delivery_password_admin')) {
-      safeSetItem('b_delivery_password_admin', '8080');
-    }
-    if (!safeGetItem('b_delivery_password_casher')) {
-      safeSetItem('b_delivery_password_casher', '8080');
-    }
+    const restoreSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          const profile = await supabaseService.getCurrentStaffProfile(session.user.id);
+          if (profile && profile.is_active) {
+            setCurrentUser(session.user);
+            setCurrentStaff(profile);
+            setUserRole(profile.role);
+          } else {
+            await supabaseService.signOutStaff();
+            setCurrentUser(null);
+            setCurrentStaff(null);
+            setUserRole('');
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthInit] Error restoring session:', err);
+      } finally {
+        if (isMounted) setIsAuthLoading(false);
+      }
+    };
+
+    restoreSession();
+
+    const { data: authListener } = supabaseService.onAuthStateChange(async (event, session, profile) => {
+      if (!isMounted) return;
+      if (session?.user && profile && profile.is_active) {
+        setCurrentUser(session.user);
+        setCurrentStaff(profile);
+        setUserRole(profile.role);
+      } else if (event === 'SIGNED_OUT' || !session) {
+        setCurrentUser(null);
+        setCurrentStaff(null);
+        setUserRole('');
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener?.subscription?.unsubscribe?.();
+    };
   }, []);
+
+  const loginStaff = async ({ email, password }) => {
+    const { user, profile } = await supabaseService.signInStaff({ email, password });
+    setCurrentUser(user);
+    setCurrentStaff(profile);
+    setUserRole(profile.role);
+    return profile;
+  };
+
+  const logoutStaff = async () => {
+    await supabaseService.signOutStaff();
+    setCurrentUser(null);
+    setCurrentStaff(null);
+    setUserRole('');
+  };
 
   const [orders, setOrders] = useState([]);
 
@@ -1180,7 +1225,7 @@ export const AppProvider = ({ children }) => {
 
       let sessionMinutes = 0;
       if (newStatus === 'closed' && p.lastOpenedAt) {
-        sessionMinutes = calculateDelayMinutes(p.lastOpenedAt, closedAt);
+        sessionMinutes = capShiftMinutes(calculateDelayMinutes(p.lastOpenedAt, closedAt));
       }
 
       const updates = newStatus === 'open'
@@ -1189,7 +1234,7 @@ export const AppProvider = ({ children }) => {
           state: 'off',
           lastClosedAt: closedAt,
           shiftUsed: true,
-          totalMinutes: (p.totalMinutes || 0) + sessionMinutes
+          totalMinutes: capShiftMinutes((p.totalMinutes || 0) + sessionMinutes)
         };
 
       return { ...p, shiftStatus: newStatus, ...updates };
@@ -1216,9 +1261,9 @@ export const AppProvider = ({ children }) => {
    */
   const activeStats = () => {
     const pilotPerformance = pilots.map(p => {
-      // Calculate current active minutes if still open
+      // Calculate current active minutes if still open (capped to max shift minutes)
       const currentActiveSession = (p.shiftStatus === 'open' && p.lastOpenedAt)
-        ? calculateDelayMinutes(p.lastOpenedAt)
+        ? capShiftMinutes(calculateDelayMinutes(p.lastOpenedAt))
         : 0;
 
       return calculatePilotShiftSummary(p, orders, currentActiveSession);
@@ -1367,6 +1412,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       orders, pilots, currentShift, dailyReports, auditLogs, reservations,
+      currentUser, currentStaff, isAuthLoading, loginStaff, logoutStaff,
       userRole, setUserRole, // 🔐 تصدير بيانات الدور لباقي السيستم
       isThermalPrintMode, setIsThermalPrintMode,
       // 🕐 حوكمة أوقات الورديات (المصدر: قاعدة البيانات)
