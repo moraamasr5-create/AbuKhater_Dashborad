@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { FileText, Download, Trash2, Calendar, Clock, DollarSign, Bike, TrendingUp, Home, Globe, Printer, UtensilsCrossed } from 'lucide-react';
 import { calculateOrderPilotShare, isOrderAssignedToPilot } from '../../utils/pilotCalculations';
+import { ReceiptThumbnail } from '../../services/storageService';
 
 const displayDate = (dateStr) => {
   if (!dateStr) return '';
@@ -20,6 +21,7 @@ const ReportsView = () => {
   const [selectedPilotDetails, setSelectedPilotDetails] = React.useState(null);
   const [showDues, setShowDues] = React.useState(false);
   const [showArchives, setShowArchives] = React.useState(false);
+  const [previewProofUrl, setPreviewProofUrl] = React.useState(null);
 
   const handlePrintShiftReport = (report) => {
     const printWindow = window.open('', '_blank', 'width=400,height=600');
@@ -565,15 +567,14 @@ const ReportsView = () => {
                         </td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>
                           {res.paymentProof ? (
-                            <div
-                              onClick={() => {
-                                const w = window.open('about:blank');
-                                if (w) w.document.write(`<img src="${res.paymentProof}" style="max-width:100%"/>`);
-                              }}
-                              style={{ cursor: 'pointer', width: '40px', height: '40px', borderRadius: '4px', overflow: 'hidden', margin: '0 auto', border: '1px solid #8b5cf6' }}
-                            >
-                              <img src={res.paymentProof} alt="proof" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            </div>
+                            <ReceiptThumbnail
+                              src={res.paymentProof}
+                              size={40}
+                              borderRadius={4}
+                              border="1px solid #8b5cf6"
+                              style={{ margin: '0 auto' }}
+                              onOpen={(url) => setPreviewProofUrl(url)}
+                            />
                           ) : (
                             <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>لا يوجد</span>
                           )}
@@ -817,6 +818,58 @@ const ReportsView = () => {
           </div>
         )}
       </section>
+
+      {/* 🖼️ Modal Preview for Reservation Payment Proof */}
+      {previewProofUrl && (
+        <div
+          onClick={() => setPreviewProofUrl(null)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            backdropFilter: 'blur(10px)',
+            padding: '40px'
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%' }}
+          >
+            <img
+              src={previewProofUrl}
+              alt="Proof Full view"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '80vh',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.1)'
+              }}
+            />
+            <button
+              onClick={() => setPreviewProofUrl(null)}
+              style={{
+                position: 'absolute',
+                top: '-15px',
+                right: '-15px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                fontWeight: 'bold'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

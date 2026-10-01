@@ -10,7 +10,7 @@ import ConnectionBanner from './components/common/ConnectionBanner';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
-import { uploadReservationReceipt } from './services/storageService';
+import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
 import { isPilotOnDelivery } from './utils/pilotState';
 
 export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
@@ -1352,7 +1352,9 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
   const [isCompressing, setIsCompressing] = useState(false);
   const [refNum, setRefNum] = useState(res.ref_number || '');
   const existingProof = res.payment_proof_url || res.paymentProof;
+  const { signedUrl: resolvedExistingProof } = useSignedReceiptUrl(existingProof);
   const [proof, setProof] = useState(existingProof || null);
+  const displayProof = (proof && proof.startsWith('data:')) ? proof : (resolvedExistingProof || proof);
 
   const handleFile = async (e) => {
     const file = e.target.files[0];
@@ -1387,7 +1389,7 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
             {!existingProof && (
               <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
             )}
-            {proof && <img src={proof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
+            {displayProof && <img src={displayProof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
