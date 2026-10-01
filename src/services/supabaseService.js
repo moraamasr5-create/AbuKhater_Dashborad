@@ -384,6 +384,10 @@ export const supabaseService = {
           paymentMethod: row.payment_method || rawPayload.customer?.payment_method || 'Cash',
           paymentScreenshot: row.payment_screenshot || rawPayload.payment?.screenshot || null,
           status: mappedStatus,
+          canonicalStatus: row.status || mappedStatus,
+          paymentStatus: row.payment_status || (isCashOnDelivery ? 'cash_on_delivery' : (row.payment_screenshot ? 'pending_verification' : 'pending_payment')),
+          cancellationReason: row.cancellation_reason || null,
+          statusHistory: row.status_history || [],
           displayStatus: rawStatus || 'pending',
           timestamp: row.created_at || rawPayload.timestamp || new Date().toISOString(),
           pilotId: row.pilot_id || null,
@@ -457,33 +461,71 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 2. updateOrderStatus
-  //    يحدّث حالة الطلب في DB ويُعالج كل الحالات العربية
+  // ─────────────────────────────────────────────────────────
+  // 2. updateOrderStatus (Authoritative Canonical State Transition)
   // ─────────────────────────────────────────────────────────
   async updateOrderStatus(supabaseId, newStatus, reason = null, extraFields = {}, skipQueue = false) {
     if (!supabaseId) return; // Manual orders have no supabaseId
 
     return withOfflineSupport('updateOrderStatus', async () => {
-      let dbStatus = newStatus;
-      if (newStatus === 'confirmed' || newStatus === 'waiting_driver') dbStatus = 'في التحضير';
-      else if (newStatus === 'cancelled') dbStatus = reason ? `ملغي (${reason})` : 'ملغي';
-      else if (newStatus === 'driver_assigned') dbStatus = 'تم الإسناد للطيار';
-      else if (newStatus === 'out_for_delivery' || newStatus === 'active') dbStatus = 'في الطريق للتسليم';
-      else if (newStatus === 'completed' || newStatus === 'delivered') dbStatus = 'تم التوصيل';
-      else if (newStatus === 'failed_delivery') dbStatus = reason ? `فشل التوصيل (${reason})` : 'فشل التوصيل';
+      // Map frontend action to canonical state
+      let canonical = newStatus;
+      if (newStatus === 'confirmed' || newStatus === 'waiting_driver') canonical = 'preparing';
+      else if (newStatus === 'active' || newStatus === 'out_for_delivery') canonical = 'out_for_delivery';
+      else if (newStatus === 'completed' || newStatus === 'delivered') canonical = 'delivered';
+      else if (newStatus === 'failed_delivery') canonical = 'failed_delivery';
+      else if (newStatus === 'cancelled') canonical = 'cancelled';
 
-      const updatePayload = { status: dbStatus };
-      if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
-      if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
-      if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+      const mutationId = newMutationId();
+      const { data, error } = await supabase.rpc('transition_order_status', {
+        p_order_id: supabaseId,
+        p_target_status: canonical,
+        p_reason: reason,
+        p_mutation_id: mutationId
+      });
 
-      const { error } = await supabase
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', supabaseId);
+      if (error) {
+        // Fallback for fields not managed by transition_order_status (e.g. direct pilot re-assignment metadata)
+        if (extraFields && Object.keys(extraFields).length > 0) {
+          const updatePayload = {};
+          if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
+          if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
+          if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+          await supabase.from('orders').update(updatePayload).eq('id', supabaseId);
+        }
+        throw error;
+      }
+
+      if (extraFields && Object.keys(extraFields).length > 0) {
+        const updatePayload = {};
+        if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
+        if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
+        if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+        await supabase.from('orders').update(updatePayload).eq('id', supabaseId);
+      }
+
+      return data;
+    }, { supabaseId, newStatus, reason, extraFields }, skipQueue);
+  },
+
+  /**
+   * التحقق من حالة دفع الطلب من قبل الكاشير / الإدارة
+   */
+  async verifyOrderPayment(supabaseId, paymentStatus, notes = null, skipQueue = false) {
+    if (!supabaseId) return;
+
+    return withOfflineSupport('verifyOrderPayment', async () => {
+      const mutationId = newMutationId();
+      const { data, error } = await supabase.rpc('verify_order_payment', {
+        p_order_id: supabaseId,
+        p_payment_status: paymentStatus,
+        p_notes: notes,
+        p_mutation_id: mutationId
+      });
 
       if (error) throw error;
-    }, { supabaseId, newStatus, reason, extraFields }, skipQueue);
+      return data;
+    }, { supabaseId, paymentStatus, notes }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────
