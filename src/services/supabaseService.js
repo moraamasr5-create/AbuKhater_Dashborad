@@ -144,6 +144,9 @@ export const processPendingSync = async () => {
         const isPermanent = (
           currentRetries >= MAX_QUEUE_RETRIES ||
           e?.code === 'P0001' ||
+          e?.code === '42501' ||
+          errMsg.includes('Unauthorized') ||
+          errMsg.includes('Forbidden') ||
           errMsg.includes('not found') ||
           errMsg.includes('violates foreign key') ||
           errMsg.includes('duplicate key')
