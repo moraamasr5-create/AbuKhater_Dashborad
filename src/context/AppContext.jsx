@@ -90,43 +90,60 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     let isMounted = true;
 
-    const restoreSession = async () => {
+    const handleSession = async (session) => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user && isMounted) {
+        if (session?.user?.id) {
           const profile = await supabaseService.getCurrentStaffProfile(session.user.id);
+          if (!isMounted) return;
+
           if (profile && profile.is_active) {
             setCurrentUser(session.user);
             setCurrentStaff(profile);
             setUserRole(profile.role);
           } else {
-            await supabaseService.signOutStaff();
             setCurrentUser(null);
             setCurrentStaff(null);
             setUserRole('');
           }
+        } else {
+          if (!isMounted) return;
+          setCurrentUser(null);
+          setCurrentStaff(null);
+          setUserRole('');
         }
       } catch (err) {
-        console.warn('[AuthInit] Error restoring session:', err);
+        console.warn('[AuthInit] Error validating staff session:', err);
+        if (isMounted) {
+          setCurrentUser(null);
+          setCurrentStaff(null);
+          setUserRole('');
+        }
       } finally {
-        if (isMounted) setIsAuthLoading(false);
+        if (isMounted) {
+          setIsAuthLoading(false);
+        }
       }
     };
 
-    restoreSession();
-
-    const { data: authListener } = supabaseService.onAuthStateChange(async (event, session, profile) => {
+    // الاستماع لمصدر الحقيقة الرسمي لمصادقة Supabase
+    // (يُطلق حدث INITIAL_SESSION فوراً عند تحميل التطبيق بالجلسة المحفوظة أو null)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
-      if (session?.user && profile && profile.is_active) {
-        setCurrentUser(session.user);
-        setCurrentStaff(profile);
-        setUserRole(profile.role);
-      } else if (event === 'SIGNED_OUT' || !session) {
+
+      if (event === 'SIGNED_OUT' || !session) {
         setCurrentUser(null);
         setCurrentStaff(null);
         setUserRole('');
+        setIsAuthLoading(false);
+        return;
       }
-      setIsAuthLoading(false);
+
+      // فك الارتباط الزمني مع دورة القفل الداخلي لـ GoTrue لتجنب أي Deadlock عند جلب الدور
+      setTimeout(() => {
+        if (isMounted) {
+          handleSession(session);
+        }
+      }, 0);
     });
 
     return () => {
@@ -140,6 +157,7 @@ export const AppProvider = ({ children }) => {
     setCurrentUser(user);
     setCurrentStaff(profile);
     setUserRole(profile.role);
+    setIsAuthLoading(false);
     return profile;
   };
 
@@ -152,6 +170,7 @@ export const AppProvider = ({ children }) => {
       setCurrentUser(null);
       setCurrentStaff(null);
       setUserRole('');
+      setIsAuthLoading(false);
     }
   };
 

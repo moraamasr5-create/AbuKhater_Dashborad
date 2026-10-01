@@ -4,9 +4,9 @@ import { Shield, User, Bike, Delete, Check, Lock, Mail, Loader2, KeyRound } from
 import { useApp } from '../../context/AppContext';
 
 const DEFAULT_EMAILS = {
-  admin: 'admin@abukhater.com',
-  casher: 'casher@abukhater.com',
-  driver: 'driver@abukhater.com'
+  admin: 'admin_1@abukhater.com',
+  casher: 'casher_1@abukhater.com',
+  driver: 'delivery_1@abukhater.com'
 };
 
 const Login = ({ onLoginSuccess }) => {

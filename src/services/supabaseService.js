@@ -1232,7 +1232,11 @@ export const supabaseService = {
    */
   async getCurrentStaffProfile(userId = null) {
     try {
-      const targetUid = userId || (await supabase.auth.getUser())?.data?.user?.id;
+      let targetUid = userId;
+      if (!targetUid) {
+        const { data } = await supabase.auth.getSession();
+        targetUid = data?.session?.user?.id;
+      }
       if (!targetUid) return null;
 
       // First try the RPC
@@ -1263,12 +1267,8 @@ export const supabaseService = {
    * الاستماع لتغيرات جلسة المستخدم من Supabase Auth
    */
   onAuthStateChange(callback) {
-    return supabase.auth.onAuthStateChange(async (event, session) => {
-      let profile = null;
-      if (session?.user) {
-        profile = await this.getCurrentStaffProfile(session.user.id);
-      }
-      callback(event, session, profile);
+    return supabase.auth.onAuthStateChange((event, session) => {
+      callback(event, session);
     });
   }
 };
