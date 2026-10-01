@@ -1402,15 +1402,137 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
   );
 };
 
+const ReservationCard = ({ res, onConfirm, onDelete, onPreviewProof }) => {
+  const existingProof = res.paymentProof || res.payment_proof_url;
+  const { signedUrl } = useSignedReceiptUrl(existingProof);
+  const displayProof = (existingProof && existingProof.startsWith('data:')) ? existingProof : signedUrl;
+
+  return (
+    <div className="glass-card" style={{ borderTop: `4px solid ${res.status === 'confirmed' ? '#10b981' : '#8b5cf6'}` }}>
+      <div className="flex" style={{ justifyContent: 'space-between', marginBottom: '12px' }}>
+        <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{res.id}</span>
+        <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', background: res.status === 'confirmed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: res.status === 'confirmed' ? '#10b981' : '#f59e0b' }}>
+          {res.status === 'confirmed' ? 'مؤكد' : 'معلق'}
+        </span>
+      </div>
+      <h3 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {res.customerName}
+        <span style={{ fontSize: '0.7rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
+          {res.locationType === 'cafe' ? 'كافيه' : 'مطعم'}
+        </span>
+      </h3>
+      <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0 0 12px 0' }}>{res.phone}</p>
+
+      <div className="grid-2" style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', marginBottom: '12px', gap: '8px' }}>
+        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>التاريخ</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.date}</div></div>
+        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الوقت</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.time}</div></div>
+        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الأفراد</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.guests}</div></div>
+      </div>
+
+      {res.notes && (
+        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
+          <strong>ملاحظات:</strong> {res.notes}
+        </div>
+      )}
+
+      {existingProof && (
+        <div style={{ marginBottom: '12px', border: '1px dashed var(--border)', padding: '8px', borderRadius: '8px', textAlign: 'center', background: 'rgba(255,255,255,0.02)' }}>
+          {displayProof ? (
+            <img
+              src={displayProof}
+              alt="إثبات الدفع"
+              style={{ width: '100%', height: '90px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
+              onClick={() => onPreviewProof(displayProof)}
+            />
+          ) : (
+            <div style={{ height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+              ⏳ جاري تجهيز رابط الإيصال الآمن...
+            </div>
+          )}
+          <div
+            style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px', cursor: displayProof ? 'pointer' : 'default' }}
+            onClick={() => displayProof && onPreviewProof(displayProof)}
+          >
+            🔍 انقر لتكبير صورة التحويل
+          </div>
+        </div>
+      )}
+
+      <div className="flex" style={{ gap: '10px', marginTop: '16px' }}>
+        {res.status === 'pending' && <button onClick={() => onConfirm(res)} className="btn-primary" style={{ flex: 1, background: 'var(--success)', justifyContent: 'center' }}>تأكيد</button>}
+        <button onClick={() => { if (window.confirm('هل أنت متأكد من حذف الحجز؟')) onDelete(res.id); }} style={{ flex: res.status === 'pending' ? 1 : 'none', width: res.status === 'pending' ? 'auto' : '100%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '10px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>حذف</button>
+      </div>
+    </div>
+  );
+};
+
 const ReservationView = () => {
   const { reservations, deleteReservation } = useApp();
   const [showModal, setShowModal] = useState(false);
   const [confirmingRes, setConfirmingRes] = useState(null);
+  const [previewProofUrl, setPreviewProofUrl] = useState(null);
 
   return (
     <div className="grid" style={{ gap: '32px' }}>
       {showModal && <ReservationModal onClose={() => setShowModal(false)} />}
       {confirmingRes && <ConfirmPaymentModal res={confirmingRes} onClose={() => setConfirmingRes(null)} />}
+
+      {previewProofUrl && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.85)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 4000,
+            backdropFilter: 'blur(8px)',
+            padding: '20px'
+          }}
+          onClick={() => setPreviewProofUrl(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ position: 'relative', maxWidth: '90%', maxHeight: '90%' }}
+          >
+            <img
+              src={previewProofUrl}
+              alt="إيصال الحجز"
+              style={{
+                maxWidth: '100%',
+                maxHeight: '85vh',
+                borderRadius: '12px',
+                border: '1px solid rgba(255,255,255,0.1)',
+                objectFit: 'contain'
+              }}
+            />
+            <button
+              onClick={() => setPreviewProofUrl(null)}
+              style={{
+                position: 'absolute',
+                top: '-15px',
+                right: '-15px',
+                background: '#ef4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold',
+                fontSize: '1rem',
+                boxShadow: '0 2px 10px rgba(0,0,0,0.5)'
+              }}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       <header className="flex" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
         <div><h1 style={{ color: '#a78bfa' }}>الحجوزات</h1><p style={{ color: 'var(--text-muted)' }}>إدارة طاولات المطعم</p></div>
@@ -1422,45 +1544,13 @@ const ReservationView = () => {
           <div className="card" style={{ gridColumn: '1/-1', padding: '60px', textAlign: 'center' }}><p>لا يوجد حجوزات</p></div>
         ) : (
           reservations.map(res => (
-            <div key={res.id} className="glass-card" style={{ borderTop: `4px solid ${res.status === 'confirmed' ? '#10b981' : '#8b5cf6'}` }}>
-              <div className="flex" style={{ justifyContent: 'space-between', marginBottom: '12px' }}>
-                <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{res.id}</span>
-                <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', background: res.status === 'confirmed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: res.status === 'confirmed' ? '#10b981' : '#f59e0b' }}>
-                  {res.status === 'confirmed' ? 'مؤكد' : 'معلق'}
-                </span>
-              </div>
-              <h3 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {res.customerName}
-                <span style={{ fontSize: '0.7rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
-                  {res.locationType === 'cafe' ? 'كافيه' : 'مطعم'}
-                </span>
-              </h3>
-              <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0 0 12px 0' }}>{res.phone}</p>
-
-              <div className="grid-2" style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', marginBottom: '12px', gap: '8px' }}>
-                <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>التاريخ</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.date}</div></div>
-                <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الوقت</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.time}</div></div>
-                <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الأفراد</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.guests}</div></div>
-              </div>
-
-              {res.notes && (
-                <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-                  <strong>ملاحظات:</strong> {res.notes}
-                </div>
-              )}
-
-              {res.paymentProof && (
-                <div style={{ marginBottom: '12px', border: '1px dashed var(--border)', padding: '4px', borderRadius: '8px', textAlign: 'center' }}>
-                  <img src={res.paymentProof} alt="إثبات الدفع" style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer' }} onClick={() => window.open(res.paymentProof, '_blank')} />
-                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>صورة التحويل</div>
-                </div>
-              )}
-
-              <div className="flex" style={{ gap: '10px', marginTop: '16px' }}>
-                {res.status === 'pending' && <button onClick={() => setConfirmingRes(res)} className="btn-primary" style={{ flex: 1, background: 'var(--success)', justifyContent: 'center' }}>تأكيد</button>}
-                <button onClick={() => { if (window.confirm('هل أنت متأكد من حذف الحجز؟')) deleteReservation(res.id); }} style={{ flex: res.status === 'pending' ? 1 : 'none', width: res.status === 'pending' ? 'auto' : '100%', background: 'rgba(239, 68, 68, 0.1)', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '10px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' }}>حذف</button>
-              </div>
-            </div>
+            <ReservationCard
+              key={res.id}
+              res={res}
+              onConfirm={setConfirmingRes}
+              onDelete={deleteReservation}
+              onPreviewProof={setPreviewProofUrl}
+            />
           ))
         )}
       </div>

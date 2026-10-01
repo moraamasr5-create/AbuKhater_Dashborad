@@ -70,7 +70,7 @@ CREATE OR REPLACE FUNCTION public.submit_reservation(
   p_location_type     text DEFAULT 'restaurant',
   p_notes             text DEFAULT NULL,
   p_payment_proof_url text DEFAULT NULL,
-  p_idempotency_key   text DEFAULT NULL
+  p_idempotency_key   uuid DEFAULT NULL
 )
 RETURNS jsonb
 LANGUAGE plpgsql
