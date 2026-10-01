@@ -145,13 +145,8 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         {!isShiftOpen ? (
                             <button
                                 onClick={() => {
-                                    const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';
-                                    const pwd = prompt('أدخل كلمة المرور لفتح الوردية:');
-                                    if (pwd === correctPwd) {
-                                        openShift();
-                                        closeSidebar();
-                                    }
-                                    else alert('كلمة مرور خاطئة');
+                                    openShift();
+                                    closeSidebar();
                                 }}
                                 className="btn-primary"
                                 style={{ width: '100%', background: 'var(--accent)' }}
@@ -164,18 +159,10 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                 onClick={async () => {
                                     try {
                                         if (!isShiftOpen) return;
-
-                                        // 🔐 كلمة المرور
-                                        const correctPwd = safeGetItem(`b_delivery_password_${userRole}`) || '8080';
-                                        const pwd = prompt('أدخل كلمة المرور لإغلاق الوردية:');
-
-                                        if (pwd === correctPwd) {
+                                        if (window.confirm('هل أنت متأكد من رغبتك في إغلاق الوردية الحالية؟')) {
                                             await closeShift(false);
                                             closeSidebar();
-                                        } else if (pwd !== null) {
-                                            alert('كلمة مرور خاطئة');
                                         }
-
                                     } catch (error) {
                                         console.error('Close shift error:', error);
                                         alert('حدث خطأ أثناء إغلاق الوردية');

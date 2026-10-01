@@ -1228,9 +1228,11 @@ export const AppProvider = ({ children }) => {
     let forceReopen = false;
 
     if (newStatus === 'open' && pilot.shiftUsed) {
-      const password = prompt('⚠️ الطيار فتح وردية مسبقاً! للضرورة القصوى أدخل كلمة سر الأدمن لفتحه مرة أخرى:');
-      if (password !== '8080') {
-        alert('❌ كلمة السر غير صحيحة، تم إلغاء العملية.');
+      if (userRole !== 'admin') {
+        alert('⚠️ الطيار فتح وردية مسبقاً! إعادة فتح الوردية تتطلب صلاحيات المدير (Admin).');
+        return;
+      }
+      if (!window.confirm('⚠️ الطيار فتح وردية مسبقاً! هل أنت متأكد من إعادة فتح الوردية كمدير؟')) {
         return;
       }
       forceReopen = true;
@@ -1407,10 +1409,9 @@ export const AppProvider = ({ children }) => {
   };
 
   const deletePilot = async (pilotId) => {
-    const password = prompt('أدخل كلمة المرور لحذف هذا الطيار:');
-    if (password !== '8080') {
-      if (password !== null) alert('كلمة المرور غير صحيحة');
-      return { success: false, error: 'كلمة المرور غير صحيحة' };
+    if (userRole !== 'admin') {
+      alert('⚠️ حذف طيار يتطلب صلاحيات المدير (Admin).');
+      return { success: false, error: 'صلاحيات المدير مطلوبة' };
     }
 
     if (window.confirm('هل أنت متأكد من حذف هذا الطيار نهائياً؟')) {

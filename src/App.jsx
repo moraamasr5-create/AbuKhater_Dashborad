@@ -116,11 +116,10 @@ const PilotManagement = () => {
     if (revealedPilots[pilotId]) {
       setRevealedPilots(prev => ({ ...prev, [pilotId]: false }));
     } else {
-      const pass = prompt('أدخل كلمة المرور لعرض البيانات السرية:');
-      if (pass === '8080') {
+      if (userRole === 'admin') {
         setRevealedPilots(prev => ({ ...prev, [pilotId]: true }));
-      } else if (pass !== null) {
-        alert('كلمة المرور غير صحيحة');
+      } else {
+        alert('⚠️ عرض البيانات السرية متاح للمدير (Admin) فقط.');
       }
     }
   };
@@ -172,9 +171,11 @@ const PilotManagement = () => {
         <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>إدارة الطيارين</h2>
         <button
           onClick={() => {
-            const pass = prompt('أدخل كلمة المرور لإضافة طيار جديد:');
-            if (pass === '8080') setShowAddModal(true);
-            else if (pass !== null) alert('كلمة المرور غير صحيحة');
+            if (userRole === 'admin') {
+              setShowAddModal(true);
+            } else {
+              alert('⚠️ إضافة طيار جديد تتطلب صلاحيات المدير (Admin).');
+            }
           }}
           className="btn-primary"
           style={{ background: 'var(--accent)', padding: '10px 20px', borderRadius: '12px', fontSize: '0.95rem' }}
@@ -461,11 +462,10 @@ const { orders, pilots, activeStats, completeOrder, confirmOrder, assignPilot, u
   };
 
   const handleEditOrder = (order) => {
-    const password = prompt('أدخل كلمة مرور المشرف للتعديل:');
-    if (password === '8080') {
+    if (userRole === 'admin') {
       setEditModalData(order);
     } else {
-      alert('كلمة المرور غير صحيحة');
+      alert('⚠️ تعديل الطلب متاح للمدير (Admin) فقط.');
     }
   };
 

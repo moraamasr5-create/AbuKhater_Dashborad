@@ -164,21 +164,13 @@ const ReportsView = () => {
   }, []);
 
   const handleCloseShift = () => {
-    const password = prompt('برجاء إدخال كلمة المرور لإغلاق اليوم:');
-    if (password === '8080') {
+    if (window.confirm('هل أنت متأكد من رغبتك في إغلاق الوردية الحالية؟')) {
       closeShift(false);
-    } else if (password !== null) {
-      alert('كلمة المرور غير صحيحة');
     }
   };
 
   const handleOpenShift = () => {
-    const password = prompt('برجاء إدخال كلمة المرور لفتح وردية جديدة:');
-    if (password === '8080') {
-      openShift();
-    } else {
-      alert('كلمة المرور غير صحيحة');
-    }
+    openShift();
   };
 
   const getPilotOrders = (pilotId) => {
@@ -724,9 +716,11 @@ const ReportsView = () => {
           {!showArchives && (
             <button
               onClick={() => {
-                const pass = prompt('كلمة المرور للمشرف:');
-                if (pass === '8080') setShowArchives(true);
-                else alert('خطأ في كلمة المرور');
+                if (userRole === 'admin') {
+                  setShowArchives(true);
+                } else {
+                  alert('⚠️ عرض سجل الورديات السابقة متاح للمدير (Admin) فقط.');
+                }
               }}
               className="btn-primary"
               style={{ background: 'rgba(255,255,255,0.1)', padding: '8px 16px', fontSize: '0.85rem' }}

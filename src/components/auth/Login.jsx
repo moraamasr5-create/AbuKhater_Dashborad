@@ -10,9 +10,9 @@ const DEFAULT_EMAILS = {
 };
 
 const Login = ({ onLoginSuccess }) => {
-  const { loginStaff } = useApp();
+  const { loginStaff, currentStaff } = useApp();
   const [selectedUser, setSelectedUser] = useState('casher'); // admin | casher | driver
-  const [authMode, setAuthMode] = useState('pin'); // 'pin' | 'password'
+  const [authMode, setAuthMode] = useState('password'); // Default to real Supabase Email + Password
   const [email, setEmail] = useState(DEFAULT_EMAILS.casher);
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
@@ -60,16 +60,32 @@ const Login = ({ onLoginSuccess }) => {
     if (loading) return;
 
     const targetEmail = email.trim();
-    // In PIN mode, map pin to password or authenticate with server
-    const targetPassword = authMode === 'pin' ? (pin || '8080') : password;
 
-    if (authMode === 'password' && (!targetEmail || !targetPassword)) {
-      triggerError('⚠️ يرجى إدخال البريد الإلكتروني وكلمة المرور');
-      return;
+    // Mode 1: Quick PIN validation for existing session unlock
+    if (authMode === 'pin') {
+      if (!pin) {
+        triggerError('⚠️ يرجى إدخال رمز الـ PIN');
+        return;
+      }
+
+      if (currentStaff) {
+        if (currentStaff.quick_pin && pin === String(currentStaff.quick_pin)) {
+          if (onLoginSuccess) onLoginSuccess(currentStaff.role);
+          return;
+        } else {
+          triggerError('⚠️ رمز الـ PIN غير صحيح');
+          return;
+        }
+      } else {
+        triggerError('⚠️ يرجى تسجيل الدخول أولاً بالبريد وكلمة المرور');
+        setAuthMode('password');
+        return;
+      }
     }
 
-    if (authMode === 'pin' && !pin) {
-      triggerError('⚠️ يرجى إدخال رمز المرور');
+    // Mode 2: Real Supabase Auth (Email + Password)
+    if (!targetEmail || !password) {
+      triggerError('⚠️ يرجى إدخال البريد الإلكتروني وكلمة المرور');
       return;
     }
 
@@ -79,7 +95,7 @@ const Login = ({ onLoginSuccess }) => {
     try {
       const profile = await loginStaff({
         email: targetEmail,
-        password: targetPassword
+        password: password
       });
 
       if (profile) {
@@ -89,8 +105,8 @@ const Login = ({ onLoginSuccess }) => {
       console.error('[Login] Auth error:', err);
       const msg = err?.message || '';
       if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
-        triggerError('⚠️ بيانات الدخول غير صحيحة، تأكد من الرمز وحاول مجدداً');
-      } else if (msg.includes('Staff Role Required')) {
+        triggerError('⚠️ البريد الإلكتروني أو كلمة المرور غير صحيحة');
+      } else if (msg.includes('Staff Role Required') || msg.includes('ليس لديه صلاحية')) {
         triggerError('⚠️ هذا الحساب غير مسجل كعضو في طاقم العمل');
       } else if (msg.includes('تعطيل')) {
         triggerError('⚠️ تم تعطيل هذا الحساب من قبل إدارة المطعم');
