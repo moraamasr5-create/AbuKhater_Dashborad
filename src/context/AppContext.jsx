@@ -1,6 +1,7 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { API_CONFIG } from '../config/apiConfig';
+import { supabase } from '../services/supabase/supabaseClient';
 import {
   supabaseService,
   processPendingSync,
@@ -1278,6 +1279,9 @@ export const AppProvider = ({ children }) => {
    * يُستدعى في كل render للـ Dashboard
    */
   const activeStats = () => {
+    const finishedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered');
+    const failedOrders = orders.filter(o => o.status === 'failed_delivery');
+
     const pilotPerformance = pilots.map(p => {
       // Calculate current active minutes if still open (capped to max shift minutes)
       const currentActiveSession = (p.shiftStatus === 'open' && p.lastOpenedAt)
