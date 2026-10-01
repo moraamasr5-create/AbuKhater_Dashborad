@@ -17,8 +17,8 @@
  * 
  * 4. بدل الحضور والشيفت:
  *    - الحساب: Math.floor(capShiftMinutes(totalMinutes) / 35) * 15
- *    - 15 ج.م لكل 35 دقيقة حضور فعلية مسجلة ومحددة بسقف أقصى 12 ساعة (720 دقيقة).
- *    - المصدر: AppContext.jsx (السطر 1138) و shiftLogic.js (السطر 22).
+ *    - 15 ج.م لكل 35 دقيقة حضور فعلية مسجلة ومحددة بسقف أقصى 10 ساعات (600 دقيقة).
+ *    - المصدر: AppContext.jsx و shiftLogic.js.
  */
 
 import { capShiftMinutes } from './shiftLogic.js';
@@ -67,7 +67,7 @@ export const calculateOrderPilotShare = (order) => {
 };
 
 /**
- * حساب بدل الحضور للطيار بالدقائق
+ * حساب بدل الحضور للطيار بالدقائق (سقف أقصى 10 ساعات = 600 دقيقة)
  */
 export const calculateAttendancePay = (totalMinutes) => {
   const safeMinutes = Number(totalMinutes) || 0;
@@ -77,10 +77,12 @@ export const calculateAttendancePay = (totalMinutes) => {
 
 /**
  * محرك تجميع مستحقات وأداء الطيار الشامل
+ * يحسب الدقائق منذ فتح الشيفت لحين إغلاقه بحد أقصى 10 ساعات يومياً (600 دقيقة)
  */
 export const calculatePilotShiftSummary = (pilot, orders = [], activeSessionMinutes = 0) => {
   const pilotId = pilot?.id;
-  const totalMinutes = (Number(pilot?.totalMinutes) || 0) + (Number(activeSessionMinutes) || 0);
+  const rawMinutes = (Number(pilot?.totalMinutes) || 0) + (Number(activeSessionMinutes) || 0);
+  const totalMinutes = capShiftMinutes(rawMinutes);
 
   let ordersCount = 0;
   let tripsCount = 0;

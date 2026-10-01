@@ -38,7 +38,7 @@ CREATE POLICY applied_mutations_insert ON public.applied_mutations FOR INSERT WI
 -- 1. Helpers
 -- ----------------------------------------------------------------------------
 
--- Minutes between two timestamps (never negative), capped at 12h per session
+-- Minutes between two timestamps (never negative), capped at 10h per session
 CREATE OR REPLACE FUNCTION public._session_minutes(
   p_start timestamptz,
   p_end   timestamptz DEFAULT now()
@@ -50,7 +50,7 @@ AS $$
   SELECT CASE
     WHEN p_start IS NULL THEN 0
     ELSE LEAST(
-      720,
+      600,
       GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (COALESCE(p_end, now()) - p_start)) / 60.0))::int
     )
   END;
@@ -242,7 +242,7 @@ BEGIN
       -- shift_started_at يبقى كما هو ✅
       state           = 'off',
       shift_used      = true,
-      total_minutes   = COALESCE(total_minutes, 0) + v_session_min
+      total_minutes   = LEAST(600, COALESCE(total_minutes, 0) + v_session_min)
     WHERE id = p_pilot_id;
 
     -- Log to delivery_shift_logs if table exists
@@ -262,7 +262,7 @@ BEGIN
       'shift_started_at', v_pilot.shift_started_at,
       'shift_ended_at', now(),
       'session_minutes', v_session_min,
-      'total_minutes', COALESCE(v_pilot.total_minutes, 0) + v_session_min,
+      'total_minutes', LEAST(600, COALESCE(v_pilot.total_minutes, 0) + v_session_min),
       'state', 'off'
     );
 
@@ -345,7 +345,7 @@ BEGIN
     -- shift_started_at preserved ✅
     state           = 'off',
     shift_used      = true,
-    total_minutes   = COALESCE(total_minutes, 0) + v_min
+    total_minutes   = LEAST(600, COALESCE(total_minutes, 0) + v_min)
   WHERE id = p_driver_id;
 END;
 $$;
@@ -667,8 +667,8 @@ SELECT
   d.last_return_time,
   CASE
     WHEN d.shift_started_at IS NOT NULL AND d.shift_ended_at IS NULL
-      THEN COALESCE(d.total_minutes, 0) + public._session_minutes(d.shift_started_at, now())
-    ELSE COALESCE(d.total_minutes, 0)
+      THEN LEAST(600, COALESCE(d.total_minutes, 0) + public._session_minutes(d.shift_started_at, now()))
+    ELSE LEAST(600, COALESCE(d.total_minutes, 0))
   END AS total_minutes_including_active
 FROM public.delivery d;
 

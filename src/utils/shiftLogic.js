@@ -15,12 +15,12 @@ import {
   DEFAULT_SHIFT_CLOSE_TIME
 } from './shiftGovernance.js';
 
-// أقصي مدة شيفت طيار = 12 ساعة = 720 دقيقة
-export const MAX_SHIFT_MINUTES = 12 * 60; // 720
+// أقصي مدة شيفت طيار = 10 ساعات = 600 دقيقة
+export const MAX_SHIFT_MINUTES = 10 * 60; // 600
 
-// Cap total pilot minutes to the maximum allowed shift duration
+// Cap total pilot minutes to the maximum allowed shift duration (10 hours)
 export const capShiftMinutes = (minutes) => {
-  return Math.min(minutes, MAX_SHIFT_MINUTES);
+  return Math.max(0, Math.min(Number(minutes) || 0, MAX_SHIFT_MINUTES));
 };
 
 // Normalize all current times to avoid client-server discrepancies
