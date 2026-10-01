@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Check, X, AlertCircle, UserPlus, RotateCcw, Clock, Bike, RefreshCw, ShoppingCart, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
 import { printerService } from '../../services/printerService';
+import { ReceiptThumbnail } from '../../services/storageService';
 import { motion, AnimatePresence } from 'framer-motion'; // 🪄 استيراد مكتبة التحريك لعمل الـ Live Dashboard
 import { isPilotOnDelivery } from '../../utils/pilotState';
 
@@ -390,17 +391,13 @@ const OrderInbox = ({ onReedit }) => {
 
                                                         {/* 🖼️ Mini Preview Thumbnail */}
                                                         {normalized.screenshot && (
-                                                            <div
-                                                                onClick={() => setPreviewImage(normalized.screenshot)}
-                                                                className="hover-scale"
-                                                                style={{
-                                                                    width: '42px', height: '42px', borderRadius: '10px', overflow: 'hidden',
-                                                                    cursor: 'pointer', border: '2px solid rgba(255,255,255,0.1)',
-                                                                    boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                                                                }}
-                                                            >
-                                                                <img src={normalized.screenshot} alt="preview" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                            </div>
+                                                            <ReceiptThumbnail
+                                                                src={normalized.screenshot}
+                                                                size={42}
+                                                                borderRadius={10}
+                                                                border="2px solid rgba(255,255,255,0.1)"
+                                                                onOpen={(url) => setPreviewImage(url)}
+                                                            />
                                                         )}
                                                     </div>
                                                 </div>
@@ -464,25 +461,13 @@ const OrderInbox = ({ onReedit }) => {
 
                                                         {/* 🖼️ Mini Preview Thumbnail */}
                                                         {paymentScreenshot && (
-                                                            <div
-                                                                onClick={() => setPreviewImage(paymentScreenshot)}
-                                                                className="hover-scale"
-                                                                style={{
-                                                                    width: '45px',
-                                                                    height: '45px',
-                                                                    borderRadius: '8px',
-                                                                    overflow: 'hidden',
-                                                                    cursor: 'pointer',
-                                                                    border: '2px solid var(--border)'
-                                                                }}
-                                                                title="عرض صورة التحويل"
-                                                            >
-                                                                <img
-                                                                    src={paymentScreenshot}
-                                                                    alt="preview"
-                                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                                                />
-                                                            </div>
+                                                            <ReceiptThumbnail
+                                                                src={paymentScreenshot}
+                                                                size={45}
+                                                                borderRadius={8}
+                                                                border="2px solid var(--border)"
+                                                                onOpen={(url) => setPreviewImage(url)}
+                                                            />
                                                         )}
 
                                                         {receiptUploadStatus === 'uploading' && (
@@ -539,25 +524,24 @@ const OrderInbox = ({ onReedit }) => {
                                         <div>
                                             {/* Stage 1: Pending -> Confirm (Admin/Casher) */}
                                             {(order.status === 'pending' || order.status === 'pending_timer') && (userRole === 'admin' || userRole === 'casher') && (
-                                                <div style={{ display: 'flex', gap: '10px' }}>
-                                                    {isInGracePeriod ? (
+                                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                                    <button
+                                                        onClick={() => confirmOrder(order.id)}
+                                                        className="btn-primary"
+                                                        style={{ flex: 1, minWidth: '120px' }}
+                                                    >
+                                                        <Check size={18} /> تأكيد وقبول
+                                                    </button>
+                                                    {isInGracePeriod && (
                                                         <button
                                                             onClick={() => onReedit(order)}
-                                                            className="btn-primary"
-                                                            style={{ width: '100%', background: 'var(--warning)', color: 'black' }}
+                                                            style={{ background: 'var(--warning)', color: 'black', padding: '8px 12px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 'bold', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
+                                                            title="تعديل تفاصيل الطلب خلال مهلة المراجعة"
                                                         >
-                                                            <RotateCcw size={18} /> الرجوع خطوة للتعديل
-                                                        </button>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => confirmOrder(order.id)}
-                                                            className="btn-primary"
-                                                            style={{ width: '100%' }}
-                                                        >
-                                                            <Check size={18} /> تأكيد وقبول
+                                                            <RotateCcw size={16} /> تعديل ({timeLeft}ث)
                                                         </button>
                                                     )}
-                                                    <button onClick={() => handleCancel(order.id)} className="btn-danger-outline"><X size={18} /></button>
+                                                    <button onClick={() => handleCancel(order.id)} className="btn-danger-outline" title="إلغاء الطلب"><X size={18} /></button>
                                                 </div>
                                             )}
 

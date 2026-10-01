@@ -4,11 +4,13 @@ import Sidebar from './components/layout/Sidebar';
 import OrderInbox from './components/orders/OrderInbox';
 import ReportsView from './components/reports/ReportsView';
 import FeedbackView from './components/feedback/FeedbackView';
+import SettingsView from './components/settings/SettingsView';
 import Login from './components/auth/Login';
+import ConnectionBanner from './components/common/ConnectionBanner';
 import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
-import { uploadReservationReceipt } from './services/storageService';
+import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
 import { isPilotOnDelivery } from './utils/pilotState';
 
 export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
@@ -689,7 +691,7 @@ const getDeliveryFee = typeof window.getDeliveryFee === 'function' ? window.getD
 };
 
 const ManualOrderForm = ({ onClose, initialData }) => {
-  const { addOrder, sendToN8N } = useApp();
+  const { addOrder } = useApp();
   const [isCompressing, setIsCompressing] = useState(false);
   const [formData, setFormData] = useState(initialData?.formData || {
     receiptNo: '', customerName: '', phone: '', area: '',
@@ -800,12 +802,6 @@ const ManualOrderForm = ({ onClose, initialData }) => {
     if (!formData.receiptNo) return alert('أدخل رقم البون للطباعة');
     const printWindow = window.open('', '_blank', 'width=400,height=600');
     if (!printWindow) return;
-
-    sendToN8N({
-      id: formData.receiptNo, customer: formData.customerName,
-      items: selectedItems, notes: formData.itemsDescription,
-      type: 'KITCHEN_TICKET_PRINT'
-    }, 'PRINT_JOB');
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -1356,7 +1352,9 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
   const [isCompressing, setIsCompressing] = useState(false);
   const [refNum, setRefNum] = useState(res.ref_number || '');
   const existingProof = res.payment_proof_url || res.paymentProof;
+  const { signedUrl: resolvedExistingProof } = useSignedReceiptUrl(existingProof);
   const [proof, setProof] = useState(existingProof || null);
+  const displayProof = (proof && proof.startsWith('data:')) ? proof : (resolvedExistingProof || proof);
 
   const handleFile = async (e) => {
     const file = e.target.files[0];
@@ -1391,7 +1389,7 @@ const ConfirmPaymentModal = ({ res, onClose }) => {
             {!existingProof && (
               <input required type="file" accept="image/*" onChange={handleFile} style={{ fontSize: '0.8rem', color: 'white' }} />
             )}
-            {proof && <img src={proof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
+            {displayProof && <img src={displayProof} alt="preview" style={{ marginTop: '10px', width: '100%', height: '100px', objectFit: 'cover', borderRadius: '8px' }} />}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -1731,7 +1729,7 @@ function App() {
   const [activeModal, setActiveModal] = useState('none');
   const [reeditData, setReeditData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { isShiftOpen, deleteOrder, userRole, setUserRole } = useApp();
+  const { isShiftOpen, deleteOrder, userRole, setUserRole, isAuthLoading } = useApp();
 
   // 🟢 حماية لضمان الصلاحيات للأدوار المختلفة
   useEffect(() => {
@@ -1822,6 +1820,16 @@ function App() {
     };
   }, []);
 
+  if (isAuthLoading) {
+    return (
+      <div style={{ minHeight: '100vh', background: '#090d16', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '16px', color: 'white', fontFamily: 'Cairo, sans-serif' }}>
+        <div style={{ width: '48px', height: '48px', border: '3px solid rgba(16, 185, 129, 0.2)', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+        <p style={{ fontSize: '0.9rem', color: '#94a3b8' }}>جاري التحقق من هوية وصلاحيات الموظف...</p>
+        <style dangerouslySetInnerHTML={{ __html: `@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }` }} />
+      </div>
+    );
+  }
+
   if (!userRole) {
     return <Login onLoginSuccess={(role) => setActiveTab(role === 'admin' ? 'dashboard' : 'inbox')} />;
   }
@@ -1847,6 +1855,7 @@ function App() {
       />
       <main className="main-content">
         <div className="app-container">
+          <ConnectionBanner />
           {/* 🔴 أزرار الإضافة - مسموحة للكاشير فقط */}
           {isShiftOpen && userRole === 'casher' && (
             <div className="flex flex-wrap" style={{ marginBottom: '24px', gap: '12px' }}>
@@ -1892,6 +1901,7 @@ function App() {
             {activeTab === 'reservations' && (userRole === 'casher') && <ReservationView />}
             {activeTab === 'feedback' && userRole === 'admin' && <FeedbackView />}
             {activeTab === 'reports' && userRole === 'admin' && <ReportsView />}
+            {activeTab === 'settings' && userRole === 'admin' && <SettingsView />}
           </div>
 
           {/* 🛡️ Modern minimal Ownership Footer */}

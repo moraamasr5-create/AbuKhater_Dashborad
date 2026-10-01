@@ -1,20 +1,31 @@
 // Developed & Owned by AmrMamdouh - 01038035884
 import React, { useState, useEffect } from 'react';
-import { Shield, KeyRound, User, Delete, Check } from 'lucide-react';
+import { Shield, User, Bike, Delete, Check, Lock, Mail, Loader2, KeyRound } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { safeGetItem } from '../../utils/safeStorage';
+
+const DEFAULT_EMAILS = {
+  admin: 'admin@abukhater.com',
+  casher: 'casher@abukhater.com',
+  driver: 'driver@abukhater.com'
+};
 
 const Login = ({ onLoginSuccess }) => {
-  const { setUserRole } = useApp();
-  const [selectedUser, setSelectedUser] = useState('casher'); // Default selection
+  const { loginStaff } = useApp();
+  const [selectedUser, setSelectedUser] = useState('casher'); // admin | casher | driver
+  const [authMode, setAuthMode] = useState('pin'); // 'pin' | 'password'
+  const [email, setEmail] = useState(DEFAULT_EMAILS.casher);
+  const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [isShaking, setIsShaking] = useState(false);
 
-  // Clear error when user changes selection
+  // Update default email when role changes
   useEffect(() => {
     setError('');
     setPin('');
+    setPassword('');
+    setEmail(DEFAULT_EMAILS[selectedUser] || '');
   }, [selectedUser]);
 
   const handleKeyPress = (num) => {
@@ -32,32 +43,62 @@ const Login = ({ onLoginSuccess }) => {
     setPin('');
   };
 
-  const handleSubmit = (e) => {
+  const triggerError = (msg) => {
+    setError(msg);
+    setIsShaking(true);
+    setPin('');
+    if (navigator.vibrate) {
+      navigator.vibrate(200);
+    }
+    setTimeout(() => {
+      setIsShaking(false);
+    }, 500);
+  };
+
+  const handleAuthSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!pin) return;
+    if (loading) return;
 
-    // Get correct password from localStorage, fallback to '8080'
-    const storageKey = `b_delivery_password_${selectedUser}`;
-    const correctPassword = safeGetItem(storageKey) || '8080';
+    const targetEmail = email.trim();
+    // In PIN mode, map pin to password or authenticate with server
+    const targetPassword = authMode === 'pin' ? (pin || '8080') : password;
 
-    if (pin === correctPassword) {
-      // Save session in sessionStorage
-      sessionStorage.setItem('b_delivery_session_user', selectedUser);
-      // Update global context state
-      setUserRole(selectedUser);
-      if (onLoginSuccess) onLoginSuccess(selectedUser);
-    } else {
-      // Trigger shake animation and error
-      setError('⚠️ كلمة المرور غير صحيحة، حاول مرة أخرى');
-      setIsShaking(true);
-      setPin('');
-      // Trigger haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(200);
+    if (authMode === 'password' && (!targetEmail || !targetPassword)) {
+      triggerError('⚠️ يرجى إدخال البريد الإلكتروني وكلمة المرور');
+      return;
+    }
+
+    if (authMode === 'pin' && !pin) {
+      triggerError('⚠️ يرجى إدخال رمز المرور');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const profile = await loginStaff({
+        email: targetEmail,
+        password: targetPassword
+      });
+
+      if (profile) {
+        if (onLoginSuccess) onLoginSuccess(profile.role);
       }
-      setTimeout(() => {
-        setIsShaking(false);
-      }, 500);
+    } catch (err) {
+      console.error('[Login] Auth error:', err);
+      const msg = err?.message || '';
+      if (msg.includes('Invalid login credentials') || msg.includes('invalid_credentials')) {
+        triggerError('⚠️ بيانات الدخول غير صحيحة، تأكد من الرمز وحاول مجدداً');
+      } else if (msg.includes('Staff Role Required')) {
+        triggerError('⚠️ هذا الحساب غير مسجل كعضو في طاقم العمل');
+      } else if (msg.includes('تعطيل')) {
+        triggerError('⚠️ تم تعطيل هذا الحساب من قبل إدارة المطعم');
+      } else {
+        triggerError(`⚠️ ${msg || 'فشل تسجيل الدخول، تحقق من اتصالك'}`);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -69,116 +110,239 @@ const Login = ({ onLoginSuccess }) => {
 
       <div className="login-container">
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+        <div style={{ textAlign: 'center', marginBottom: '20px' }}>
           <div className="login-logo-container">
             <img src="/logo.png" alt="Abu Khater Logo" className="login-logo" onError={(e) => { e.target.style.display = 'none'; }} />
-            <Shield size={36} color="var(--accent)" />
+            <Shield size={36} color="var(--accent, #10b981)" />
           </div>
-          <h1 style={{ fontSize: '1.8rem', fontWeight: '800', margin: '12px 0 4px 0', color: 'white' }}>نظام توصيل أبو خاطر</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>الرجاء تسجيل الدخول لمتابعة العمل</p>
+          <h1 style={{ fontSize: '1.6rem', fontWeight: '800', margin: '10px 0 4px 0', color: 'white' }}>نظام توصيل أبو خاطر</h1>
+          <p style={{ color: 'var(--text-muted, #94a3b8)', fontSize: '0.85rem' }}>بوابة مصادقة موظفي المطعم الموثقة</p>
         </div>
 
-        {/* User Selection */}
-        <div className="login-user-select">
+        {/* User Role Selection */}
+        <div className="login-user-select" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px', marginBottom: '16px' }}>
           <button
             type="button"
             className={`login-user-btn ${selectedUser === 'admin' ? 'active admin' : ''}`}
             onClick={() => setSelectedUser('admin')}
+            disabled={loading}
           >
-            <Shield size={24} />
-            <span>مدير النظام (Admin)</span>
+            <Shield size={20} />
+            <span>المدير</span>
           </button>
           <button
             type="button"
             className={`login-user-btn ${selectedUser === 'casher' ? 'active casher' : ''}`}
             onClick={() => setSelectedUser('casher')}
+            disabled={loading}
           >
-            <User size={24} />
-            <span>الكاشير (Casher)</span>
+            <User size={20} />
+            <span>الكاشير</span>
+          </button>
+          <button
+            type="button"
+            className={`login-user-btn ${selectedUser === 'driver' ? 'active driver' : ''}`}
+            onClick={() => setSelectedUser('driver')}
+            disabled={loading}
+          >
+            <Bike size={20} />
+            <span>طيار</span>
           </button>
         </div>
 
-        {/* PIN Display Dots */}
-        <div className={`login-pin-display ${isShaking ? 'shake' : ''}`}>
-          <div className="login-dots-container">
-            {[...Array(4)].map((_, i) => (
-              <span
-                key={i}
-                className={`login-dot ${pin.length > i ? 'active' : ''}`}
-              />
-            ))}
-            {pin.length > 4 && [...Array(pin.length - 4)].map((_, i) => (
-              <span
-                key={i + 4}
-                className="login-dot active"
-              />
-            ))}
+        {/* Auth Mode Toggle */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '16px' }}>
+          <button
+            type="button"
+            onClick={() => setAuthMode('pin')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: authMode === 'pin' ? '1px solid var(--accent, #10b981)' : '1px solid rgba(255,255,255,0.1)',
+              background: authMode === 'pin' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+              color: authMode === 'pin' ? '#34d399' : '#94a3b8',
+              fontSize: '0.8rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            رمز الـ PIN السريع
+          </button>
+          <button
+            type="button"
+            onClick={() => setAuthMode('password')}
+            style={{
+              padding: '6px 14px',
+              borderRadius: '8px',
+              border: authMode === 'password' ? '1px solid var(--accent, #10b981)' : '1px solid rgba(255,255,255,0.1)',
+              background: authMode === 'password' ? 'rgba(16, 185, 129, 0.15)' : 'transparent',
+              color: authMode === 'password' ? '#34d399' : '#94a3b8',
+              fontSize: '0.8rem',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}
+          >
+            البريد وكلمة السر
+          </button>
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #ef4444', color: '#fca5a5', padding: '10px', borderRadius: '10px', fontSize: '0.82rem', marginBottom: '14px', textAlign: 'center' }}>
+            {error}
           </div>
+        )}
 
-          {error && <p className="login-error-msg">{error}</p>}
-        </div>
+        {/* Mode 1: PIN Numpad */}
+        {authMode === 'pin' && (
+          <>
+            <div className={`login-pin-display ${isShaking ? 'shake' : ''}`}>
+              <div className="login-dots-container">
+                {[...Array(4)].map((_, i) => (
+                  <span
+                    key={i}
+                    className={`login-dot ${pin.length > i ? 'active' : ''}`}
+                  />
+                ))}
+                {pin.length > 4 && [...Array(pin.length - 4)].map((_, i) => (
+                  <span
+                    key={i + 4}
+                    className="login-dot active"
+                  />
+                ))}
+              </div>
+            </div>
 
-        {/* Custom Numpad */}
-        <div className="login-numpad">
-          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
-            <button
-              key={num}
-              type="button"
-              className="login-num-btn"
-              onClick={() => handleKeyPress(num)}
-            >
-              {num}
-            </button>
-          ))}
+            <div className="login-numpad">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => (
+                <button
+                  key={num}
+                  type="button"
+                  className="login-num-btn"
+                  onClick={() => handleKeyPress(num)}
+                  disabled={loading}
+                >
+                  {num}
+                </button>
+              ))}
 
-          {/* Action Row */}
-          <button
-            type="button"
-            className="login-num-btn clear-btn"
-            style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--danger)' }}
-            onClick={handleClear}
-          >
-            تصفير
-          </button>
+              <button
+                type="button"
+                className="login-num-btn clear-btn"
+                style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--danger, #ef4444)' }}
+                onClick={handleClear}
+                disabled={loading}
+              >
+                تصفير
+              </button>
 
-          <button
-            type="button"
-            className="login-num-btn"
-            onClick={() => handleKeyPress(0)}
-          >
-            0
-          </button>
+              <button
+                type="button"
+                className="login-num-btn"
+                onClick={() => handleKeyPress(0)}
+                disabled={loading}
+              >
+                0
+              </button>
 
-          <button
-            type="button"
-            className="login-num-btn delete-btn"
-            onClick={handleDelete}
-            title="حذف رقم"
-          >
-            <Delete size={20} />
-          </button>
-        </div>
+              <button
+                type="button"
+                className="login-num-btn delete-btn"
+                onClick={handleDelete}
+                title="حذف رقم"
+                disabled={loading}
+              >
+                <Delete size={20} />
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Mode 2: Standard Email & Password Form */}
+        {authMode === 'password' && (
+          <form onSubmit={handleAuthSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <label style={{ display: 'block', color: 'var(--text-muted, #94a3b8)', fontSize: '0.8rem', marginBottom: '4px' }}>
+                البريد الإلكتروني:
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 36px 10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                  required
+                />
+                <Mail size={16} color="#94a3b8" style={{ position: 'absolute', right: '12px', top: '12px' }} />
+              </div>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', color: 'var(--text-muted, #94a3b8)', fontSize: '0.8rem', marginBottom: '4px' }}>
+                كلمة المرور:
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '10px 36px 10px 12px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '0.9rem',
+                    outline: 'none'
+                  }}
+                  required
+                />
+                <Lock size={16} color="#94a3b8" style={{ position: 'absolute', right: '12px', top: '12px' }} />
+              </div>
+            </div>
+          </form>
+        )}
 
         {/* Action Button */}
         <button
           type="button"
           className="login-submit-btn"
-          disabled={pin.length === 0}
-          onClick={() => handleSubmit()}
+          disabled={loading || (authMode === 'pin' && pin.length === 0)}
+          onClick={handleAuthSubmit}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}
         >
-          <Check size={20} />
-          <span>تأكيد الدخول</span>
+          {loading ? (
+            <>
+              <Loader2 size={20} className="animate-spin" />
+              <span>جاري التحقق من السيرفر...</span>
+            </>
+          ) : (
+            <>
+              <Check size={20} />
+              <span>تأكيد الدخول عبر Supabase</span>
+            </>
+          )}
         </button>
 
         {/* Ownership Notice */}
         <div style={{
-          marginTop: '20px',
+          marginTop: '16px',
           textAlign: 'center',
           fontSize: '0.72rem',
           color: 'rgba(255, 255, 255, 0.35)',
           direction: 'ltr',
           borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-          paddingTop: '12px'
+          paddingTop: '10px'
         }}>
           Developed & Owned by <span style={{ color: 'var(--accent, #10b981)', fontWeight: 'bold' }}>AmrMamdouh✔ </span> (01038035884)
         </div>
@@ -258,295 +422,183 @@ const Login = ({ onLoginSuccess }) => {
           width: 100%;
           max-width: 360px;
           padding: 24px 20px;
-          background: rgba(10, 15, 30, 0.75);
+          background: rgba(15, 23, 42, 0.75);
+          backdrop-filter: blur(16px);
           border: 1px solid rgba(255, 255, 255, 0.08);
           border-radius: 24px;
-          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.1);
-          backdrop-filter: blur(20px);
-          -webkit-backdrop-filter: blur(20px);
-          margin: auto;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
 
         .login-logo-container {
-          width: 60px;
-          height: 60px;
-          margin: 0 auto;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1.5px solid rgba(255, 255, 255, 0.1);
-          border-radius: 16px;
-          display: flex;
+          display: inline-flex;
           align-items: center;
           justify-content: center;
-          box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.05);
-          animation: pulse-ring 3s infinite;
-        }
-
-        @keyframes pulse-ring {
-          0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); border-color: rgba(255, 255, 255, 0.1); }
-          50% { box-shadow: 0 0 25px rgba(16, 185, 129, 0.3); border-color: rgba(16, 185, 129, 0.3); }
+          width: 56px;
+          height: 56px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 16px;
+          margin-bottom: 4px;
         }
 
         .login-logo {
-          width: 80%;
-          height: 80%;
+          width: 36px;
+          height: 36px;
           object-fit: contain;
         }
 
         .login-user-select {
-          display: flex;
-          gap: 10px;
-          margin-bottom: 20px;
+          margin-bottom: 16px;
         }
 
         .login-user-btn {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 6px;
-          padding: 12px 6px;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 12px;
-          color: var(--text-muted, #94a3b8);
-          font-weight: bold;
-          cursor: pointer;
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .login-user-btn:hover {
-          background: rgba(255, 255, 255, 0.05);
-          color: white;
-          transform: translateY(-1px);
-        }
-
-        .login-user-btn.active.admin {
-          background: rgba(59, 130, 246, 0.1);
-          border-color: #3b82f6;
-          color: #60a5fa;
-          box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
-        }
-
-        .login-user-btn.active.casher {
-          background: rgba(16, 185, 129, 0.1);
-          border-color: #10b981;
-          color: #34d399;
-          box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
-        }
-
-        .login-pin-display {
-          background: rgba(0, 0, 0, 0.25);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 12px;
-          padding: 12px;
-          text-align: center;
-          margin-bottom: 20px;
-          min-height: 70px;
           display: flex;
           flex-direction: column;
           align-items: center;
           justify-content: center;
+          gap: 6px;
+          padding: 10px 4px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 14px;
+          color: var(--text-muted, #94a3b8);
+          font-size: 0.75rem;
+          font-weight: 700;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .login-user-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.06);
+          color: white;
+        }
+
+        .login-user-btn.active.admin {
+          background: rgba(59, 130, 246, 0.15);
+          border-color: rgba(59, 130, 246, 0.5);
+          color: #60a5fa;
+        }
+
+        .login-user-btn.active.casher {
+          background: rgba(16, 185, 129, 0.15);
+          border-color: rgba(16, 185, 129, 0.5);
+          color: #34d399;
+        }
+
+        .login-user-btn.active.driver {
+          background: rgba(245, 158, 11, 0.15);
+          border-color: rgba(245, 158, 11, 0.5);
+          color: #fbbf24;
+        }
+
+        .login-pin-display {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          margin-bottom: 16px;
         }
 
         .login-dots-container {
           display: flex;
-          justify-content: center;
           gap: 12px;
-          height: 12px;
+          margin-bottom: 4px;
         }
 
         .login-dot {
-          width: 12px;
-          height: 12px;
+          width: 14px;
+          height: 14px;
           border-radius: 50%;
-          background: rgba(255, 255, 255, 0.1);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          transition: all 0.15s ease;
+          border: 2px solid rgba(255, 255, 255, 0.2);
+          background: transparent;
+          transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .login-dot.active {
-          background: white;
-          transform: scale(1.2);
-          box-shadow: 0 0 10px white;
-        }
-
-        .login-error-msg {
-          color: #ef4444;
-          font-size: 0.8rem;
-          margin-top: 8px;
-          font-weight: bold;
+          background: var(--accent, #10b981);
+          border-color: var(--accent, #10b981);
+          box-shadow: 0 0 12px var(--accent, #10b981);
+          transform: scale(1.15);
         }
 
         .login-numpad {
           display: grid;
           grid-template-columns: repeat(3, 1fr);
-          gap: 10px;
-          margin-bottom: 20px;
+          gap: 8px;
+          margin-bottom: 16px;
         }
 
         .login-num-btn {
-          height: 46px;
-          background: rgba(255, 255, 255, 0.02);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          border-radius: 10px;
-          color: white;
-          font-size: 1.3rem;
-          font-weight: 600;
-          cursor: pointer;
+          height: 48px;
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.15s ease;
-          user-select: none;
-          box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-        }
-
-        .login-num-btn:hover {
-          background: rgba(255, 255, 255, 0.06);
-          border-color: rgba(255, 255, 255, 0.12);
-          color: #60a5fa;
-        }
-
-        .login-num-btn:active {
-          background: rgba(59, 130, 246, 0.2);
-          border-color: #3b82f6;
-          transform: scale(0.92);
-          box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
-        }
-
-        .login-num-btn.clear-btn:hover {
-          color: #f87171 !important;
-          background: rgba(239, 68, 68, 0.1);
-          border-color: rgba(239, 68, 68, 0.2);
-        }
-
-        .login-num-btn.clear-btn:active {
-          background: rgba(239, 68, 68, 0.2);
-          border-color: #ef4444;
-        }
-
-        .login-num-btn.delete-btn {
-          color: #94a3b8;
-        }
-
-        .login-num-btn.delete-btn:hover {
-          background: rgba(255, 255, 255, 0.08);
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
           color: white;
+          font-size: 1.25rem;
+          font-weight: 700;
+          font-family: 'Outfit', sans-serif;
+          cursor: pointer;
+          transition: all 0.15s ease;
+        }
+
+        .login-num-btn:hover:not(:disabled) {
+          background: rgba(255, 255, 255, 0.08);
+          border-color: rgba(255, 255, 255, 0.15);
+          transform: translateY(-1px);
+        }
+
+        .login-num-btn:active:not(:disabled) {
+          transform: translateY(1px);
         }
 
         .login-submit-btn {
           width: 100%;
-          height: 46px;
-          background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-          color: white;
+          height: 48px;
+          background: var(--accent, #10b981);
           border: none;
-          border-radius: 12px;
+          border-radius: 14px;
+          color: #090d16;
           font-size: 0.95rem;
-          font-weight: bold;
+          font-weight: 800;
           cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
-          transition: all 0.2s;
-          text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
         }
 
         .login-submit-btn:hover:not(:disabled) {
-          background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
-          box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
-        }
-
-        .login-submit-btn:active:not(:disabled) {
-          transform: scale(0.98);
+          filter: brightness(1.08);
+          transform: translateY(-1px);
         }
 
         .login-submit-btn:disabled {
-          background: rgba(255, 255, 255, 0.05);
-          color: rgba(255, 255, 255, 0.2);
-          box-shadow: none;
+          opacity: 0.45;
           cursor: not-allowed;
-          text-shadow: none;
+          box-shadow: none;
+          transform: none;
         }
 
-        /* Animations */
+        .login-pin-display.shake {
+          animation: shake 0.4s ease-in-out;
+        }
+
         @keyframes shake {
           0%, 100% { transform: translateX(0); }
           20%, 60% { transform: translateX(-6px); }
           40%, 80% { transform: translateX(6px); }
         }
 
-        .login-pin-display.shake {
-          animation: shake 0.4s ease-in-out;
-          border-color: #ef4444;
-          background: rgba(239, 68, 68, 0.05);
+        .animate-spin {
+          animation: spin 1s linear infinite;
         }
 
-        /* 📱 Responsive overrides for extremely tiny mobile screens and landscape orientations */
-        @media (max-width: 480px), (max-height: 680px) {
-          .login-container {
-            padding: 16px 14px;
-            border-radius: 18px;
-            max-width: 320px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-          }
-          .login-logo-container {
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-          }
-          .login-logo-container svg {
-            width: 22px !important;
-            height: 22px !important;
-          }
-          h1 {
-            font-size: 1.25rem !important;
-            margin: 6px 0 2px 0 !important;
-          }
-          p {
-            font-size: 0.75rem !important;
-          }
-          .login-user-select {
-            gap: 6px;
-            margin-bottom: 12px;
-          }
-          .login-user-btn {
-            padding: 8px 4px;
-            border-radius: 10px;
-            font-size: 0.75rem;
-            gap: 4px;
-          }
-          .login-user-btn svg {
-            width: 16px !important;
-            height: 16px !important;
-          }
-          .login-pin-display {
-            padding: 8px;
-            min-height: 48px;
-            margin-bottom: 12px;
-            border-radius: 10px;
-          }
-          .login-dot {
-            width: 8px;
-            height: 8px;
-          }
-          .login-numpad {
-            gap: 8px;
-            margin-bottom: 12px;
-          }
-          .login-num-btn {
-            height: 38px;
-            font-size: 1.1rem;
-            border-radius: 8px;
-          }
-          .login-submit-btn {
-            height: 38px;
-            font-size: 0.85rem;
-            border-radius: 10px;
-          }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
-      `}} />
+        `
+      }} />
     </div>
   );
 };

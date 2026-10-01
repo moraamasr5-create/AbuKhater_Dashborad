@@ -1,17 +1,20 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import { supabase } from './supabase/supabaseClient';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
+import { capShiftMinutes } from '../utils/shiftLogic';
 
 // ============================================================
 // OFFLINE SYNC QUEUE
 // ============================================================
 
 const QUEUE_KEY = 'delivery_pending_sync';
+const FAILED_QUEUE_KEY = 'delivery_failed_sync';
+export const MAX_QUEUE_RETRIES = 3;
 
 /**
  * يقرأ قائمة العمليات المنتظرة من localStorage
  */
-const getPendingQueue = () => {
+export const getPendingQueue = () => {
   try { return JSON.parse(safeGetItem(QUEUE_KEY)) || []; }
   catch { return []; }
 };
@@ -19,8 +22,50 @@ const getPendingQueue = () => {
 /**
  * يحفظ قائمة العمليات المنتظرة في localStorage
  */
-const savePendingQueue = (queue) => {
+export const savePendingQueue = (queue) => {
   safeSetItem(QUEUE_KEY, JSON.stringify(queue));
+  notifyQueueChange();
+};
+
+/**
+ * يقرأ قائمة العمليات التي فشلت نهائياً وتحتاج تدخل يدوي
+ */
+export const getFailedQueue = () => {
+  try { return JSON.parse(safeGetItem(FAILED_QUEUE_KEY)) || []; }
+  catch { return []; }
+};
+
+/**
+ * يحفظ قائمة العمليات الفاشلة نهائياً
+ */
+export const saveFailedQueue = (queue) => {
+  safeSetItem(FAILED_QUEUE_KEY, JSON.stringify(queue));
+  notifyQueueChange();
+};
+
+/**
+ * مسح قائمة العمليات الفاشلة بعد مراجعة الكاشير
+ */
+export const clearFailedQueue = () => {
+  safeSetItem(FAILED_QUEUE_KEY, JSON.stringify([]));
+  notifyQueueChange();
+};
+
+/**
+ * نظام إشعار المشتركين بتغيرات الطابور
+ */
+const queueListeners = new Set();
+export const onQueueChange = (callback) => {
+  queueListeners.add(callback);
+  callback({ pending: getPendingQueue().length, failed: getFailedQueue().length });
+  return () => queueListeners.delete(callback);
+};
+
+const notifyQueueChange = () => {
+  const status = { pending: getPendingQueue().length, failed: getFailedQueue().length };
+  queueListeners.forEach(fn => {
+    try { fn(status); } catch (e) { console.error('Queue listener error:', e); }
+  });
 };
 
 /**
@@ -28,70 +73,139 @@ const savePendingQueue = (queue) => {
  */
 const queueSync = (action, payload) => {
   const q = getPendingQueue();
-  q.push({ action, payload, id: Date.now() });
+  q.push({
+    action,
+    payload,
+    id: Date.now(),
+    retries: 0,
+    createdAt: new Date().toISOString()
+  });
   savePendingQueue(q);
 };
 
 /**
  * يعيد تشغيل العمليات المنتظرة في القائمة عند عودة الاتصال بالإنترنت
- * يُستدعى تلقائياً عند أي reconnect
+ * يمنع التكرار اللانهائي وينقل العمليات الفاشلة نهائياً إلى failedQueue مع توضيح السبب
  */
+let isSyncing = false;
 export const processPendingSync = async () => {
-  if (!navigator.onLine) return;
+  if (!navigator.onLine || isSyncing) return { processed: 0, remaining: 0, failed: 0 };
   const q = getPendingQueue();
-  if (!q.length) return;
+  if (!q.length) return { processed: 0, remaining: 0, failed: getFailedQueue().length };
 
+  isSyncing = true;
   console.log(`🔄 Processing ${q.length} pending offline syncs...`);
   const remainingQueue = [];
+  const failedQueue = getFailedQueue();
+  let processedCount = 0;
 
-  for (const item of q) {
-    try {
-      if (item.action === 'updateOrderStatus') {
-        await supabaseService.updateOrderStatus(item.payload.supabaseId, item.payload.newStatus, item.payload.reason, item.payload.extraFields, true);
-      } else if (item.action === 'updatePilotState') {
-        await supabaseService.updatePilotState(item.payload.id, item.payload.stateUpdates, true);
-      } else if (item.action === 'saveShiftReport') {
-        await supabaseService.saveShiftReport(item.payload, true);
-      } else if (item.action === 'createShift') {
-        await supabaseService.createShift(item.payload, true);
-      } else if (item.action === 'updateMenuAvailability') {
-        await supabaseService.updateMenuAvailability(item.payload.itemName, item.payload.isAvailable, true);
-      } else if (item.action === 'updateAppConfig') {
-        await supabaseService.updateAppConfig(item.payload.key, item.payload.value, true);
-      } else if (item.action === 'createReservation') {
-        await supabaseService.createReservation(item.payload, true);
-      } else if (item.action === 'updateReservationStatus') {
-        await supabaseService.updateReservationStatus(item.payload.id, item.payload.newStatus, item.payload.refNum, item.payload.paymentProof, true);
-      } else if (item.action === 'deleteReservation') {
-        await supabaseService.deleteReservation(item.payload.id, true);
-      } else if (item.action === 'resetAllPilots') {
-        await supabaseService.resetAllPilots(item.payload.pilotIds, true);
-      } else if (item.action === 'createManualOrder') {
-        await supabaseService.createManualOrder(item.payload, true);
-      } else if (item.action === 'updateOrderPaymentScreenshot') {
-        await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
-      } else if (item.action === 'assignOrderToPilot') {
-        await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
-      } else if (item.action === 'startPilotTrip') {
-        await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
-      } else if (item.action === 'completeOrderDelivery') {
-        await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
-      } else if (item.action === 'failOrderDelivery') {
-        await supabaseService.failOrderDelivery(item.payload.orderId, item.payload.reason, item.payload.mutationId, true);
-      } else if (item.action === 'togglePilotShift') {
-        await supabaseService.togglePilotShift(item.payload.pilotId, item.payload.forceReopen, item.payload.mutationId, true);
+  try {
+    for (const item of q) {
+      const currentRetries = (item.retries || 0) + 1;
+      try {
+        if (item.action === 'updateOrderStatus') {
+          await supabaseService.updateOrderStatus(item.payload.supabaseId, item.payload.newStatus, item.payload.reason, item.payload.extraFields, true);
+        } else if (item.action === 'updatePilotState') {
+          await supabaseService.updatePilotState(item.payload.id, item.payload.stateUpdates, true);
+        } else if (item.action === 'saveShiftReport') {
+          await supabaseService.saveShiftReport(item.payload, true);
+        } else if (item.action === 'createShift') {
+          await supabaseService.createShift(item.payload, true);
+        } else if (item.action === 'updateMenuAvailability') {
+          await supabaseService.updateMenuAvailability(item.payload.itemName, item.payload.isAvailable, true);
+        } else if (item.action === 'updateAppConfig') {
+          await supabaseService.updateAppConfig(item.payload.key, item.payload.value, true);
+        } else if (item.action === 'createReservation') {
+          await supabaseService.createReservation(item.payload, true);
+        } else if (item.action === 'updateReservationStatus') {
+          await supabaseService.updateReservationStatus(item.payload.id, item.payload.newStatus, item.payload.refNum, item.payload.paymentProof, true);
+        } else if (item.action === 'deleteReservation') {
+          await supabaseService.deleteReservation(item.payload.id, true);
+        } else if (item.action === 'resetAllPilots') {
+          await supabaseService.resetAllPilots(item.payload.pilotIds, true);
+        } else if (item.action === 'createManualOrder') {
+          await supabaseService.createManualOrder(item.payload, true);
+        } else if (item.action === 'updateOrderPaymentScreenshot') {
+          await supabaseService.updateOrderPaymentScreenshot(item.payload.supabaseId, item.payload.screenshotUrl, true);
+        } else if (item.action === 'assignOrderToPilot') {
+          await supabaseService.assignOrderToPilot(item.payload.orderId, item.payload.pilotId, item.payload.pilotName, item.payload.mutationId, true);
+        } else if (item.action === 'startPilotTrip') {
+          await supabaseService.startPilotTrip(item.payload.orderId, item.payload.mutationId, true);
+        } else if (item.action === 'completeOrderDelivery') {
+          await supabaseService.completeOrderDelivery(item.payload.orderId, item.payload.mutationId, true);
+        } else if (item.action === 'failOrderDelivery') {
+          await supabaseService.failOrderDelivery(item.payload.orderId, item.payload.reason, item.payload.mutationId, true);
+        } else if (item.action === 'togglePilotShift') {
+          await supabaseService.togglePilotShift(item.payload.pilotId, item.payload.forceReopen, item.payload.mutationId, true);
+        }
+        processedCount++;
+      } catch (e) {
+        const errMsg = e?.message || String(e);
+        const isPermanent = (
+          currentRetries >= MAX_QUEUE_RETRIES ||
+          e?.code === 'P0001' ||
+          e?.code === '42501' ||
+          errMsg.includes('Unauthorized') ||
+          errMsg.includes('Forbidden') ||
+          errMsg.includes('not found') ||
+          errMsg.includes('violates foreign key') ||
+          errMsg.includes('duplicate key')
+        );
+
+        if (isPermanent) {
+          console.error(`❌ [Offline Sync] Item permanently failed (${item.action}):`, errMsg);
+          failedQueue.push({
+            ...item,
+            retries: currentRetries,
+            failedAt: new Date().toISOString(),
+            error: errMsg
+          });
+        } else {
+          console.warn(`⚠️ [Offline Sync] Item failed (attempt ${currentRetries}/${MAX_QUEUE_RETRIES}), keeping in queue:`, item);
+          remainingQueue.push({
+            ...item,
+            retries: currentRetries,
+            lastError: errMsg
+          });
+        }
       }
-    } catch (e) {
-      console.warn('⚠️ Offline sync item failed, keeping in queue:', item);
-      remainingQueue.push(item);
     }
-  }
 
-  savePendingQueue(remainingQueue);
+    safeSetItem(QUEUE_KEY, JSON.stringify(remainingQueue));
+    safeSetItem(FAILED_QUEUE_KEY, JSON.stringify(failedQueue));
+    notifyQueueChange();
+
+    return {
+      processed: processedCount,
+      remaining: remainingQueue.length,
+      failed: failedQueue.length
+    };
+  } finally {
+    isSyncing = false;
+  }
+};
+
+/**
+ * يعيد محاولة جميع العمليات الفاشلة نهائياً بنقلها إلى طابور الانتظار
+ */
+export const retryFailedQueue = async () => {
+  const failed = getFailedQueue();
+  if (!failed.length) return { processed: 0, remaining: 0, failed: 0 };
+  const pending = getPendingQueue();
+  const resetItems = failed.map(item => ({
+    ...item,
+    retries: 0,
+    lastError: null
+  }));
+  savePendingQueue([...pending, ...resetItems]);
+  clearFailedQueue();
+  return processPendingSync();
 };
 
 // يعيد المحاولة تلقائياً عند عودة الاتصال
-window.addEventListener('online', processPendingSync);
+window.addEventListener('online', () => {
+  processPendingSync();
+});
 
 /**
  * Wrapper مشترك: يُشغّل أي Supabase call مع fallback صامت عند انقطاع الاتصال
@@ -270,6 +384,10 @@ export const supabaseService = {
           paymentMethod: row.payment_method || rawPayload.customer?.payment_method || 'Cash',
           paymentScreenshot: row.payment_screenshot || rawPayload.payment?.screenshot || null,
           status: mappedStatus,
+          canonicalStatus: row.status || mappedStatus,
+          paymentStatus: row.payment_status || (isCashOnDelivery ? 'cash_on_delivery' : (row.payment_screenshot ? 'pending_verification' : 'pending_payment')),
+          cancellationReason: row.cancellation_reason || null,
+          statusHistory: row.status_history || [],
           displayStatus: rawStatus || 'pending',
           timestamp: row.created_at || rawPayload.timestamp || new Date().toISOString(),
           pilotId: row.pilot_id || null,
@@ -290,82 +408,38 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async createManualOrder(orderData, skipQueue = false) {
     return withOfflineSupport('createManualOrder', async () => {
-      const items = orderData.items || [];
-      const itemsTotal = items.reduce((sum, item) => {
-        const price = Number(item.price || item.unit_price || 0);
-        const count = Number(item.count || item.quantity || 1);
-        return sum + (price * count);
-      }, 0);
+      const items = (orderData.items || []).map(item => ({
+        item_id: item.itemId || item.id || null,
+        name: item.name,
+        quantity: Number(item.count || item.quantity || 1),
+        price: Number(item.price || item.unit_price || 0)
+      }));
 
-      const deliveryFee = Number(orderData.deliveryFee || orderData.delivery_fee || 0);
-      const serviceFee = Number(orderData.serviceFee || orderData.service_fee || 0);
-      const totalAmount = itemsTotal + deliveryFee + serviceFee;
+      const mutationId = orderData.mutationId || newMutationId();
 
-      const paymentMethod = orderData.paymentMethod || 'Cash';
-      const isCashOnDelivery = (!paymentMethod || paymentMethod === 'Cash' || String(paymentMethod).toLowerCase().includes('cash'));
-      const paidNow = isCashOnDelivery ? 0 : Number(orderData.paidNow || orderData.paid_now || 0);
-      const remainingAmount = isCashOnDelivery ? totalAmount : (totalAmount - paidNow);
-
-      const rawPayload = {
-        order_id: String(orderData.id),
-        items: items.map(item => ({
-          name: item.name,
-          quantity: item.count || item.quantity || 1,
-          price: item.price || 0
-        })),
-        customer: {
-          full_name: orderData.customerName,
-          phone_1: orderData.phone,
-          delivery_info: {
-            address: orderData.area,
-            coordinates: {
-              lat: orderData.lat || orderData.latitude || null,
-              lon: orderData.lng || orderData.longitude || null
-            }
-          },
-          payment_method: paymentMethod
-        },
-        totals: {
-          delivery_fee: deliveryFee,
-          service_fee: serviceFee,
-          paid_now: paidNow,
-          remaining_amount: remainingAmount
-        },
-        route_distance_km: orderData.route_distance_km || null,
-        route_duration_minutes: orderData.route_duration_minutes || null,
-        calculated_by: orderData.calculated_by || null,
-        items_description: orderData.itemsDescription || null,
-        timestamp: new Date().toISOString()
+      const rpcParams = {
+        p_receipt_no: orderData.id ? String(orderData.id) : null,
+        p_order_type: orderData.type || 'delivery',
+        p_source: orderData.source || 'manual',
+        p_customer_name: orderData.customerName || 'عميل مطعم',
+        p_customer_phone: orderData.phone || null,
+        p_customer_phone_2: orderData.phone2 || null,
+        p_delivery_address: orderData.area || null,
+        p_payment_method: orderData.paymentMethod || 'Cash',
+        p_delivery_fee: Number(orderData.deliveryFee || orderData.delivery_fee || 0),
+        p_service_fee: Number(orderData.serviceFee || orderData.service_fee || 0),
+        p_paid_now: orderData.paidNow !== undefined ? Number(orderData.paidNow) : null,
+        p_latitude: Number(orderData.lat || orderData.latitude) || null,
+        p_longitude: Number(orderData.lng || orderData.longitude) || null,
+        p_items: items,
+        p_shift_id: orderData.shiftId || null,
+        p_idempotency_key: mutationId
       };
 
-      const { data, error } = await supabase
-        .from('orders')
-        .insert([{
-          customer_name: orderData.customerName || 'عميل غير معروف',
-          customer_phone: orderData.phone || null,
-          customer_phone_2: orderData.phone2 || null,
-          order_type: orderData.type || 'delivery',
-          total_amount: totalAmount,
-          delivery_fee: deliveryFee,
-          service_fee: serviceFee,
-          paid_now: paidNow,
-          remaining_amount: remainingAmount,
-          status: 'pending',
-          delivery_address: orderData.area || null,
-          payment_method: paymentMethod,
-          payment_screenshot: null,
-          latitude: orderData.lat || orderData.latitude || null,
-          longitude: orderData.lng || orderData.longitude || null,
-          raw_payload: rawPayload,
-          source: orderData.source || 'manual',
-          original_id: String(orderData.id),
-          shift_id: orderData.shiftId || null
-        }])
-        .select('id')
-        .single();
+      const { data, error } = await supabase.rpc('create_manual_order', rpcParams);
 
       if (error) throw error;
-      return data;
+      return { id: data?.order_id, ...data };
     }, orderData, skipQueue);
   },
 
@@ -387,33 +461,71 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 2. updateOrderStatus
-  //    يحدّث حالة الطلب في DB ويُعالج كل الحالات العربية
+  // ─────────────────────────────────────────────────────────
+  // 2. updateOrderStatus (Authoritative Canonical State Transition)
   // ─────────────────────────────────────────────────────────
   async updateOrderStatus(supabaseId, newStatus, reason = null, extraFields = {}, skipQueue = false) {
     if (!supabaseId) return; // Manual orders have no supabaseId
 
     return withOfflineSupport('updateOrderStatus', async () => {
-      let dbStatus = newStatus;
-      if (newStatus === 'confirmed' || newStatus === 'waiting_driver') dbStatus = 'في التحضير';
-      else if (newStatus === 'cancelled') dbStatus = reason ? `ملغي (${reason})` : 'ملغي';
-      else if (newStatus === 'driver_assigned') dbStatus = 'تم الإسناد للطيار';
-      else if (newStatus === 'out_for_delivery' || newStatus === 'active') dbStatus = 'في الطريق للتسليم';
-      else if (newStatus === 'completed' || newStatus === 'delivered') dbStatus = 'تم التوصيل';
-      else if (newStatus === 'failed_delivery') dbStatus = reason ? `فشل التوصيل (${reason})` : 'فشل التوصيل';
+      // Map frontend action to canonical state
+      let canonical = newStatus;
+      if (newStatus === 'confirmed' || newStatus === 'waiting_driver') canonical = 'preparing';
+      else if (newStatus === 'active' || newStatus === 'out_for_delivery') canonical = 'out_for_delivery';
+      else if (newStatus === 'completed' || newStatus === 'delivered') canonical = 'delivered';
+      else if (newStatus === 'failed_delivery') canonical = 'failed_delivery';
+      else if (newStatus === 'cancelled') canonical = 'cancelled';
 
-      const updatePayload = { status: dbStatus };
-      if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
-      if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
-      if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+      const mutationId = newMutationId();
+      const { data, error } = await supabase.rpc('transition_order_status', {
+        p_order_id: supabaseId,
+        p_target_status: canonical,
+        p_reason: reason,
+        p_mutation_id: mutationId
+      });
 
-      const { error } = await supabase
-        .from('orders')
-        .update(updatePayload)
-        .eq('id', supabaseId);
+      if (error) {
+        // Fallback for fields not managed by transition_order_status (e.g. direct pilot re-assignment metadata)
+        if (extraFields && Object.keys(extraFields).length > 0) {
+          const updatePayload = {};
+          if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
+          if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
+          if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+          await supabase.from('orders').update(updatePayload).eq('id', supabaseId);
+        }
+        throw error;
+      }
+
+      if (extraFields && Object.keys(extraFields).length > 0) {
+        const updatePayload = {};
+        if (extraFields.pilot_id !== undefined) updatePayload.pilot_id = String(extraFields.pilot_id);
+        if (extraFields.pilot_name !== undefined) updatePayload.pilot_name = extraFields.pilot_name;
+        if (extraFields.delivery_id !== undefined) updatePayload.delivery_id = extraFields.delivery_id;
+        await supabase.from('orders').update(updatePayload).eq('id', supabaseId);
+      }
+
+      return data;
+    }, { supabaseId, newStatus, reason, extraFields }, skipQueue);
+  },
+
+  /**
+   * التحقق من حالة دفع الطلب من قبل الكاشير / الإدارة
+   */
+  async verifyOrderPayment(supabaseId, paymentStatus, notes = null, skipQueue = false) {
+    if (!supabaseId) return;
+
+    return withOfflineSupport('verifyOrderPayment', async () => {
+      const mutationId = newMutationId();
+      const { data, error } = await supabase.rpc('verify_order_payment', {
+        p_order_id: supabaseId,
+        p_payment_status: paymentStatus,
+        p_notes: notes,
+        p_mutation_id: mutationId
+      });
 
       if (error) throw error;
-    }, { supabaseId, newStatus, reason, extraFields }, skipQueue);
+      return data;
+    }, { supabaseId, paymentStatus, notes }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────
@@ -488,7 +600,7 @@ export const supabaseService = {
         lastReturnTime: row.last_return_time || null,
         lastOpenedAt: row.shift_started_at || null,   // shift_started_at → lastOpenedAt
         lastClosedAt: row.shift_ended_at || null,    // shift_ended_at → lastClosedAt
-        totalMinutes: Number(row.total_minutes) || 0,
+        totalMinutes: capShiftMinutes(Number(row.total_minutes) || 0),
         ordersCount: Number(row.orders_count) || 0,
         shift: `${row.start_shift || '01:00'} - ${row.end_shift || '11:00'}`,
         numberMotor: row.number_motor || '',
@@ -648,20 +760,68 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 8. saveShiftReport
-  //    يحفظ تقرير إغلاق الوردية في جدول shifts
-  //    مع الـ offline fallback عند انقطاع الاتصال
+  // 8. saveShiftReport & close_shift
+  //    يغلق الوردية في Supabase مع الحساب المالي المعتمد من السيرفر
   // ─────────────────────────────────────────────────────────
   async saveShiftReport(reportData, skipQueue = false) {
     return withOfflineSupport('saveShiftReport', async () => {
-      const { error } = await supabase.rpc('close_shift', {
-        p_shift_id: reportData.id,
-        p_stats: reportData,
+      const { data, error } = await supabase.rpc('close_shift', {
+        p_shift_id: String(reportData.id),
+        p_stats: null, // الحساب المالي يتم بالكامل authoritative من جهة السيرفر
         p_force_close: Boolean(reportData.forceClose)
       });
 
       if (error) throw error;
+      return data;
     }, reportData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 8.2 fetchShiftReports
+  //    يجلب تقارير الورديات المغلقة مع الإحصائيات المالية المعتمدة
+  // ─────────────────────────────────────────────────────────
+  async fetchShiftReports() {
+    return withOfflineSupport('fetchShiftReports', async () => {
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .eq('status', 'closed')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(row => ({
+        id: row.id,
+        date: row.date,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        status: row.status,
+        ordersCount: row.total_orders || row.stats?.ordersCount || 0,
+        totalDeliveryFees: row.stats?.totalDeliveryFees || 0,
+        totalAttendancePay: row.stats?.totalAttendancePay || 0,
+        totalPilotDues: row.stats?.totalPilotDues || 0,
+        pilotStats: row.stats?.pilotStats || row.stats?.pilotPerformance || [],
+        financials: row.stats?.financials || {},
+        sourceBreakdown: row.stats?.sourceBreakdown || {},
+        reservationStats: row.stats?.reservationStats || {},
+        stats: row.stats,
+        ...row.stats
+      }));
+    }, null);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 8.3 getShiftStats
+  //    يحسب الإحصائيات اللحظية للوردية من قاعدة البيانات مباشرة
+  // ─────────────────────────────────────────────────────────
+  async getShiftStats(shiftId) {
+    if (!shiftId) return null;
+    return withOfflineSupport('getShiftStats', async () => {
+      const { data, error } = await supabase.rpc('calculate_shift_stats', {
+        p_shift_id: String(shiftId)
+      });
+      if (error) throw error;
+      return data;
+    }, { shiftId });
   },
 
   // ─────────────────────────────────────────────────────────
@@ -764,40 +924,79 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 11. Menu Availability (جدول menu_availability)
-  //     item_name UNIQUE, is_available bool
+  // 11. Menu Items & Availability (جدول menu_items الرسمي)
   // ─────────────────────────────────────────────────────────
 
   /**
-   * يجلب كل حالات الإتاحة من menu_availability
+   * يجلب كافة أصناف المنيو مع التصنيفات للوحة التحكم
+   */
+  async fetchMenuItemsAdmin() {
+    return withOfflineSupport('fetchMenuItemsAdmin', async () => {
+      const { data, error } = await supabase.rpc('get_menu_items_admin');
+      if (error) throw error;
+      return data || [];
+    }, null);
+  },
+
+  /**
+   * يحدّث حالة صنف في المنيو (available, out_of_stock, paused, hidden)
+   */
+  async updateMenuItemStatus(itemId, status, skipQueue = false) {
+    if (!itemId) return;
+    return withOfflineSupport('updateMenuItemStatus', async () => {
+      const { data, error } = await supabase.rpc('update_menu_item_status', {
+        p_item_id: itemId,
+        p_status: status
+      });
+      if (error) throw error;
+      return data;
+    }, { itemId, status }, skipQueue);
+  },
+
+  /**
+   * تبديل إتاحة الصنف (متاح / غير متاح)
+   */
+  async toggleMenuItemAvailability(itemId, isAvailable, skipQueue = false) {
+    if (!itemId) return;
+    return withOfflineSupport('toggleMenuItemAvailability', async () => {
+      const { data, error } = await supabase.rpc('toggle_menu_item_availability', {
+        p_item_id: itemId,
+        p_is_available: Boolean(isAvailable)
+      });
+      if (error) throw error;
+      return data;
+    }, { itemId, isAvailable }, skipQueue);
+  },
+
+  /**
+   * [Legacy Compatibility] يجلب كل حالات الإتاحة معتمدة على جدول menu_items
    * يُعيد Map { itemName: boolean }
    */
   async fetchMenuAvailability() {
     return withOfflineSupport('fetchMenuAvailability', async () => {
       const { data, error } = await supabase
-        .from('menu_availability')
-        .select('item_name, is_available');
+        .from('menu_items')
+        .select('name, status');
       if (error) throw error;
 
       const map = {};
-      (data || []).forEach(row => { map[row.item_name] = row.is_available; });
+      (data || []).forEach(row => {
+        map[row.name] = (row.status === 'available');
+      });
       return map;
     }, null);
   },
 
   /**
-   * يحدّث أو يضيف حالة إتاحة عنصر في القائمة
-   * @param {string} itemName - اسم العنصر
-   * @param {boolean} isAvailable - متاح أم لا
+   * [Legacy Compatibility] يحدّث إتاحة عنصر بالاسم في menu_items
    */
   async updateMenuAvailability(itemName, isAvailable, skipQueue = false) {
     return withOfflineSupport('updateMenuAvailability', async () => {
+      const newStatus = isAvailable ? 'available' : 'out_of_stock';
       const { error } = await supabase
-        .from('menu_availability')
-        .upsert(
-          { item_name: itemName, is_available: isAvailable, updated_at: new Date().toISOString() },
-          { onConflict: 'item_name' }
-        );
+        .from('menu_items')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('name', itemName);
       if (error) throw error;
     }, { itemName, isAvailable }, skipQueue);
   },
@@ -854,6 +1053,71 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
+  // 11.6 Restaurant Settings (إعدادات المطعم والأسعار والتوصيل)
+  // ─────────────────────────────────────────────────────────
+  async fetchRestaurantSettings() {
+    return withOfflineSupport('fetchRestaurantSettings', async () => {
+      let map = {};
+      try {
+        const { data, error } = await supabase
+          .from('restaurant_settings')
+          .select('key, value');
+        if (!error && data && data.length > 0) {
+          data.forEach(row => { map[row.key] = row.value; });
+          return map;
+        }
+      } catch (e) {
+        console.warn('[RestaurantSettings] Falling back to app_config:', e?.message);
+      }
+
+      const { data: acData, error: acError } = await supabase
+        .from('app_config')
+        .select('key, value');
+      if (acError) throw acError;
+
+      (acData || []).forEach(row => { map[row.key] = row.value; });
+      return map;
+    }, null);
+  },
+
+  async updateRestaurantSetting(key, value, skipQueue = false) {
+    return withOfflineSupport('updateRestaurantSetting', async () => {
+      const now = new Date().toISOString();
+      const valStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+      // Save to app_config
+      const { error: acErr } = await supabase
+        .from('app_config')
+        .upsert({ key, value: valStr, updated_at: now }, { onConflict: 'key' });
+      if (acErr) console.warn('[RestaurantSettings] app_config error:', acErr.message);
+
+      // Attempt to save to restaurant_settings
+      try {
+        await supabase
+          .from('restaurant_settings')
+          .upsert({ key, value: valStr, updated_at: now }, { onConflict: 'key' });
+      } catch (e) {
+        // Silently catch if RLS restricts restaurant_settings table
+      }
+    }, { key, value }, skipQueue);
+  },
+
+  subscribeToRestaurantSettings(callback) {
+    const channelId = `restaurant-settings-rt-${Date.now()}`;
+    return supabase
+      .channel(channelId)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_settings' }, payload => {
+        console.log('🔄 Realtime RestaurantSettings:', payload);
+        callback(payload);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_config' }, payload => {
+        console.log('🔄 Realtime RestaurantSettings (via app_config):', payload);
+        callback(payload);
+      })
+      .subscribe();
+  },
+
+  // ─────────────────────────────────────────────────────────
   // 12. fetchFeedbacks (جدول feedback)
   // ─────────────────────────────────────────────────────────
   async fetchFeedbacks() {
@@ -879,7 +1143,7 @@ export const supabaseService = {
   // 13. Realtime Subscriptions
   // ─────────────────────────────────────────────────────────
 
-  subscribeToOrders(callback) {
+  subscribeToOrders(callback, onStatusChange = null) {
     const channelId = `orders-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -887,10 +1151,12 @@ export const supabaseService = {
         console.log('🔄 Realtime Order:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
   },
 
-  subscribeToReservations(callback) {
+  subscribeToReservations(callback, onStatusChange = null) {
     const channelId = `reservations-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -898,10 +1164,12 @@ export const supabaseService = {
         console.log('🔄 Realtime Reservation:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
   },
 
-  subscribeToDrivers(callback) {
+  subscribeToDrivers(callback, onStatusChange = null) {
     const channelId = `delivery-realtime-${Date.now()}`;
     return supabase
       .channel(channelId)
@@ -909,6 +1177,89 @@ export const supabaseService = {
         console.log('🔄 Realtime Driver:', payload);
         callback(payload);
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (onStatusChange) onStatusChange(status, err);
+      });
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 14. Authentication & Staff Roles (Supabase Auth)
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * تسجيل دخول موظف عبر Supabase Auth والتحقق من دوره وحالته
+   */
+  async signInStaff({ email, password }) {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    
+    const profile = await this.getCurrentStaffProfile(data.user.id);
+    if (!profile) {
+      await supabase.auth.signOut();
+      throw new Error('هذا الحساب ليس لديه صلاحية وصول إلى لوحة التحكم (Staff Role Required).');
+    }
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      throw new Error('تم تعطيل هذا الحساب من قبل الإدارة.');
+    }
+
+    return { user: data.user, profile };
+  },
+
+  /**
+   * تسجيل خروج الموظف وإنهاء الجلسة
+   */
+  async signOutStaff() {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.warn('[Auth] SignOut warning:', e?.message);
+    }
+  },
+
+  /**
+   * جلب الملف التعريفي والدور الموثق للموظف من السيرفر
+   */
+  async getCurrentStaffProfile(userId = null) {
+    try {
+      const targetUid = userId || (await supabase.auth.getUser())?.data?.user?.id;
+      if (!targetUid) return null;
+
+      // First try the RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_my_staff_profile');
+      if (!rpcError && rpcData && rpcData.length > 0) {
+        return rpcData[0];
+      }
+
+      // Fallback to direct query on staff_roles
+      const { data, error } = await supabase
+        .from('staff_roles')
+        .select('*')
+        .eq('user_id', targetUid)
+        .maybeSingle();
+
+      if (error) {
+        console.warn('[StaffProfile] Error fetching profile:', error.message);
+        return null;
+      }
+      return data;
+    } catch (e) {
+      console.warn('[StaffProfile] Exception fetching profile:', e?.message);
+      return null;
+    }
+  },
+
+  /**
+   * الاستماع لتغيرات جلسة المستخدم من Supabase Auth
+   */
+  onAuthStateChange(callback) {
+    return supabase.auth.onAuthStateChange(async (event, session) => {
+      let profile = null;
+      if (session?.user) {
+        profile = await this.getCurrentStaffProfile(session.user.id);
+      }
+      callback(event, session, profile);
+    });
   }
 };
+

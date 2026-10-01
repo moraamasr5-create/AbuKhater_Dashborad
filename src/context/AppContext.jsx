@@ -1,7 +1,16 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import { API_CONFIG } from '../config/apiConfig';
-import { supabaseService, processPendingSync } from '../services/supabaseService';
+import {
+  supabaseService,
+  processPendingSync,
+  getPendingQueue,
+  savePendingQueue,
+  getFailedQueue,
+  clearFailedQueue,
+  retryFailedQueue,
+  onQueueChange
+} from '../services/supabaseService';
 import { attachReceiptToOrder } from '../services/storageService';
 import { printerService } from '../services/printerService';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
@@ -18,25 +27,16 @@ import {
   capShiftMinutes
 } from '../utils/shiftLogic';
 import {
+  calculatePilotShiftSummary,
+  isOrderAssignedToPilot
+} from '../utils/pilotCalculations';
+import {
   isShiftOperationAllowed,
   isAutoCloseTimeNow,
   DEFAULT_SHIFT_OPEN_TIME,
   DEFAULT_SHIFT_CLOSE_TIME
 } from '../utils/shiftGovernance';
 import { safeParseOrder } from '../utils/safeOrderParser';
-
-/**
- * 🔴 الدالة دي هي المسؤولة عن إرسال أي تحديث عام للبيانات لـ Supabase
- */
-const sendToN8N = async (payload, type) => {
-  try {
-    if (type === 'SHIFT_CLOSE') {
-      await supabaseService.saveShiftReport(payload);
-    }
-  } catch (e) {
-    console.error('Supabase Integration Error:', e);
-  }
-};
 
 const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => {
   // حقول تُزامَن من Supabase — لا نُبقي النسخة المحلية إلا أثناء تحديث معلّق
@@ -66,11 +66,11 @@ const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => 
 };
 
 export const AppProvider = ({ children }) => {
-  // 🔴 نظام الأدوار (Role System)
-  // بنحدد هنا إذا كان المستخدم 'admin' (مدير) أو 'casher' (كاشير) أو '' (غير مسجل دخول)
-  const [userRole, setUserRole] = useState(() => {
-    return sessionStorage.getItem('b_delivery_session_user') || '';
-  });
+  // 🔐 نظام المصادقة والأدوار الموثقة من السيرفر (Supabase Auth & Staff RBAC)
+  const [currentUser, setCurrentUser] = useState(null);
+  const [currentStaff, setCurrentStaff] = useState(null);
+  const [userRole, setUserRole] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const [isThermalPrintMode, setIsThermalPrintMode] = useState(() => {
     return safeGetItem('is_thermal_print_mode') === 'true';
@@ -85,24 +85,69 @@ export const AppProvider = ({ children }) => {
     }
   }, [isThermalPrintMode]);
 
-  // حفظ الدور في المتصفح ودور الجلسة
+  // 🔐 استعادة جلسة Supabase Auth والتحقق من صلاحية الموظف في السيرفر
   useEffect(() => {
-    if (userRole) {
-      sessionStorage.setItem('b_delivery_session_user', userRole);
-    } else {
-      sessionStorage.removeItem('b_delivery_session_user');
-    }
-  }, [userRole]);
+    let isMounted = true;
 
-  // تهيئة كلمات المرور الافتراضية إذا لم تكن موجودة
-  useEffect(() => {
-    if (!safeGetItem('b_delivery_password_admin')) {
-      safeSetItem('b_delivery_password_admin', '8080');
-    }
-    if (!safeGetItem('b_delivery_password_casher')) {
-      safeSetItem('b_delivery_password_casher', '8080');
-    }
+    const restoreSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user && isMounted) {
+          const profile = await supabaseService.getCurrentStaffProfile(session.user.id);
+          if (profile && profile.is_active) {
+            setCurrentUser(session.user);
+            setCurrentStaff(profile);
+            setUserRole(profile.role);
+          } else {
+            await supabaseService.signOutStaff();
+            setCurrentUser(null);
+            setCurrentStaff(null);
+            setUserRole('');
+          }
+        }
+      } catch (err) {
+        console.warn('[AuthInit] Error restoring session:', err);
+      } finally {
+        if (isMounted) setIsAuthLoading(false);
+      }
+    };
+
+    restoreSession();
+
+    const { data: authListener } = supabaseService.onAuthStateChange(async (event, session, profile) => {
+      if (!isMounted) return;
+      if (session?.user && profile && profile.is_active) {
+        setCurrentUser(session.user);
+        setCurrentStaff(profile);
+        setUserRole(profile.role);
+      } else if (event === 'SIGNED_OUT' || !session) {
+        setCurrentUser(null);
+        setCurrentStaff(null);
+        setUserRole('');
+      }
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+      authListener?.subscription?.unsubscribe?.();
+    };
   }, []);
+
+  const loginStaff = async ({ email, password }) => {
+    const { user, profile } = await supabaseService.signInStaff({ email, password });
+    setCurrentUser(user);
+    setCurrentStaff(profile);
+    setUserRole(profile.role);
+    return profile;
+  };
+
+  const logoutStaff = async () => {
+    await supabaseService.signOutStaff();
+    setCurrentUser(null);
+    setCurrentStaff(null);
+    setUserRole('');
+  };
 
   const [orders, setOrders] = useState([]);
 
@@ -164,6 +209,13 @@ export const AppProvider = ({ children }) => {
     };
 
     loadConfig();
+
+    // جلب تقارير الورديات السابقة المعتمدة من قاعدة البيانات
+    supabaseService.fetchShiftReports().then(reports => {
+      if (reports && reports.length > 0) {
+        setDailyReports(reports);
+      }
+    }).catch(err => console.warn('[DailyReports] Could not load reports:', err?.message));
 
     // أي تعديل للأوقات من قاعدة البيانات يُطبَّق فوراً على كل المستخدمين
     configSub = supabaseService.subscribeToAppConfig(() => {
@@ -227,16 +279,45 @@ export const AppProvider = ({ children }) => {
     return () => clearInterval(timer);
   }, [currentShift]);
 
-  // 🔥 3. Real-time Dashboard (Supabase Live System)
+  // 🔥 3. Real-time Dashboard & Offline Resilience (Supabase Live System)
   const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
   const pendingPilotUpdatesRef = useRef(new Set()); // pilot ids with in-flight DB writes
   const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
 
+  // 🌐 إدارة حالة الاتصال وطابور المزامنة المحلي
+  const [connectionStatus, setConnectionStatus] = useState(navigator.onLine ? 'connected' : 'disconnected');
+  const [queueStatus, setQueueStatus] = useState({ pending: 0, failed: 0 });
+  const [failedQueueItems, setFailedQueueItems] = useState([]);
+
+  useEffect(() => {
+    // 1. مراقبة طابور العمليات المعلقة والفاشلة نهائياً
+    const unsubQueue = onQueueChange((status) => {
+      setQueueStatus(status);
+      setFailedQueueItems(getFailedQueue());
+    });
+
+    const handleOffline = () => {
+      console.warn('🔴 انقطع الاتصال بالإنترنت');
+      setConnectionStatus('disconnected');
+    };
+
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      unsubQueue();
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   /**
    * يُحدّث حالة الطلب في Supabase مع حماية من التحديثات المكررة أثناء الـ polling
    */
   const updateExternalOrderStatus = async (orderId, newStatus, reason = null, extraFields = {}) => {
+    if (!orderId) {
+      console.warn('⚠️ updateExternalOrderStatus skipped: orderId (supabaseId) is missing');
+      return;
+    }
     pendingUpdatesRef.current.add(String(orderId));
     try {
       await supabaseService.updateOrderStatus(orderId, newStatus, reason, extraFields);
@@ -254,7 +335,7 @@ export const AppProvider = ({ children }) => {
 
     let ordersSub, pilotsSub, resSub;
 
-    const fetchInitialData = async () => {
+    const fetchInitialData = async (trigger = 'mount') => {
       try {
         const [fetchedOrders, fetchedPilots, fetchedRes] = await Promise.all([
           supabaseService.fetchOrders(currentShift?.id),
@@ -276,65 +357,152 @@ export const AppProvider = ({ children }) => {
 
             if (newOrdersForAudio.length > 0) {
               new Audio(API_CONFIG.SOUNDS.NEW_ORDER).play().catch(() => { });
-              logAction('LIVE_SYNC', `Supabase Sync: Received ${newOrdersForAudio.length} new orders`, 'System');
+              logAction('LIVE_SYNC', `Supabase: وصول ${newOrdersForAudio.length} طلب جديد`, 'System');
+            } else if (trigger === 'realtime') {
+              logAction('LIVE_SYNC', `Supabase Realtime: تحديث فوري لحظي`, 'System');
             }
 
-            const LOCAL_ONLY_FIELDS = ['pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 'startTime', 'endTime', 'failureReason', 'cancellationReason', 'cancelledAt', 'logs', 'shiftId'];
+            // 🛡️ LOCAL_ONLY_FIELDS: حقول تشغيلية محلية لا يتم مسحها إطلاقاً أثناء استلام بيانات Supabase
+            const LOCAL_ONLY_FIELDS = [
+              'pilotId', 'deliveryId', 'assignedAt', 'confirmedAt', 
+              'startTime', 'endTime', 'failureReason', 'cancellationReason', 
+              'cancelledAt', 'logs', 'shiftId', 'notes', 'internalNotes', 
+              'customerNotes', 'receiptUploadStatus', 'originalId'
+            ];
+            const matchedPrevIds = new Set();
 
             const mergedOrders = fetchedOrders.map(fo => {
-              // Try to find the local order matching this fetched order uniquely by supabaseId first
+              // البحث عن الطلب المحلي المطابق أولاً بـ supabaseId ثم بـ originalId للطلبات اليدوية
               let existing = prev.find(o => o.supabaseId === fo.supabaseId);
               if (!existing) {
-                // Fallback to matching by originalId/id for pending manual orders that don't have a supabaseId yet
                 existing = prev.find(o => !o.supabaseId && (o.originalId || o.id) === fo.originalId);
               }
               if (!existing) return fo;
 
-              const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
-              const localIsNewer = existing.confirmedAt || existing.assignedAt || existing.startTime;
+              matchedPrevIds.add(existing.id);
 
-              const mergedStatus = isPending ? existing.status : (localIsNewer ? existing.status : fo.status);
+              // 🛡️ حماية ضد Race Condition دون تجميد الحالة للأبد:
+              // 1. إذا كان الطلب قيد التحديث في الـ DB حالياً (isPending)
+              // 2. إذا كان الطلب محلياً في فترة مهلة التراجع والتعديل (pending_timer)
+              // 3. عدا ذلك: حالة Supabase (fo.status) هي المصدر الحقيقي المعتمد المتزامن بين جميع الأجهزة
+              const isPending = pendingUpdatesRef.current.has(String(fo.supabaseId));
+              const isInGracePeriod = existing.status === 'pending_timer';
+
+              const mergedStatus = (isPending || isInGracePeriod) ? existing.status : fo.status;
 
               const localFields = {};
               LOCAL_ONLY_FIELDS.forEach(f => {
                 if (existing[f] !== undefined) localFields[f] = existing[f];
               });
 
-              return { ...fo, ...localFields, status: mergedStatus };
+              // إسناد الطيار: إذا كان قيد التحديث محلياً نُبقي المحلي، وإلا فبيانات السيرفر هي المعتمدة
+              const effectivePilotId = isPending ? (existing.pilotId || fo.pilotId) : (fo.pilotId || existing.pilotId);
+              const effectiveDeliveryId = isPending ? (existing.deliveryId || fo.deliveryId) : (fo.deliveryId || existing.deliveryId);
+
+              // دمج حقيقي (Merge وليس Full-Replace) للحفاظ على أي بيانات محلية وملاحظات
+              return {
+                ...existing,
+                ...fo,
+                ...localFields,
+                id: existing.id || fo.id,
+                originalId: existing.originalId || fo.originalId,
+                pilotId: effectivePilotId,
+                deliveryId: effectiveDeliveryId,
+                status: mergedStatus
+              };
             });
 
-            const manualOrders = prev.filter(p => !p.supabaseId);
+            const unmatchedManualOrders = prev.filter(p => !p.supabaseId && !matchedPrevIds.has(p.id));
 
-            return [...mergedOrders, ...manualOrders];
+            return [...mergedOrders, ...unmatchedManualOrders];
           });
         }
+        return fetchedOrders;
       } catch (err) {
         console.error('📡 Supabase Fetch Error:', err);
+        return null;
       }
     };
 
-    fetchInitialData();
+    // 🌐 معالجة عودة الاتصال المرتبة: الطابور أولاً ثم الجلب (Queue First, Then Fetch)
+    const handleReconnect = async () => {
+      console.log('🌐 استشعار عودة الاتصال: معالجة طابور العمليات المحفوظة أولاً...');
+      setConnectionStatus('reconnecting');
+      try {
+        await processPendingSync();
+      } catch (e) {
+        console.warn('⚠️ خطأ أثناء تفريغ الطابور:', e);
+      }
+      await fetchInitialData('reconnect');
+      setConnectionStatus('connected');
+    };
 
-    // 🚀 Subscribing to Realtime Database Changes
-    ordersSub = supabaseService.subscribeToOrders(() => {
-      fetchInitialData(); // Re-fetch all data gently on change
-    });
+    const handleOnline = () => {
+      handleReconnect();
+    };
 
-    pilotsSub = supabaseService.subscribeToDrivers(() => {
-      supabaseService.fetchDeliveryDrivers().then(fetched => {
-        if (fetched) setPilots(prev => mergePilots(prev, fetched, pendingPilotUpdatesRef.current));
-      });
-    });
+    window.addEventListener('online', handleOnline);
 
-    resSub = supabaseService.subscribeToReservations(() => {
-      supabaseService.fetchReservations().then(setReservations);
-    });
+    // التحميل المبدئي عند بدء الشيفت
+    fetchInitialData('mount');
 
-    // Fallback polling just in case WebSocket drops
-    const pollTimer = setInterval(fetchInitialData, 30000);
+    // 🚀 القناة الأساسية: التحديث اللحظي عبر WebSocket مع تتبع حالة الاتصال
+    ordersSub = supabaseService.subscribeToOrders(
+      () => {
+        fetchInitialData('realtime');
+      },
+      (status) => {
+        if (status === 'SUBSCRIBED') {
+          if (connectionStatus !== 'connected') {
+            handleReconnect();
+          }
+        } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
+
+    pilotsSub = supabaseService.subscribeToDrivers(
+      () => {
+        supabaseService.fetchDeliveryDrivers().then(fetched => {
+          if (fetched) setPilots(prev => mergePilots(prev, fetched, pendingPilotUpdatesRef.current));
+        });
+      },
+      (status) => {
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
+
+    resSub = supabaseService.subscribeToReservations(
+      () => {
+        supabaseService.fetchReservations().then(setReservations);
+      },
+      (status) => {
+        if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          setConnectionStatus('disconnected');
+        }
+      }
+    );
+
+    // 🛡️ شبكة الأمان الصامتة: Polling كل 30 ثانية في الخلفية
+    const pollTimer = setInterval(async () => {
+      if (!navigator.onLine) {
+        setConnectionStatus('disconnected');
+        return;
+      }
+      const fetched = await fetchInitialData('silent_poll');
+      if (fetched === null && !navigator.onLine) {
+        setConnectionStatus('disconnected');
+      } else if (fetched !== null && connectionStatus === 'disconnected') {
+        setConnectionStatus('connected');
+      }
+    }, 30000);
 
     return () => {
       clearInterval(pollTimer);
+      window.removeEventListener('online', handleOnline);
       if (ordersSub) ordersSub.unsubscribe();
       if (pilotsSub) pilotsSub.unsubscribe();
       if (resSub) resSub.unsubscribe();
@@ -347,7 +515,7 @@ export const AppProvider = ({ children }) => {
     setPilots(prev => {
       let changed = false;
       const updated = prev.map(p => {
-        const finishedCount = orders.filter(o => String(o.pilotId) === String(p.id) && (o.status === 'completed' || o.status === 'delivered')).length;
+        const finishedCount = orders.filter(o => isOrderAssignedToPilot(o, p.id) && (o.status === 'completed' || o.status === 'delivered')).length;
         if (p.ordersCount !== finishedCount) {
           changed = true;
           return { ...p, ordersCount: finishedCount };
@@ -554,13 +722,23 @@ export const AppProvider = ({ children }) => {
     };
 
     try {
-      // استدعاء RPC close_shift من خلال saveShiftReport
-      await supabaseService.saveShiftReport(snapshot);
+      // استدعاء RPC close_shift من خلال saveShiftReport المعتمدة من السيرفر
+      const serverStats = await supabaseService.saveShiftReport(snapshot);
 
-      setDailyReports(prev => [snapshot, ...prev]);
+      const authoritativeReport = {
+        ...snapshot,
+        ...(serverStats || {}),
+        ordersCount: serverStats?.ordersCount ?? snapshot.ordersCount,
+        totalDeliveryFees: serverStats?.totalDeliveryFees ?? snapshot.totalDeliveryFees,
+        totalAttendancePay: serverStats?.totalAttendancePay ?? snapshot.totalAttendancePay,
+        totalPilotDues: serverStats?.totalPilotDues ?? snapshot.totalPilotDues,
+        pilotStats: serverStats?.pilotStats ?? snapshot.pilotStats,
+        financials: serverStats?.financials ?? {}
+      };
+
+      setDailyReports(prev => [authoritativeReport, ...prev]);
 
       logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
-      sendToN8N(snapshot, 'SHIFT_CLOSE');
 
       // Bulk reset all pilots in the Supabase delivery table
       const allPilotIds = pilots.map(p => p.id);
@@ -629,12 +807,14 @@ export const AppProvider = ({ children }) => {
    * يحفظ طلب الكول سنتر/التابلت في Supabase أولاً ثم يرفع الإيصال بشكل غير متزامن
    */
   const persistManualOrderToSupabase = async (localOrderId, orderPayload) => {
-    const persistableSources = ['manual', 'talabat'];
-    if (!persistableSources.includes(orderPayload.source)) return;
+    const persistableSources = ['manual', 'talabat', 'external', 'trip', 'restaurant'];
+    const source = orderPayload.source || (orderPayload.type === 'trip' ? 'external' : 'manual');
+    if (!persistableSources.includes(source)) return;
 
     try {
       const row = await supabaseService.createManualOrder({
         ...orderPayload,
+        source,
         shiftId: currentShift?.id
       });
 
@@ -717,9 +897,17 @@ export const AppProvider = ({ children }) => {
 
     setOrders(prev => [newOrder, ...prev]);
     logAction('ORDER_CREATE', `Order #${orderData.id} created`, 'Operator');
-    sendToN8N(newOrder, 'ORDER_CREATE');
 
-    persistManualOrderToSupabase(finalId, { ...orderFields, id: orderData.id });
+    persistManualOrderToSupabase(finalId, {
+      ...orderFields,
+      id: orderData.id,
+      source: orderData.source || (orderData.type === 'trip' ? 'external' : 'manual'),
+      total: totalAmount,
+      deliveryFee,
+      serviceFee,
+      paidNow,
+      remainingAmount
+    });
 
     setTimeout(() => {
       setOrders(currentOrders => currentOrders.map(o =>
@@ -785,7 +973,6 @@ export const AppProvider = ({ children }) => {
         : o
     ));
     logAction('ORDER_CANCEL', `Order #${orderId} cancelled. Reason: ${reason}`, 'Supervisor');
-    sendToN8N({ ...order, status: 'cancelled', cancellationReason: reason }, 'ORDER_CANCEL');
     if (order.supabaseId) {
       updateExternalOrderStatus(order.supabaseId, 'cancelled', reason);
     }
@@ -954,7 +1141,6 @@ export const AppProvider = ({ children }) => {
     }
 
     logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
-    sendToN8N({ ...order, status: 'delivered', endTime: nowTime, deliveredAt: nowTime }, 'ORDER_COMPLETE');
 
     if (!order.supabaseId) return;
 
@@ -1006,7 +1192,6 @@ export const AppProvider = ({ children }) => {
     }
 
     logAction('DELIVERY_FAIL', `Order #${orderId} failed delivery. Reason: ${reason}`, 'Supervisor');
-    sendToN8N({ ...order, status: 'failed_delivery', failureReason: reason, endTime: nowTime, failedAt: nowTime }, 'ORDER_FAIL');
 
     if (!order.supabaseId) return;
 
@@ -1058,7 +1243,7 @@ export const AppProvider = ({ children }) => {
 
       let sessionMinutes = 0;
       if (newStatus === 'closed' && p.lastOpenedAt) {
-        sessionMinutes = calculateDelayMinutes(p.lastOpenedAt, closedAt);
+        sessionMinutes = capShiftMinutes(calculateDelayMinutes(p.lastOpenedAt, closedAt));
       }
 
       const updates = newStatus === 'open'
@@ -1067,7 +1252,7 @@ export const AppProvider = ({ children }) => {
           state: 'off',
           lastClosedAt: closedAt,
           shiftUsed: true,
-          totalMinutes: (p.totalMinutes || 0) + sessionMinutes
+          totalMinutes: capShiftMinutes((p.totalMinutes || 0) + sessionMinutes)
         };
 
       return { ...p, shiftStatus: newStatus, ...updates };
@@ -1093,81 +1278,13 @@ export const AppProvider = ({ children }) => {
    * يُستدعى في كل render للـ Dashboard
    */
   const activeStats = () => {
-    const finishedOrders = orders.filter(o => o.status === 'completed' || o.status === 'delivered');
-    const failedOrders = orders.filter(o => o.status === 'failed_delivery');
-
     const pilotPerformance = pilots.map(p => {
-      const pOrders = finishedOrders.filter(o => String(o.pilotId) === String(p.id));
-      const pFailed = failedOrders.filter(o => String(o.pilotId) === String(p.id));
-
-      // Calculate current active minutes if still open
+      // Calculate current active minutes if still open (capped to max shift minutes)
       const currentActiveSession = (p.shiftStatus === 'open' && p.lastOpenedAt)
-        ? calculateDelayMinutes(p.lastOpenedAt)
+        ? capShiftMinutes(calculateDelayMinutes(p.lastOpenedAt))
         : 0;
 
-      const totalMinutes = (p.totalMinutes || 0) + currentActiveSession;
-
-      let feeEarnings = 0;
-      let restaurantEarnings = 0;
-      let talabatEarnings = 0;
-      let onlineEarnings = 0;
-      let tripEarnings = 0;
-      let ordersCount = 0;
-      let tripsCount = 0;
-      let restaurantOrdersCount = 0;
-      let talabatOrdersCount = 0;
-      let onlineOrdersCount = 0;
-
-      [...pOrders, ...pFailed].forEach(o => {
-        const fee = Number(o.deliveryFee) || 0;
-        const source = o.source || (o.type === 'trip' ? 'external' : o.type === 'talabat' || o.type === 'external' ? 'talabat' : 'manual');
-        const isCompleted = o.status === 'completed' || o.status === 'delivered';
-
-        if (source === 'external') {
-          if (isCompleted) {
-            feeEarnings += fee;
-            tripEarnings += fee;
-          }
-          tripsCount++;
-        } else {
-          const share = fee / 2;
-          if (isCompleted) {
-            feeEarnings += share;
-            ordersCount++;
-          }
-
-          if (source === 'online') {
-            if (isCompleted) onlineEarnings += share;
-            onlineOrdersCount++;
-          } else if (source === 'talabat') {
-            if (isCompleted) talabatEarnings += share;
-            talabatOrdersCount++;
-          } else {
-            if (isCompleted) restaurantEarnings += share;
-            restaurantOrdersCount++;
-          }
-        }
-      });
-
-      const attendancePay = Math.floor(capShiftMinutes(totalMinutes) / 35) * 15;
-
-      return {
-        ...p,
-        ordersCount,
-        tripsCount,
-        restaurantOrdersCount,
-        talabatOrdersCount,
-        onlineOrdersCount,
-        failedCount: pFailed.length,
-        totalMinutes,
-        feeEarnings,
-        restaurantEarnings,
-        talabatEarnings,
-        onlineEarnings,
-        tripEarnings,
-        attendancePay,
-        totalEarnings: feeEarnings + attendancePay
-      };
+      return calculatePilotShiftSummary(p, orders, currentActiveSession);
     });
 
     const delays = orders
@@ -1243,7 +1360,6 @@ export const AppProvider = ({ children }) => {
 
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'confirmed', refNumber: refNum, paymentProof, confirmedAt: getSafeISOTime() } : r));
     logAction('RES_CONFIRM', `Reservation ${id} confirmed with Ref: ${refNum}`, 'Manager');
-    sendToN8N({ ...existing, status: 'confirmed', refNumber: refNum, paymentProof }, 'RESERVATION_CONFIRM');
   };
 
   const deleteReservation = async (id) => {
@@ -1314,6 +1430,7 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       orders, pilots, currentShift, dailyReports, auditLogs, reservations,
+      currentUser, currentStaff, isAuthLoading, loginStaff, logoutStaff,
       userRole, setUserRole, // 🔐 تصدير بيانات الدور لباقي السيستم
       isThermalPrintMode, setIsThermalPrintMode,
       // 🕐 حوكمة أوقات الورديات (المصدر: قاعدة البيانات)
@@ -1332,7 +1449,14 @@ export const AppProvider = ({ children }) => {
       activeStats: computedStats,
       recalcStats: activeStats,     // expose raw function for manual recalc if needed
       assignPilot, startDelivery, getSuggestedPilot,
-      sendToN8N, syncExternalOrders
+      syncExternalOrders,
+      // 🌐 حالة الاتصال والعمليات المعلقة والفاشلة
+      connectionStatus,
+      pendingQueueCount: queueStatus.pending,
+      failedQueueCount: queueStatus.failed,
+      failedQueueItems,
+      clearFailedQueue,
+      retryFailedQueue
     }}>
       {children}
     </AppContext.Provider>

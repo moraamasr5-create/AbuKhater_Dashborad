@@ -5,7 +5,7 @@ import { safeGetItem } from '../../utils/safeStorage';
 
 
 const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenSecurity }) => {
-    const { isShiftOpen, openShift, closeShift, orders, userRole, setUserRole, isThermalPrintMode, setIsThermalPrintMode } = useApp();
+    const { isShiftOpen, openShift, closeShift, orders, userRole, logoutStaff, currentStaff, isThermalPrintMode, setIsThermalPrintMode } = useApp();
 
     // مؤشر الاتصال: يتابع حالة الشبكة بدون أي مكتبة خارجية
     const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -33,6 +33,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
         { id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
         { id: 'feedback', label: 'الشكاوى والمقترحات', icon: MessageSquare, roles: ['admin'] },
         { id: 'reports', label: 'التقارير', icon: BarChart3, roles: ['admin'] },
+        { id: 'settings', label: 'الإعدادات والأسعار', icon: Settings, roles: ['admin'] },
     ];
 
     const menuItems = allMenuItems.filter(item => item.roles.includes(userRole));
@@ -47,9 +48,28 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
 
                 {/* 🛡️ شارة المستخدم الحالي النشط */}
                 <div
-                    style={{ background: userRole === 'admin' ? 'rgba(59, 130, 246, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: userRole === 'admin' ? '#60a5fa' : '#34d399', border: '1px solid currentColor', padding: '6px 16px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 'bold' }}
+                    style={{
+                        background: userRole === 'admin' ? 'rgba(59, 130, 246, 0.1)' : userRole === 'driver' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                        color: userRole === 'admin' ? '#60a5fa' : userRole === 'driver' ? '#f59e0b' : '#34d399',
+                        border: '1px solid currentColor',
+                        padding: '6px 16px',
+                        borderRadius: '20px',
+                        fontSize: '0.8rem',
+                        fontWeight: 'bold',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '2px'
+                    }}
                 >
-                    {userRole === 'admin' ? '👑 مشرف النظام (Admin)' : '👤 الكاشير (Casher)'}
+                    <span>
+                        {userRole === 'admin' ? '👑 مشرف النظام (Admin)' : userRole === 'driver' ? '🛵 كابتن التوصيل (Driver)' : '👤 الكاشير (Casher)'}
+                    </span>
+                    {currentStaff?.display_name && (
+                        <span style={{ fontSize: '0.72rem', opacity: 0.85, fontWeight: 'normal' }}>
+                            {currentStaff.display_name}
+                        </span>
+                    )}
                 </div>
             </div>
 
@@ -195,17 +215,16 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 {/* 🚪 صف الأزرار السفلية (تسجيل الخروج + مفتاح الأمان الصغير للأدمن) */}
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                     <button
-                        onClick={() => {
+                        onClick={async () => {
                             if (confirm('هل أنت متأكد من تسجيل الخروج؟')) {
-                                sessionStorage.removeItem('b_delivery_session_user');
-                                setUserRole('');
+                                await logoutStaff();
                             }
                         }}
                         className="btn-primary"
                         style={{ flex: 1, background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px' }}
                     >
                         <LogOut size={18} />
-                        <span>تبديل المستخدم</span>
+                        <span>تسجيل الخروج</span>
                     </button>
 
                     {userRole === 'admin' && (

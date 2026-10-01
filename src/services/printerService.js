@@ -1,7 +1,9 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
 // Cache to prevent duplicate printing across app re-renders
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
+
 const printedCacheKey = 'PRINTED_ORDERS_CACHE';
+
 const getPrintedCache = () => {
   try {
     return JSON.parse(safeGetItem(printedCacheKey)) || {};
@@ -10,12 +12,38 @@ const getPrintedCache = () => {
     return {};
   }
 };
+
 const setPrintedCache = (cache) => {
   try {
     safeSetItem(printedCacheKey, JSON.stringify(cache));
   } catch (err) {
     console.warn('Cache write error:', err);
   }
+};
+
+/**
+ * Escapes unsafe characters in user-provided strings to prevent HTML/XSS injection
+ * @param {any} unsafe - The raw value to escape
+ * @returns {string} Sanitized string safe for HTML interpolation
+ */
+export const escapeHtml = (unsafe) => {
+  if (unsafe === null || unsafe === undefined) return '';
+  return String(unsafe)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+};
+
+/**
+ * Sanitizes multi-line notes safely converting newlines to <br/> after escaping HTML
+ * @param {any} notes - The raw notes string
+ * @returns {string} Sanitized HTML string
+ */
+export const sanitizeNotes = (notes) => {
+  if (!notes) return '';
+  return escapeHtml(notes).replace(/\r?\n/g, '<br/>');
 };
 
 class PrinterService {
@@ -76,12 +104,13 @@ class PrinterService {
   }
 
   generateHtmlWrapper(title, content) {
+    const safeTitle = escapeHtml(title);
     return `
       <!DOCTYPE html>
       <html dir="rtl">
       <head>
         <meta charset="utf-8">
-        <title>${title}</title>
+        <title>${safeTitle}</title>
         <style>
           @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;800;900&display=swap');
           
@@ -249,24 +278,34 @@ class PrinterService {
 
   // 1. Kitchen Receipt (بون المطبخ)
   async printKitchenReceipt(order, forceReprint = false, pilotName = null) {
-    const itemsHtml = (order.items || []).map(i => `
-      <tr>
-        <td class="bold" style="font-size:16px;">${i.name} ${i.notes ? `<div style="font-size:12px;color:#666;">${i.notes}</div>` : ''}</td>
-        <td class="bold center" style="font-size:18px;">${i.count || i.quantity || 1}</td>
-      </tr>
-    `).join('');
+    const safeOriginalId = escapeHtml(order.originalId || order.id || '');
+    const safeCustomerName = escapeHtml(order.customerName || '');
+    const safeArea = escapeHtml(order.area || '');
+    const safePilotName = escapeHtml(pilotName || order.pilotName || '');
+
+    const itemsHtml = (order.items || []).map(i => {
+      const safeItemName = escapeHtml(i.name || 'صنف');
+      const safeNotes = i.notes ? sanitizeNotes(i.notes) : '';
+      const safeCount = Number(i.count || i.quantity || 1);
+      return `
+        <tr>
+          <td class="bold" style="font-size:16px;">${safeItemName} ${safeNotes ? `<div style="font-size:12px;color:#666;">${safeNotes}</div>` : ''}</td>
+          <td class="bold center" style="font-size:18px;">${safeCount}</td>
+        </tr>
+      `;
+    }).join('');
 
     const content = `
       <div class="header">
         <div class="title">بون المطبخ (KITCHEN)</div>
-        <div class="subtitle">رقم الطلب: #${order.originalId || order.id}</div>
+        <div class="subtitle">رقم الطلب: #${safeOriginalId}</div>
         <div class="subtitle">${order.source === 'online' ? 'توصيل (Delivery)' : 'تيك أواي / صالة'}</div>
       </div>
       <div class="section">
         <div class="flex"><span>الوقت:</span> <span class="bold">${new Date(order.timestamp || Date.now()).toLocaleTimeString('ar-EG')}</span></div>
-        ${order.customerName ? `<div class="flex"><span>العميل:</span> <span class="bold">${order.customerName}</span></div>` : ''}
-        ${order.area ? `<div class="flex"><span>العنوان:</span> <span class="bold">${order.area}</span></div>` : ''}
-        ${(pilotName || order.pilotName) ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${pilotName || order.pilotName}</div>` : ''}
+        ${safeCustomerName ? `<div class="flex"><span>العميل:</span> <span class="bold">${safeCustomerName}</span></div>` : ''}
+        ${safeArea ? `<div class="flex"><span>العنوان:</span> <span class="bold">${safeArea}</span></div>` : ''}
+        ${safePilotName ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${safePilotName}</div>` : ''}
       </div>
       <div class="solid-line"></div>
       <table class="items-table">
@@ -284,37 +323,55 @@ class PrinterService {
       <div class="footer">أبو خاطر للتوصيل • نسخة المطبخ</div>
     `;
 
-    const html = this.generateHtmlWrapper(`Kitchen Ticket #${order.originalId || order.id}`, content);
+    const html = this.generateHtmlWrapper(`Kitchen Ticket #${safeOriginalId}`, content);
     return await this.printReceiptHtml(html, order.id, 'kitchen', forceReprint);
   }
 
   // 2. Cashier Receipt (فاتورة العميل / الكاشير)
   async printCashierReceipt(order, forceReprint = false, pilotName = null) {
-    const itemsHtml = (order.items || []).map(i => `
-      <tr>
-        <td>${i.name}</td>
-        <td class="center">${i.count || i.quantity || 1}</td>
-        <td>${i.price || 0} ج</td>
-        <td>${(i.count || i.quantity || 1) * (i.price || 0)} ج</td>
-      </tr>
-    `).join('');
+    const safeOriginalId = escapeHtml(order.originalId || order.id || '');
+    const safeCustomerName = escapeHtml(order.customerName || 'عميل');
+    const safePhone = escapeHtml(order.phone || 'غير مسجل');
+    const safeArea = escapeHtml(order.area || '');
+    const safePaymentMethod = escapeHtml(order.paymentMethod || 'كاش');
+    const safePilotName = escapeHtml(pilotName || order.pilotName || '');
 
-    const subtotal = order.subtotal || Math.max(0, order.total - (order.deliveryFee || 0));
+    const itemsHtml = (order.items || []).map(i => {
+      const safeItemName = escapeHtml(i.name || 'صنف');
+      const safeCount = Number(i.count || i.quantity || 1);
+      const safePrice = Number(i.price || 0);
+      const safeTotal = safeCount * safePrice;
+      return `
+        <tr>
+          <td>${safeItemName}</td>
+          <td class="center">${safeCount}</td>
+          <td>${safePrice} ج</td>
+          <td>${safeTotal} ج</td>
+        </tr>
+      `;
+    }).join('');
+
+    const subtotal = Number(order.subtotal) || Math.max(0, Number(order.total || 0) - Number(order.deliveryFee || 0));
+    const deliveryFee = Number(order.deliveryFee || 0);
+    const serviceFee = Number(order.serviceFee || 0);
+    const total = Number(order.total || 0);
+    const paidNow = Number(order.paidNow || 0);
+    const remainingAmount = Number(order.remainingAmount || 0);
 
     const content = `
       <div class="header">
         <div class="title">مطعم أبو خاطر</div>
         <div class="subtitle">إدارة وتوصيل الطلبات</div>
         <div class="dashed-line"></div>
-        <div class="bold" style="font-size:18px;">فاتورة رقم #${order.originalId || order.id}</div>
+        <div class="bold" style="font-size:18px;">فاتورة رقم #${safeOriginalId}</div>
       </div>
       <div class="section">
         <div class="flex"><span>التاريخ والوقت:</span> <span class="bold">${new Date(order.timestamp || Date.now()).toLocaleString('ar-EG')}</span></div>
-        <div class="flex"><span>اسم العميل:</span> <span class="bold">${order.customerName || 'عميل'}</span></div>
-        <div class="flex"><span>رقم الهاتف:</span> <span class="bold">${order.phone || 'غير مسجل'}</span></div>
-        ${order.area ? `<div class="flex"><span>العنوان:</span> <span class="bold">${order.area}</span></div>` : ''}
-        <div class="flex"><span>طريقة الدفع:</span> <span class="bold">${order.paymentMethod || 'كاش'}</span></div>
-        ${(pilotName || order.pilotName) ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${pilotName || order.pilotName}</div>` : ''}
+        <div class="flex"><span>اسم العميل:</span> <span class="bold">${safeCustomerName}</span></div>
+        <div class="flex"><span>رقم الهاتف:</span> <span class="bold">${safePhone}</span></div>
+        ${safeArea ? `<div class="flex"><span>العنوان:</span> <span class="bold">${safeArea}</span></div>` : ''}
+        <div class="flex"><span>طريقة الدفع:</span> <span class="bold">${safePaymentMethod}</span></div>
+        ${safePilotName ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${safePilotName}</div>` : ''}
       </div>
       <div class="solid-line"></div>
       <table class="items-table" style="font-size:12px;">
@@ -333,12 +390,12 @@ class PrinterService {
       <div class="solid-line"></div>
       <div class="section" style="font-size:15px;">
         <div class="flex"><span>المجموع:</span> <span class="bold">${subtotal} ج.م</span></div>
-        ${order.deliveryFee > 0 ? `<div class="flex"><span>خدمة التوصيل:</span> <span class="bold">${order.deliveryFee} ج.م</span></div>` : ''}
-        ${order.serviceFee > 0 ? `<div class="flex"><span>الخدمة:</span> <span class="bold">${order.serviceFee} ج.م</span></div>` : ''}
+        ${deliveryFee > 0 ? `<div class="flex"><span>خدمة التوصيل:</span> <span class="bold">${deliveryFee} ج.م</span></div>` : ''}
+        ${serviceFee > 0 ? `<div class="flex"><span>الخدمة:</span> <span class="bold">${serviceFee} ج.م</span></div>` : ''}
         <div class="solid-line"></div>
-        <div class="flex" style="font-size:18px;font-weight:900;"><span>الإجمالي النهائي:</span> <span class="bold">${order.total} ج.م</span></div>
-        ${Number(order.paidNow) > 0 ? `<div class="flex" style="color:#10b981;"><span>المدفوع:</span> <span class="bold">${order.paidNow} ج.م</span></div>` : ''}
-        ${Number(order.remainingAmount) > 0 ? `<div class="flex" style="color:#ef4444;font-size:16px;"><span>المتبقي تحصيله:</span> <span class="bold">${order.remainingAmount} ج.م</span></div>` : ''}
+        <div class="flex" style="font-size:18px;font-weight:900;"><span>الإجمالي النهائي:</span> <span class="bold">${total} ج.م</span></div>
+        ${paidNow > 0 ? `<div class="flex" style="color:#10b981;"><span>المدفوع:</span> <span class="bold">${paidNow} ج.م</span></div>` : ''}
+        ${remainingAmount > 0 ? `<div class="flex" style="color:#ef4444;font-size:16px;"><span>المتبقي تحصيله:</span> <span class="bold">${remainingAmount} ج.م</span></div>` : ''}
       </div>
       <div class="dashed-line"></div>
       <div class="footer">
@@ -347,26 +404,33 @@ class PrinterService {
       </div>
     `;
 
-    const html = this.generateHtmlWrapper(`Cashier Receipt #${order.originalId || order.id}`, content);
+    const html = this.generateHtmlWrapper(`Cashier Receipt #${safeOriginalId}`, content);
     return await this.printReceiptHtml(html, order.id, 'cashier', forceReprint);
   }
 
   // 3. Daily Report (تقرير المبيعات اليومية)
   async printDailyReport(reportData) {
+    const totalSales = Number(reportData.totalSales || 0);
+    const totalOrders = Number(reportData.totalOrders || 0);
+    const completedOrders = Number(reportData.completedOrders || 0);
+    const cancelledOrders = Number(reportData.cancelledOrders || 0);
+    const totalDeliveryFees = Number(reportData.totalDeliveryFees || 0);
+    const totalCash = Number(reportData.totalCash || 0);
+
     const content = `
       <div class="header">
         <div class="title">التقرير اليومي الشامل</div>
         <div class="subtitle">${new Date().toLocaleDateString('ar-EG')}</div>
       </div>
       <div class="section" style="font-size:16px;">
-        <div class="flex"><span>إجمالي المبيعات:</span> <span class="bold">${reportData.totalSales} ج.م</span></div>
+        <div class="flex"><span>إجمالي المبيعات:</span> <span class="bold">${totalSales} ج.م</span></div>
         <div class="dashed-line"></div>
-        <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${reportData.totalOrders}</span></div>
-        <div class="flex"><span>الطلبات المكتملة:</span> <span class="bold" style="color:#10b981;">${reportData.completedOrders}</span></div>
-        <div class="flex"><span>الطلبات الملغية:</span> <span class="bold" style="color:#ef4444;">${reportData.cancelledOrders}</span></div>
+        <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${totalOrders}</span></div>
+        <div class="flex"><span>الطلبات المكتملة:</span> <span class="bold" style="color:#10b981;">${completedOrders}</span></div>
+        <div class="flex"><span>الطلبات الملغية:</span> <span class="bold" style="color:#ef4444;">${cancelledOrders}</span></div>
         <div class="dashed-line"></div>
-        <div class="flex"><span>إجمالي رسوم التوصيل:</span> <span class="bold">${reportData.totalDeliveryFees} ج.م</span></div>
-        <div class="flex"><span>إجمالي الكاش المحصل:</span> <span class="bold">${reportData.totalCash} ج.م</span></div>
+        <div class="flex"><span>إجمالي رسوم التوصيل:</span> <span class="bold">${totalDeliveryFees} ج.م</span></div>
+        <div class="flex"><span>إجمالي الكاش المحصل:</span> <span class="bold">${totalCash} ج.م</span></div>
       </div>
       <div class="solid-line"></div>
       <div class="footer">تم إصدار التقرير بواسطة النظام الآلي</div>
@@ -378,24 +442,30 @@ class PrinterService {
 
   // 4. Driver Report (تقرير الطيار)
   async printDriverReport(driverReport) {
+    const safeDriverName = escapeHtml(driverReport.name || 'طيار');
+    const ordersCount = Number(driverReport.ordersCount || 0);
+    const deliveredCount = Number(driverReport.deliveredCount || 0);
+    const returnedCount = Number(driverReport.returnedCount || 0);
+    const totalCollected = Number(driverReport.totalCollected || 0);
+
     const content = `
       <div class="header">
         <div class="title">تقرير وردية الطيار</div>
-        <div class="subtitle">الطيار: ${driverReport.name}</div>
+        <div class="subtitle">الطيار: ${safeDriverName}</div>
         <div class="subtitle">التاريخ: ${new Date().toLocaleDateString('ar-EG')}</div>
       </div>
       <div class="section" style="font-size:16px;">
-        <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${driverReport.ordersCount}</span></div>
-        <div class="flex"><span>الطلبات المسلمة:</span> <span class="bold" style="color:#10b981;">${driverReport.deliveredCount}</span></div>
-        <div class="flex"><span>الطلبات المرتجعة:</span> <span class="bold" style="color:#ef4444;">${driverReport.returnedCount}</span></div>
+        <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${ordersCount}</span></div>
+        <div class="flex"><span>الطلبات المسلمة:</span> <span class="bold" style="color:#10b981;">${deliveredCount}</span></div>
+        <div class="flex"><span>الطلبات المرتجعة:</span> <span class="bold" style="color:#ef4444;">${returnedCount}</span></div>
         <div class="solid-line"></div>
-        <div class="flex" style="font-size:20px;"><span>إجمالي التحصيل:</span> <span class="bold">${driverReport.totalCollected} ج.م</span></div>
+        <div class="flex" style="font-size:20px;"><span>إجمالي التحصيل:</span> <span class="bold">${totalCollected} ج.م</span></div>
       </div>
       <div class="dashed-line"></div>
       <div class="footer">توقيع الطيار: ...........................</div>
     `;
 
-    const html = this.generateHtmlWrapper(`Driver Report - ${driverReport.name}`, content);
+    const html = this.generateHtmlWrapper(`Driver Report - ${safeDriverName}`, content);
     return await this.printReceiptHtml(html, `DRIVER_${driverReport.id}_${Date.now()}`, 'report', true);
   }
 }
