@@ -924,8 +924,79 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 11. Menu Items & Availability (جدول menu_items الرسمي)
+  // 11. Menu Items & Categories (إدارة المنيو والأقسام الرسمية)
   // ─────────────────────────────────────────────────────────
+
+  /**
+   * يجلب كافة التصنيفات مرتبة حسب display_order
+   */
+  async fetchCategories() {
+    return withOfflineSupport('fetchCategories', async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('display_order', { ascending: true })
+        .order('name', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    }, null);
+  },
+
+  /**
+   * إضافة قسم جديد
+   */
+  async createCategory(categoryData) {
+    return withOfflineSupport('createCategory', async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .insert([{
+          name: categoryData.name.trim(),
+          slug: categoryData.slug?.trim() || categoryData.name.trim().toLowerCase().replace(/\s+/g, '-'),
+          display_order: Number(categoryData.display_order) || 0
+        }])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }, categoryData, true);
+  },
+
+  /**
+   * تعديل بيانات قسم
+   */
+  async updateCategory(id, categoryData) {
+    if (!id) return;
+    return withOfflineSupport('updateCategory', async () => {
+      const updatePayload = {};
+      if (categoryData.name !== undefined) updatePayload.name = categoryData.name.trim();
+      if (categoryData.slug !== undefined) updatePayload.slug = categoryData.slug.trim();
+      if (categoryData.display_order !== undefined) updatePayload.display_order = Number(categoryData.display_order);
+
+      const { data, error } = await supabase
+        .from('categories')
+        .update(updatePayload)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }, { id, categoryData }, true);
+  },
+
+  /**
+   * حذف قسم
+   */
+  async deleteCategory(id) {
+    if (!id) return;
+    return withOfflineSupport('deleteCategory', async () => {
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    }, { id }, true);
+  },
 
   /**
    * يجلب كافة أصناف المنيو مع التصنيفات للوحة التحكم
@@ -936,6 +1007,103 @@ export const supabaseService = {
       if (error) throw error;
       return data || [];
     }, null);
+  },
+
+  /**
+   * إنشاء صنف جديد في المنيو
+   */
+  async createMenuItem(itemData) {
+    return withOfflineSupport('createMenuItem', async () => {
+      const payload = {
+        name: itemData.name.trim(),
+        description: itemData.description?.trim() || null,
+        price: Number(itemData.price) || 0,
+        category_id: itemData.category_id || null,
+        image_url: itemData.image_url?.trim() || null,
+        status: itemData.status || 'available',
+        is_popular: Boolean(itemData.is_popular),
+        display_order: Number(itemData.display_order) || 0,
+        unit_type: itemData.unit_type || 'qty',
+        base_qty: Number(itemData.base_qty) || 1
+      };
+      const { data, error } = await supabase
+        .from('menu_items')
+        .insert([payload])
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }, itemData, true);
+  },
+
+  /**
+   * تعديل صنف بالكامل في المنيو
+   */
+  async updateMenuItem(id, itemData) {
+    if (!id) return;
+    return withOfflineSupport('updateMenuItem', async () => {
+      const payload = {
+        updated_at: new Date().toISOString()
+      };
+      if (itemData.name !== undefined) payload.name = itemData.name.trim();
+      if (itemData.description !== undefined) payload.description = itemData.description?.trim() || null;
+      if (itemData.price !== undefined) payload.price = Number(itemData.price) || 0;
+      if (itemData.category_id !== undefined) payload.category_id = itemData.category_id || null;
+      if (itemData.image_url !== undefined) payload.image_url = itemData.image_url?.trim() || null;
+      if (itemData.status !== undefined) payload.status = itemData.status;
+      if (itemData.is_popular !== undefined) payload.is_popular = Boolean(itemData.is_popular);
+      if (itemData.display_order !== undefined) payload.display_order = Number(itemData.display_order);
+      if (itemData.unit_type !== undefined) payload.unit_type = itemData.unit_type;
+      if (itemData.base_qty !== undefined) payload.base_qty = Number(itemData.base_qty);
+
+      const { data, error } = await supabase
+        .from('menu_items')
+        .update(payload)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data;
+    }, { id, itemData }, true);
+  },
+
+  /**
+   * حذف صنف من المنيو
+   */
+  async deleteMenuItem(id) {
+    if (!id) return;
+    return withOfflineSupport('deleteMenuItem', async () => {
+      const { error } = await supabase
+        .from('menu_items')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      return true;
+    }, { id }, true);
+  },
+
+  /**
+   * رفع صورة صنف إلى Supabase Storage
+   */
+  async uploadMenuImage(file) {
+    if (!file) throw new Error('الملف غير صالح');
+    const fileExt = file.name.split('.').pop() || 'jpg';
+    const fileName = `item_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
+    const filePath = `items/${fileName}`;
+
+    const { error } = await supabase.storage
+      .from('menu-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false
+      });
+    if (error) throw error;
+
+    const { data: publicData } = supabase.storage
+      .from('menu-images')
+      .getPublicUrl(filePath);
+
+    return publicData?.publicUrl || null;
   },
 
   /**

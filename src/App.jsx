@@ -100,9 +100,128 @@ const formatShift = (shiftStr) => {
   }).join(' - ');
 };
 
+// 🔐 مودال الرقم السري لتبديل حالة شيفت الطيار (بديل لـ prompt)
+const PilotPinModal = ({ isOpen, onClose, onConfirm, pilotName, isClosing }) => {
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState(false);
+
+  if (!isOpen) return null;
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px'
+    }}>
+      <div className="glass-card" style={{
+        width: '100%', maxWidth: '380px', padding: '24px',
+        background: '#131b2e', border: '1px solid var(--border)',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <KeyRound size={22} color="var(--accent)" />
+          <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: '800' }}>
+            {isClosing ? `إغلاق شيفت ${pilotName}` : `فتح شيفت ${pilotName}`}
+          </h3>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '16px' }}>
+          أدخل الرقم السري لتأكيد تغيير حالة الوردية:
+        </p>
+
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          if (pin === '123') {
+            onConfirm();
+            setPin('');
+            setError(false);
+          } else {
+            setError(true);
+          }
+        }}>
+          <input
+            autoFocus
+            type="password"
+            maxLength={6}
+            placeholder="الرقم السري (123)"
+            value={pin}
+            onChange={(e) => { setPin(e.target.value); setError(false); }}
+            style={{
+              width: '100%', padding: '12px', textAlign: 'center', fontSize: '1.2rem',
+              letterSpacing: '4px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${error ? 'var(--danger)' : 'var(--border)'}`,
+              borderRadius: '10px', color: 'white', marginBottom: error ? '6px' : '16px'
+            }}
+          />
+          {error && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '0 0 12px 0', textAlign: 'center', fontWeight: 'bold' }}>كلمة المرور غير صحيحة</p>}
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="submit"
+              className="btn-primary"
+              style={{ flex: 1, background: isClosing ? 'var(--danger)' : 'var(--accent)', color: isClosing ? '#fff' : '#000', fontWeight: '800' }}
+            >
+              {isClosing ? 'تأكيد الإغلاق' : 'تأكيد الفتح'}
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPin(''); setError(false); onClose(); }}
+              style={{ flex: 0.6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: '10px' }}
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// 🗑️ مودال تأكيد حذف طيار
+const DeletePilotModal = ({ isOpen, onClose, onConfirm, pilotName }) => {
+  if (!isOpen) return null;
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px'
+    }}>
+      <div className="glass-card" style={{
+        width: '100%', maxWidth: '380px', padding: '24px',
+        background: '#131b2e', border: '1px solid rgba(239, 68, 68, 0.4)',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', marginBottom: '12px' }}>
+          <AlertTriangle size={24} />
+          <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: '800' }}>حذف الطيار</h3>
+        </div>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px' }}>
+          هل أنت متأكد من رغبتك في حذف بيانات الطيار <strong style={{ color: 'white' }}>{pilotName}</strong> من النظام نهائياً؟
+        </p>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={onConfirm}
+            className="btn-primary"
+            style={{ flex: 1, background: 'var(--danger)', color: 'white', fontWeight: '800' }}
+          >
+            تأكيد الحذف
+          </button>
+          <button
+            onClick={onClose}
+            style={{ flex: 0.6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: '10px' }}
+          >
+            تراجع
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const PilotManagement = () => {
-  const { pilots, togglePilotShift, addNewPilot, deletePilot } = useApp();
+  const { pilots, orders, togglePilotShift, addNewPilot, deletePilot, getSuggestedPilot, userRole } = useApp();
+  const [filterTab, setFilterTab] = useState('all'); // 'all' | 'available' | 'on_delivery' | 'closed'
   const [showAddModal, setShowAddModal] = useState(false);
+  const [pinModalData, setPinModalData] = useState(null); // { pilotId, pilotName, isClosing }
+  const [deleteModalData, setDeleteModalData] = useState(null); // { pilotId, pilotName }
   const [newPilotName, setNewPilotName] = useState('');
   const [newPilotPhone, setNewPilotPhone] = useState('');
   const [newPilotStartShift, setNewPilotStartShift] = useState('01:00');
@@ -111,6 +230,8 @@ const PilotManagement = () => {
   const [newPilotMotor, setNewPilotMotor] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [revealedPilots, setRevealedPilots] = useState({});
+
+  const suggestedPilot = getSuggestedPilot();
 
   const handleReveal = (pilotId) => {
     if (revealedPilots[pilotId]) {
@@ -124,16 +245,12 @@ const PilotManagement = () => {
     }
   };
 
-  const handleToggleShift = (pilotId, currentStatus) => {
-    const password = prompt(currentStatus === 'open'
-      ? 'أدخل الرقم السري لإغلاق شيفت الطيار ():'
-      : 'أدخل الرقم السري لفتح شيفت الطيار ():');
-
-    if (password === '123') {
-      togglePilotShift(pilotId);
-    } else {
-      alert('كلمة المرور غير صحيحة');
-    }
+  const handleToggleShiftClick = (pilot) => {
+    setPinModalData({
+      pilotId: pilot.id,
+      pilotName: pilot.name,
+      isClosing: pilot.shiftStatus === 'open'
+    });
   };
 
   const onAddPilot = async (e) => {
@@ -152,7 +269,6 @@ const PilotManagement = () => {
     setIsSubmitting(false);
 
     if (result && result.success) {
-      alert('✅ تم إضافة الطيار بنجاح');
       setShowAddModal(false);
       setNewPilotName('');
       setNewPilotPhone('');
@@ -165,38 +281,348 @@ const PilotManagement = () => {
     }
   };
 
+  // Counts
+  const activePilots = pilots.filter(p => p.shiftStatus === 'open');
+  const availablePilots = activePilots.filter(p => p.state === 'available');
+  const onDeliveryPilots = activePilots.filter(p => isPilotOnDelivery(p.state));
+  const closedPilots = pilots.filter(p => p.shiftStatus !== 'open');
+
+  // Filtered pilots
+  const filteredPilots = pilots.filter(p => {
+    if (filterTab === 'available') return p.shiftStatus === 'open' && p.state === 'available';
+    if (filterTab === 'on_delivery') return p.shiftStatus === 'open' && isPilotOnDelivery(p.state);
+    if (filterTab === 'closed') return p.shiftStatus !== 'open';
+    return true;
+  });
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: '700' }}>إدارة الطيارين</h2>
-        <button
-          onClick={() => {
-            if (userRole === 'admin') {
-              setShowAddModal(true);
-            } else {
-              alert('⚠️ إضافة طيار جديد تتطلب صلاحيات المدير (Admin).');
-            }
-          }}
-          className="btn-primary"
-          style={{ background: 'var(--accent)', padding: '10px 20px', borderRadius: '12px', fontSize: '0.95rem' }}
-        >
-          <Plus size={18} /> إضافة طيار جديد
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      {/* 🚀 Header & Summary */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: '900', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>إدارة أسطول الطيارين</span>
+          </h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.9rem' }}>
+            متابعة حالة الطيارين، جاهزية الدور العادل، وساعات العمل المعتمدة
+          </p>
+        </div>
+
+        {userRole === 'admin' && (
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="btn-primary"
+            style={{ background: 'var(--accent)', color: '#000', fontWeight: '800', minHeight: '44px' }}
+          >
+            <Plus size={18} />
+            <span>إضافة طيار جديد</span>
+          </button>
+        )}
       </header>
 
-      {/* Modal for Add Pilot */}
+      {/* ⭐ Suggested Next Pilot Banner */}
+      {suggestedPilot && (
+        <div className="glass-card" style={{
+          padding: '14px 20px',
+          borderRight: '5px solid var(--accent)',
+          background: 'rgba(16, 185, 129, 0.08)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '1.2rem' }}>⭐</span>
+            <div>
+              <div style={{ fontSize: '0.95rem', fontWeight: '800', color: '#34d399' }}>
+                الطيار التالي في الدور العادل (Fair Queue): <strong>{suggestedPilot.name}</strong>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                متاح بالمطعم وجاهز لاستلام الأوردر القادم فوراً
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize: '0.8rem', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', padding: '4px 10px', borderRadius: '8px', fontWeight: 'bold' }}>
+            مكتمل اليوم: {suggestedPilot.ordersCount || 0} طلبات
+          </div>
+        </div>
+      )}
+
+      {/* 🧭 Filter Tabs */}
+      <div className="glass-card" style={{ padding: '8px 12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+        {[
+          { id: 'all', label: 'الجميع', count: pilots.length, color: '#6366f1' },
+          { id: 'available', label: 'متاح بالمطعم 🟢', count: availablePilots.length, color: '#10b981' },
+          { id: 'on_delivery', label: 'في توصيل 🛵', count: onDeliveryPilots.length, color: '#3b82f6' },
+          { id: 'closed', label: 'شيفت مغلق ⚪', count: closedPilots.length, color: '#64748b' }
+        ].map(tab => {
+          const isActive = filterTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setFilterTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 16px',
+                borderRadius: '10px',
+                border: `1px solid ${isActive ? tab.color : 'transparent'}`,
+                background: isActive ? `${tab.color}20` : 'transparent',
+                color: isActive ? '#fff' : 'var(--text-muted)',
+                fontWeight: isActive ? '800' : '600',
+                fontSize: '0.85rem',
+                minHeight: '40px',
+                cursor: 'pointer'
+              }}
+            >
+              <span>{tab.label}</span>
+              <span style={{
+                padding: '2px 8px',
+                borderRadius: '8px',
+                fontSize: '0.75rem',
+                background: isActive ? tab.color : 'rgba(255,255,255,0.08)',
+                color: isActive ? '#fff' : 'var(--text-main)',
+                fontWeight: '800'
+              }}>
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 🛵 Pilots Cards Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+        {filteredPilots.length === 0 ? (
+          <div className="glass-card" style={{ gridColumn: '1/-1', padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+            <Bike size={48} style={{ margin: '0 auto 12px', opacity: 0.4 }} />
+            <p style={{ margin: 0, fontSize: '0.95rem' }}>لا يوجد طيارين مسجلين في هذا القسم</p>
+          </div>
+        ) : (
+          filteredPilots.map(pilot => {
+            const isOpen = pilot.shiftStatus === 'open';
+            const isOut = isOpen && isPilotOnDelivery(pilot.state);
+            const currentLoad = orders.filter(o =>
+              String(o.pilotId || o.deliveryId) === String(pilot.id) &&
+              (o.status === 'active' || o.status === 'driver_assigned')
+            ).length;
+
+            let borderTopColor = '#64748b';
+            let statusText = 'الشيفت مغلق ⚪';
+            let statusBg = 'rgba(255,255,255,0.05)';
+            let statusColor = 'var(--text-muted)';
+
+            if (isOpen) {
+              if (isOut) {
+                borderTopColor = '#3b82f6';
+                statusText = `خارج للتوصيل 🛵 (${currentLoad} طلبات)`;
+                statusBg = 'rgba(59, 130, 246, 0.15)';
+                statusColor = '#60a5fa';
+              } else {
+                borderTopColor = '#10b981';
+                statusText = 'متاح في المطعم 🟢';
+                statusBg = 'rgba(16, 185, 129, 0.15)';
+                statusColor = '#34d399';
+              }
+            }
+
+            return (
+              <div
+                key={pilot.id}
+                className="glass-card hover-scale"
+                style={{
+                  padding: '20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  borderTop: `4px solid ${borderTopColor}`,
+                  justifyContent: 'space-between'
+                }}
+              >
+                {/* 1. Header: Name & Status Pill */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '8px' }}>
+                    <div>
+                      <h3 style={{ fontSize: '1.15rem', fontWeight: '800', margin: '0 0 4px 0', color: 'var(--text-main)' }}>
+                        {pilot.name}
+                      </h3>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <a
+                          href={`tel:${pilot.phone}`}
+                          style={{
+                            color: '#60a5fa', fontSize: '0.85rem', fontWeight: 'bold', textDecoration: 'none',
+                            display: 'inline-flex', alignItems: 'center', gap: '4px'
+                          }}
+                          title="اتصال مباشر"
+                        >
+                          <Phone size={13} />
+                          <span>{pilot.phone}</span>
+                        </a>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(pilot.phone);
+                            alert('تم نسخ الرقم بنجاح ✅');
+                          }}
+                          style={{
+                            background: 'rgba(255,255,255,0.06)', border: 'none', cursor: 'pointer',
+                            padding: '3px 8px', borderRadius: '6px', fontSize: '0.75rem', color: 'var(--text-dim)'
+                          }}
+                          title="نسخ الرقم"
+                        >
+                          نسخ 📋
+                        </button>
+                      </div>
+                    </div>
+
+                    {userRole === 'admin' && (
+                      <button
+                        onClick={() => setDeleteModalData({ pilotId: pilot.id, pilotName: pilot.name })}
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.25)',
+                          color: 'var(--danger)', padding: '6px', borderRadius: '8px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                        title="حذف الطيار"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Operational Status Tag */}
+                  <div style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    background: statusBg,
+                    color: statusColor,
+                    fontSize: '0.8rem',
+                    fontWeight: '800',
+                    border: `1px solid ${statusColor}40`,
+                    marginTop: '4px'
+                  }}>
+                    <span>{statusText}</span>
+                  </div>
+                </div>
+
+                {/* 2. Shift Info & Metrics */}
+                <div style={{
+                  background: 'rgba(0,0,0,0.25)',
+                  padding: '12px',
+                  borderRadius: '10px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  fontSize: '0.8rem'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>الوردية المجدولة:</span>
+                    <strong style={{ color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={12} /> {formatShift(pilot.shift)}
+                    </strong>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-muted)' }}>
+                    <span>الطلبات المكتملة اليوم:</span>
+                    <strong style={{ color: 'var(--accent)' }}>{pilot.ordersCount || 0} طلب</strong>
+                  </div>
+
+                  {/* Secret Data Toggle */}
+                  <div style={{ borderTop: '1px dashed rgba(255,255,255,0.08)', paddingTop: '8px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: 'var(--text-dim)', fontSize: '0.75rem' }}>البيانات الخاصة:</span>
+                      <button
+                        onClick={() => handleReveal(pilot.id)}
+                        style={{
+                          background: 'transparent', border: 'none', color: '#818cf8',
+                          fontSize: '0.75rem', fontWeight: 'bold', cursor: 'pointer', padding: 0
+                        }}
+                      >
+                        {revealedPilots[pilot.id] ? 'إخفاء 🔒' : 'عرض الرقم القومي والموتوسيكل 🔑'}
+                      </button>
+                    </div>
+
+                    {revealedPilots[pilot.id] && (
+                      <div style={{ marginTop: '6px', display: 'flex', flexDirection: 'column', gap: '4px', color: 'var(--text-main)' }}>
+                        <div>رقم اللوحة: <strong>{pilot.numberMotor || 'غير مسجل'}</strong></div>
+                        <div>الرقم القومي: <strong>{pilot.numberId || 'غير مسجل'}</strong></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 3. Action: Toggle Shift Button */}
+                <button
+                  onClick={() => handleToggleShiftClick(pilot)}
+                  className="btn-primary"
+                  style={{
+                    width: '100%',
+                    minHeight: '44px',
+                    justifyContent: 'center',
+                    background: isOpen ? 'rgba(239, 68, 68, 0.15)' : 'var(--accent)',
+                    color: isOpen ? 'var(--danger)' : '#000',
+                    border: `1px solid ${isOpen ? 'rgba(239, 68, 68, 0.3)' : 'var(--accent)'}`,
+                    fontWeight: '800'
+                  }}
+                >
+                  {isOpen ? 'إغلاق الشيفت' : 'فتح الشيفت 🟢'}
+                </button>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 🔐 In-App PIN Modal */}
+      <PilotPinModal
+        isOpen={Boolean(pinModalData)}
+        onClose={() => setPinModalData(null)}
+        pilotName={pinModalData?.pilotName}
+        isClosing={pinModalData?.isClosing}
+        onConfirm={() => {
+          if (pinModalData) {
+            togglePilotShift(pinModalData.pilotId);
+            setPinModalData(null);
+          }
+        }}
+      />
+
+      {/* 🗑️ Delete Pilot Modal */}
+      <DeletePilotModal
+        isOpen={Boolean(deleteModalData)}
+        onClose={() => setDeleteModalData(null)}
+        pilotName={deleteModalData?.pilotName}
+        onConfirm={() => {
+          if (deleteModalData) {
+            deletePilot(deleteModalData.pilotId);
+            setDeleteModalData(null);
+          }
+        }}
+      />
+
+      {/* ➕ Modal for Add Pilot */}
       {showAddModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}>
-          <div className="glass-card" style={{ padding: '24px', width: '350px', border: '1px solid var(--accent)' }}>
-            <h3 style={{ marginBottom: '16px', color: 'var(--accent)' }}>إضافة طيار جديد</h3>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px' }}>
+          <div className="glass-card" style={{ padding: '24px', width: '100%', maxWidth: '400px', background: '#131b2e' }}>
+            <h3 style={{ marginBottom: '16px', color: 'var(--accent)', fontWeight: '800', fontSize: '1.25rem' }}>إضافة طيار جديد</h3>
             <form onSubmit={onAddPilot} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <input
                 autoFocus
                 placeholder="اسم الطيار (مطلوب)"
                 value={newPilotName}
                 onChange={e => setNewPilotName(e.target.value)}
-                className="glass-card"
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', minHeight: '44px' }}
+                required
+              />
+              <input
+                placeholder="رقم الهاتف (مطلوب)"
+                value={newPilotPhone}
+                onChange={e => setNewPilotPhone(e.target.value)}
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', minHeight: '44px' }}
                 required
               />
               <input
@@ -204,23 +630,13 @@ const PilotManagement = () => {
                 type="number"
                 value={newPilotIdNumber}
                 onChange={e => setNewPilotIdNumber(e.target.value)}
-                className="glass-card"
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
-              />
-              <input
-                placeholder="رقم الهاتف (مطلوب)"
-                value={newPilotPhone}
-                onChange={e => setNewPilotPhone(e.target.value)}
-                className="glass-card"
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
-                required
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', minHeight: '44px' }}
               />
               <input
                 placeholder="رقم لوحة الموتوسيكل (اختياري)"
                 value={newPilotMotor}
                 onChange={e => setNewPilotMotor(e.target.value)}
-                className="glass-card"
-                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white' }}
+                style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', minHeight: '44px' }}
               />
               <div style={{ display: 'flex', gap: '12px' }}>
                 <div style={{ flex: 1 }}>
@@ -229,8 +645,7 @@ const PilotManagement = () => {
                     type="time"
                     value={newPilotStartShift}
                     onChange={e => setNewPilotStartShift(e.target.value)}
-                    className="glass-card"
-                    style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white', width: '100%' }}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', width: '100%', minHeight: '44px' }}
                     required
                   />
                 </div>
@@ -240,94 +655,21 @@ const PilotManagement = () => {
                     type="time"
                     value={newPilotEndShift}
                     onChange={e => setNewPilotEndShift(e.target.value)}
-                    className="glass-card"
-                    style={{ padding: '12px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(255,255,255,0.05)', color: 'white', width: '100%' }}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid var(--border)', background: 'rgba(0,0,0,0.3)', color: 'white', width: '100%', minHeight: '44px' }}
                     required
                   />
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                <button type="submit" disabled={isSubmitting} className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--accent)', opacity: isSubmitting ? 0.7 : 1, cursor: isSubmitting ? 'not-allowed' : 'pointer' }}>
-                  {isSubmitting ? 'جاري الإضافة...' : 'حفظ'}
+              <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                <button type="submit" disabled={isSubmitting} className="btn-primary" style={{ flex: 1, justifyContent: 'center', background: 'var(--accent)', color: '#000', fontWeight: '800' }}>
+                  {isSubmitting ? 'جاري الإضافة...' : 'حفظ الطيار'}
                 </button>
-                <button type="button" onClick={() => setShowAddModal(false)} disabled={isSubmitting} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '8px', borderRadius: '8px', cursor: isSubmitting ? 'not-allowed' : 'pointer', flex: 0.5 }}>إلغاء</button>
+                <button type="button" onClick={() => setShowAddModal(false)} disabled={isSubmitting} style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', padding: '10px', borderRadius: '8px', cursor: 'pointer', flex: 0.5 }}>إلغاء</button>
               </div>
             </form>
           </div>
         </div>
       )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
-        {pilots.length === 0 ? (
-          <div className="glass-card" style={{ gridColumn: '1/-1', padding: '60px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <Bike size={48} style={{ margin: '0 auto 16px', opacity: 0.5 }} />
-            <p>لا يوجد طيارين مسجلين حالياً</p>
-          </div>
-        ) : (
-          pilots.map(pilot => (
-            <div key={pilot.id} className="glass-card hover-scale" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px', borderTop: `4px solid ${pilot.shiftStatus === 'open' ? '#10b981' : 'var(--border)'}` }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div>
-                  <h4 style={{ fontSize: '1.2rem', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {pilot.name}
-                    <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '12px', background: pilot.shiftStatus === 'open' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(255,255,255,0.1)', color: pilot.shiftStatus === 'open' ? '#10b981' : 'var(--text-muted)' }}>
-                      {pilot.shiftStatus === 'open' ? 'متصل 🟢' : 'غير متصل ⚪'}
-                    </span>
-                  </h4>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <a href={`tel:${pilot.phone}`} style={{ color: 'var(--primary)', fontSize: '0.95rem', margin: 0, textDecoration: 'none', fontWeight: 'bold' }} title="اضغط للاتصال">
-                      {pilot.phone}
-                    </a>
-                    <button onClick={() => { navigator.clipboard.writeText(pilot.phone); alert('تم نسخ الرقم بنجاح ✅'); }} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', fontSize: '0.8rem', color: 'var(--text-main)' }} title="نسخ الرقم">
-                      نسخ 📋
-                    </button>
-                  </div>
-                </div>
-                <button
-                  onClick={() => deletePilot(pilot.id)}
-                  style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: 'var(--danger)', padding: '6px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s ease' }}
-                  title="حذف الطيار"
-                  onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
-                  onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
-
-              <div className="grid-2" style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', gap: '8px' }}>
-                <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>معاد الطيار</label><div style={{ fontSize: '0.85rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={12} /> {formatShift(pilot.shift)}</div></div>
-
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-                  <button
-                    onClick={() => handleReveal(pilot.id)}
-                    style={{ background: 'rgba(255,255,255,0.1)', border: 'none', color: 'var(--text-muted)', padding: '4px 8px', borderRadius: '8px', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-                  >
-                    {revealedPilots[pilot.id] ? 'إخفاء البيانات 🔒' : 'عرض البيانات السرية 🔑'}
-                  </button>
-                </div>
-
-                {revealedPilots[pilot.id] && (
-                  <>
-                    <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>رقم الموتوسيكل</label><div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{pilot.numberMotor || 'غير مسجل'}</div></div>
-                    <div style={{ gridColumn: '1/-1' }}><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>رقم الهوية</label><div style={{ fontSize: '0.85rem', fontWeight: 'bold' }}>{pilot.numberId || 'غير مسجل'}</div></div>
-                  </>
-                )}
-              </div>
-
-              <button
-                onClick={() => handleToggleShift(pilot.id, pilot.shiftStatus)}
-                style={{
-                  width: '100%', display: 'flex', justifyContent: 'center', padding: '12px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', transition: 'all 0.2s ease',
-                  background: pilot.shiftStatus === 'open' ? 'rgba(239, 68, 68, 0.1)' : 'var(--success)',
-                  color: pilot.shiftStatus === 'open' ? 'var(--danger)' : 'white',
-                  border: `1px solid ${pilot.shiftStatus === 'open' ? 'var(--danger)' : 'var(--success)'}`
-                }}
-              >
-                {pilot.shiftStatus === 'open' ? 'إغلاق الشيفت' : 'فتح الشيفت'}
-              </button>
-            </div>
-          )))}
-      </div>
     </div>
   );
 };
@@ -411,21 +753,34 @@ const EditOrderModal = ({ order, onClose }) => {
   );
 };
 
-const DashboardView = () => {
-const { orders, pilots, activeStats, completeOrder, confirmOrder, assignPilot, updateOrder, failDelivery } = useApp();
-  const [editingOrderId, setEditingOrderId] = useState(null);
-  const [editModalData, setEditModalData] = useState(null);
-  const [viewPilotId, setViewPilotId] = useState(null);
+const DashboardView = ({ onNavigate, onOpenModal }) => {
+  const { orders, pilots, currentShift, isShiftOpen, getSuggestedPilot, userRole } = useApp();
 
-  const stats = [
-    { label: 'طلبات اليوم', value: activeStats.totalOrders, icon: Package, color: 'var(--primary)' },
-    { label: 'طيارين في الخدمة', value: pilots.filter(p => p.shiftStatus === 'open').length, icon: Bike, color: 'var(--accent)' },
-    { label: 'متوسط التأخير', value: `${activeStats.averageDelay} د`, icon: Clock, color: activeStats.averageDelay > 40 ? 'var(--danger)' : 'var(--warning)' },
-    { label: 'قيد المراجعة', value: orders.filter(o => o.status === 'pending' || o.status === 'pending_timer').length, icon: Package, color: 'var(--primary)' },
-  ];
+  // Helper to calculate elapsed minutes
+  const getElapsedMinutes = (timestamp) => {
+    if (!timestamp) return 0;
+    const diffMs = Date.now() - new Date(timestamp).getTime();
+    return Math.max(0, Math.floor(diffMs / 60000));
+  };
+
+  // 1. Level A: Needs Attention Now (يحتاج انتباهي الآن)
+  const pendingOrders = orders.filter(o => ['pending', 'pending_timer'].includes(o.status));
+  const waitingOrders = orders.filter(o => ['waiting_driver', 'preparing'].includes(o.status));
+  const activeOrders = orders.filter(o => o.status === 'active');
+  const delayedOrders = orders.filter(o =>
+    ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned', 'active'].includes(o.status) &&
+    getElapsedMinutes(o.startTime || o.timestamp) >= 30
+  );
+
+  const hasUrgentIssues = pendingOrders.length > 0 || delayedOrders.length > 0 || waitingOrders.length > 0;
+
+  // 2. Level B: Current Status (الوضع التشغيلي اللحظي)
+  const activePilots = pilots.filter(p => p.shiftStatus === 'open');
+  const availablePilots = activePilots.filter(p => p.state === 'available');
+  const onDeliveryPilots = activePilots.filter(p => isPilotOnDelivery(p.state));
+  const suggestedPilot = getSuggestedPilot();
 
   // Group active orders by pilot
-  const activeOrders = orders.filter(o => o.status === 'active');
   const ordersByPilot = activeOrders.reduce((acc, o) => {
     const key = String(o.pilotId || o.deliveryId);
     if (!acc[key]) acc[key] = [];
@@ -433,241 +788,397 @@ const { orders, pilots, activeStats, completeOrder, confirmOrder, assignPilot, u
     return acc;
   }, {});
 
-  const pilotsWithOrders = pilots.filter(p => ordersByPilot[String(p.id)]);
-
-  // Set default view pilot if none selected and pilots exist, or reset if pilot is no longer outside
-  useEffect(() => {
-    if (pilotsWithOrders.length === 0) {
-      setViewPilotId(null);
-    } else if (!viewPilotId || !pilotsWithOrders.some(p => String(p.id) === String(viewPilotId))) {
-      setViewPilotId(pilotsWithOrders[0].id);
-    }
-  }, [pilotsWithOrders, viewPilotId]);
-
-  const activePilots = pilots.filter(p => p.shiftStatus === 'open');
-  const closedPilots = pilots.filter(p => p.shiftStatus === 'closed');
-
-  const getElapsedTime = (timestamp) => {
-    const diff = Math.floor((new Date() - new Date(timestamp)) / (1000 * 60));
-    return diff;
-  };
-
-  const delayedOrders = activeOrders.filter(o => getElapsedTime(o.startTime || o.timestamp) > 40);
-
-  const handleReassign = (orderId, newPilotId) => {
-    if (window.confirm('هل أنت متأكد من تغيير الطيار لهذا الطلب؟')) {
-      assignPilot(orderId, newPilotId);
-      setEditingOrderId(null);
-    }
-  };
-
-  const handleEditOrder = (order) => {
-    if (userRole === 'admin') {
-      setEditModalData(order);
-    } else {
-      alert('⚠️ تعديل الطلب متاح للمدير (Admin) فقط.');
-    }
-  };
-
-  const handleFailDelivery = (orderId) => {
-    const reason = prompt("يرجى إدخال سبب فشل التوصيل (مثال: العميل لدية شكوة معينة ):");
-    if (reason) {
-      failDelivery(orderId, reason);
-    }
-  };
-
   return (
-    <div className="grid" style={{ gap: '32px' }}>
-      {editModalData && <EditOrderModal order={editModalData} onClose={() => setEditModalData(null)} />}
-
-      {delayedOrders.length > 0 && (
-        <div className="card" style={{
-          background: 'rgba(239, 68, 68, 0.1)',
-          borderColor: 'var(--danger)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          padding: '16px',
-          animation: 'pulse 2s infinite'
-        }}>
-          <AlertTriangle color="var(--danger)" size={24} />
-          <div>
-            <h3 style={{ color: 'var(--danger)', fontWeight: 'bold', fontSize: '1rem' }}>تنبيه: يوجد {delayedOrders.length} طلبات متأخرة!</h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', opacity: 0.8 }}>
-              يرجى مراجعة الطلبات بالأرقام: {delayedOrders.map(o => '#' + o.id).join(', ')}
-            </p>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      {/* 🚀 Header: Greeting & Shift Indicator */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: '900', margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span>مركز العمليات التشغيلي</span>
+          </h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: '0.95rem' }}>
+            نظرة فورية شاملة على حالة المطعم، الطلبات العاجلة، وجاهزية أسطول التوصيل
+          </p>
         </div>
-      )}
 
-      <header>
-        <h1>لوحة التحكم</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>مرحباً بك في نظام إدارة دليفري أبو خاطر</p>
+        {/* Shift Badge */}
+        <div style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '8px 16px',
+          borderRadius: '12px',
+          background: isShiftOpen ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)',
+          border: `1px solid ${isShiftOpen ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+          color: isShiftOpen ? '#34d399' : '#f87171',
+          fontWeight: '800',
+          fontSize: '0.9rem'
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: isShiftOpen ? '#10b981' : '#ef4444',
+            boxShadow: isShiftOpen ? '0 0 8px #10b981' : '0 0 8px #ef4444'
+          }} />
+          <span>{isShiftOpen ? `الوردية مفتوحة (${currentShift?.date || 'نشطة'})` : 'الوردية مغلقة'}</span>
+        </div>
       </header>
 
-      {/* Stats Cards */}
-      <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
-        {stats.map((stat, i) => (
-          <div key={i} className="card flex" style={{ alignItems: 'center', padding: '20px' }}>
-            <div style={{ padding: '12px', borderRadius: '12px', background: `${stat.color}15`, color: stat.color }}>
-              <stat.icon size={24} />
+      {/* ============================================================ */}
+      {/* 🚨 المستوى الأول (A): يحتاج انتباهي الآن (Needs Attention Now) */}
+      {/* ============================================================ */}
+      <section>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <AlertCircle size={20} color={hasUrgentIssues ? 'var(--warning)' : 'var(--accent)'} />
+          <span>يحتاج انتباهي الآن</span>
+        </h2>
+
+        {hasUrgentIssues ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+            {/* 1. New Pending Orders */}
+            {pendingOrders.length > 0 && (
+              <div className="glass-card pulse-new" style={{
+                padding: '20px',
+                borderRight: '5px solid #f59e0b',
+                background: 'rgba(245, 158, 11, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#fbbf24' }}>طلبات جديدة بحاجة للقبول</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#f59e0b', background: 'rgba(245, 158, 11, 0.2)', padding: '2px 10px', borderRadius: '8px' }}>
+                      {pendingOrders.length}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', opacity: 0.9, margin: 0 }}>
+                    يوجد {pendingOrders.length} طلب أونلاين أو معلق ينتظر مراجعة الكاشير وإرساله للمطبخ.
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate && onNavigate('inbox')}
+                  className="btn-primary"
+                  style={{ background: '#f59e0b', color: '#000', fontWeight: '800', width: '100%', minHeight: '44px' }}
+                >
+                  <Check size={18} />
+                  <span>مراجعة وقبول الطلبات ({pendingOrders.length})</span>
+                </button>
+              </div>
+            )}
+
+            {/* 2. Delayed Orders Alert */}
+            {delayedOrders.length > 0 && (
+              <div className="glass-card pulse-urgent" style={{
+                padding: '20px',
+                borderRight: '5px solid #ef4444',
+                background: 'rgba(239, 68, 68, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#f87171' }}>طلبات متأخرة (&gt; 30 دقيقة)</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#ef4444', background: 'rgba(239, 68, 68, 0.2)', padding: '2px 10px', borderRadius: '8px' }}>
+                      {delayedOrders.length}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', opacity: 0.9, margin: 0 }}>
+                    أرقام الطلبات المتأخرة: {delayedOrders.map(o => `#${o.originalId || o.id}`).slice(0, 4).join(', ')} {delayedOrders.length > 4 ? '...' : ''}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate && onNavigate('inbox')}
+                  className="btn-primary"
+                  style={{ background: '#ef4444', color: '#fff', fontWeight: '800', width: '100%', minHeight: '44px' }}
+                >
+                  <Clock size={18} />
+                  <span>معالجة الطلبات المتأخرة ({delayedOrders.length})</span>
+                </button>
+              </div>
+            )}
+
+            {/* 3. Orders Waiting for Courier */}
+            {waitingOrders.length > 0 && (
+              <div className="glass-card" style={{
+                padding: '20px',
+                borderRight: '5px solid #10b981',
+                background: 'rgba(16, 185, 129, 0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                gap: '16px'
+              }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#34d399' }}>بالمطبخ تنتظر طياراً</span>
+                    <span style={{ fontSize: '1.3rem', fontWeight: '900', color: '#10b981', background: 'rgba(16, 185, 129, 0.2)', padding: '2px 10px', borderRadius: '8px' }}>
+                      {waitingOrders.length}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-main)', opacity: 0.9, margin: 0 }}>
+                    {suggestedPilot
+                      ? `الطيار المقترح التالي: ${suggestedPilot.name} (متاح بالمطعم)`
+                      : 'لا يوجد طيار متاح حالياً — يرجى فتح وردية طيار أو انتظار عودة طيار.'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => onNavigate && onNavigate('inbox')}
+                  className="btn-primary"
+                  style={{ background: '#10b981', color: '#fff', fontWeight: '800', width: '100%', minHeight: '44px' }}
+                >
+                  <UserPlus size={18} />
+                  <span>إسناد الطيارين الآن ({waitingOrders.length})</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          /* Calm Empty State */
+          <div className="glass-card" style={{
+            padding: '28px 24px',
+            borderRight: '5px solid var(--accent)',
+            background: 'rgba(16, 185, 129, 0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            flexWrap: 'wrap'
+          }}>
+            <div style={{
+              width: '48px', height: '48px', borderRadius: '14px',
+              background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', color: 'var(--accent)', flexShrink: 0
+            }}>
+              <Check size={26} />
+            </div>
+            <div style={{ flex: 1, minWidth: '240px' }}>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: '800', margin: '0 0 4px 0', color: '#34d399' }}>
+                لا توجد طلبات تحتاج إلى إجراء عاجل الآن
+              </h3>
+              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: 0 }}>
+                جميع الطلبات مقبولة، مسندة، أو تم تسليمها بنجاح. العمليات تسير بانتظام تام.
+              </p>
+            </div>
+            <button
+              onClick={() => onNavigate && onNavigate('inbox')}
+              className="btn-primary"
+              style={{ background: 'var(--bg-surface)', border: '1px solid var(--border-strong)', color: '#fff', minHeight: '44px' }}
+            >
+              <span>عرض صندوق الوارد</span>
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ============================================================ */}
+      {/* 📊 المستوى الثاني (B): الوضع التشغيلي اللحظي (Current Status) */}
+      {/* ============================================================ */}
+      <section>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Bike size={20} color="var(--primary)" />
+          <span>الوضع التشغيلي اللحظي</span>
+        </h2>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '16px' }}>
+          {/* 1. Courier Fleet Readiness */}
+          <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '700' }}>أسطول التوصيل</span>
+              <Bike size={20} color="var(--primary)" />
             </div>
             <div>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{stat.label}</p>
-              <h3 style={{ fontSize: '1.4rem', fontWeight: '800', margin: 0 }}>{stat.value}</h3>
+              <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--text-main)', margin: '2px 0' }}>
+                {availablePilots.length} <span style={{ fontSize: '0.9rem', color: '#34d399', fontWeight: 'bold' }}>طيار متاح</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                {onDeliveryPilots.length} في رحلات توصيل بالخارج • {pilots.length - activePilots.length} غير متصلين
+              </div>
             </div>
+            {suggestedPilot ? (
+              <div style={{
+                background: 'rgba(16, 185, 129, 0.1)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                borderRadius: '8px',
+                padding: '8px 12px',
+                fontSize: '0.8rem',
+                color: '#34d399',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px'
+              }}>
+                <span>⭐ التالي بالدور: <strong>{suggestedPilot.name}</strong></span>
+              </div>
+            ) : (
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+                لا يوجد طيار في وضع الانتظار حالياً
+              </div>
+            )}
           </div>
-        ))}
-      </div>
 
-      <div className="card" style={{ borderTop: '4px solid var(--primary)', padding: '0' }}>
-        <div style={{ padding: '20px', borderBottom: '1px solid var(--border)' }}>
-          <h3 className="flex" style={{ fontSize: '1.2rem', margin: 0 }}>
-            <MapPin size={22} color="var(--primary)" /> رحلات الدليفري الحالية
-          </h3>
-        </div>
-
-        <div className="flex flex-wrap" style={{ minHeight: '400px', gap: '0' }}>
-          {/* Pilots List Side */}
-          <div style={{ width: '100%', maxWidth: '280px', borderLeft: '1px solid var(--border)', padding: '20px' }}>
-            <h4 style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '16px' }}>الطيارين في الخارج:</h4>
-            <div className="grid" style={{ gap: '8px' }}>
-              {pilotsWithOrders.length === 0 ? (
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>لا يوجد طيارين في الخارج حالياً</p>
-              ) : (
-                pilotsWithOrders.map(p => (
-                  <button
-                    key={p.id}
-                    onClick={() => setViewPilotId(p.id)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: viewPilotId === p.id ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
-                      color: viewPilotId === p.id ? 'white' : 'var(--text-main)',
-                      textAlign: 'right',
-                      fontWeight: '700',
-                      minHeight: '44px'
-                    }}
-                  >
-                    <span>{p.name}</span>
-                    <span style={{ fontSize: '0.75rem', background: 'rgba(0,0,0,0.2)', padding: '2px 8px', borderRadius: '6px' }}>
-                      {ordersByPilot[p.id]?.length || 0}
-                    </span>
-                  </button>
+          {/* 2. Active Trips In-Transit */}
+          <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '700' }}>الرحلات بالخارج</span>
+              <MapPin size={20} color="var(--accent)" />
+            </div>
+            <div>
+              <div style={{ fontSize: '1.6rem', fontWeight: '900', color: 'var(--accent)', margin: '2px 0' }}>
+                {activeOrders.length} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>طلب في الطريق</span>
+              </div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                مع {onDeliveryPilots.length} طيار في شوارع التوصيل
+              </div>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {pilotsWithOrders.length > 0 ? (
+                pilotsWithOrders.slice(0, 3).map(p => (
+                  <span key={p.id} style={{
+                    fontSize: '0.75rem',
+                    background: 'rgba(255, 255, 255, 0.05)',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    border: '1px solid var(--border)'
+                  }}>
+                    {p.name}: {ordersByPilot[p.id]?.length || 0} طلب
+                  </span>
                 ))
+              ) : (
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>لا توجد رحلات نشطة حالياً</span>
               )}
             </div>
           </div>
 
-          {/* Orders Table Side */}
-          <div style={{ flex: 1, minWidth: '300px', padding: '20px', overflowX: 'auto' }}>
-            {viewPilotId && ordersByPilot[viewPilotId] ? (
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.95rem' }}>
-                <thead>
-                  <tr style={{ textAlign: 'right', color: 'var(--text-muted)', borderBottom: '2px solid var(--border)' }}>
-                    <th style={{ padding: '12px 8px' }}>بون #</th>
-                    <th style={{ padding: '12px 8px' }}>العميل</th>
-                    <th style={{ padding: '12px 8px' }}>المنطقة</th>
-                    <th style={{ padding: '12px 8px' }}>الوقت</th>
-                    <th style={{ padding: '12px 8px', textAlign: 'center' }}>إجراء</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ordersByPilot[viewPilotId].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(order => {
-                    const elapsed = getElapsedTime(order.startTime || order.timestamp);
-                    const isDelayed = elapsed > 40;
-
-                    return (
-                      <tr key={order.id} style={{ borderBottom: '1px solid var(--border)', background: isDelayed ? 'rgba(239, 68, 68, 0.05)' : 'transparent' }}>
-                        <td style={{ padding: '16px 8px' }}>
-                          <span style={{ fontWeight: '800', color: 'var(--primary)' }}>#{order.originalId || order.id}</span>
-                          <button onClick={() => handleEditOrder(order)} style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', marginRight: '4px', opacity: 0.6 }}>✏️</button>
-                        </td>
-                        <td style={{ padding: '16px 8px' }}>
-                          <p style={{ fontWeight: 'bold' }}>{order.customerName}</p>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{order.total > 0 ? `${order.total} ج.م` : ''}</p>
-                        </td>
-                        <td style={{ padding: '16px 8px' }}>{order.area}</td>
-                        <td style={{ padding: '16px 8px' }}>
-                          <span style={{ color: isDelayed ? 'var(--danger)' : elapsed > 25 ? 'var(--warning)' : 'var(--accent)', fontWeight: 'bold' }}>
-                            {elapsed} د
-                          </span>
-                        </td>
-                        <td style={{ padding: '16px 8px' }}>
-                          <div className="flex" style={{ justifyContent: 'center', gap: '8px' }}>
-                            <button onClick={() => completeOrder(order.id)} style={{ padding: '6px 12px', background: 'var(--success)', border: 'none', color: 'white', fontSize: '0.85rem' }}>تسليم</button>
-                            <button onClick={() => handleFailDelivery(order.id)} style={{ padding: '6px 8px', background: 'transparent', border: '1px solid var(--danger)', color: 'var(--danger)' }}>❌</button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '80px', color: 'var(--text-muted)' }}>
-                {pilotsWithOrders.length > 0 ? 'الرجاء اختيار طيار لعرض طلباته' : 'لا توجد رحلات نشطة حالياً'}
+          {/* 3. Operational Daily Volume */}
+          <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '700' }}>إجمالي طلبات اليوم</span>
+              <Package size={20} color="#818cf8" />
+            </div>
+            <div>
+              <div style={{ fontSize: '1.6rem', fontWeight: '900', color: '#818cf8', margin: '2px 0' }}>
+                {orders.length} <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>طلب مسجل</span>
               </div>
-            )}
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                مكتمل: {orders.filter(o => o.status === 'completed' || o.status === 'delivered').length} • ملغي: {orders.filter(o => o.status === 'cancelled' || o.status === 'failed_delivery').length}
+              </div>
+            </div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>
+              تحديث البيانات لحظي وتلقائي (Supabase Realtime)
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <section style={{ marginTop: '20px' }}>
-        <h2 className="flex" style={{ fontSize: '1.2rem' }}>
-          <Bike size={22} color="var(--accent)" /> نشاط الطيارين (الوردية الحالية)
+      {/* ============================================================ */}
+      {/* ⚡ المستوى الثالث (C): الإجراءات السريعة (Quick Action Hub) */}
+      {/* ============================================================ */}
+      <section>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: '800', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Package size={20} color="var(--accent)" />
+          <span>الإجراءات السريعة</span>
         </h2>
-        <div className="grid grid-2">
-          {/* Active Pilots Card */}
-          <div className="card" style={{ borderRight: '4px solid var(--accent)' }}>
-            <h4 style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>
-              الطيارين بالخدمة ({activePilots.length}) • (متاح: {activePilots.filter(p => p.state === 'available').length} | بالخارج: {activePilots.filter(p => isPilotOnDelivery(p.state)).length})
-            </h4>
-            <div className="grid" style={{ gap: '10px' }}>
-              {activePilots.length > 0 ? activePilots.map(p => {
-                const currentLoad = orders.filter(o =>
-                  String(o.pilotId || o.deliveryId) === String(p.id) &&
-                  (o.status === 'active' || o.status === 'driver_assigned')
-                ).length;
-                const isOut = isPilotOnDelivery(p.state);
 
-                return (
-                  <div key={p.id} className="flex" style={{ justifyContent: 'space-between', padding: '10px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
-                    <div className="flex" style={{ gap: '12px' }}>
-                      <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: isOut ? 'var(--warning)' : 'var(--success)', marginTop: '6px' }}></div>
-                      <div>
-                        <p style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{p.name}</p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                          {isOut ? 'خارج للتوصيل 🏍️' : 'متاح في المطعم ✅'} | {p.shift || '8:00A - 6:00P'}
-                        </p>
-                      </div>
-                    </div>
-                    <span style={{ fontSize: '0.8rem', background: currentLoad >= 7 ? 'var(--danger)' : 'var(--primary)', padding: '2px 10px', borderRadius: '6px', color: '#000', height: 'fit-content' }}>
-                      {currentLoad} طلبات
-                    </span>
-                  </div>
-                );
-              }) : <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا يوجد طيارين متاحين</p>}
-            </div>
-          </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+          {/* Primary Operations Inbox CTA */}
+          <button
+            onClick={() => onNavigate && onNavigate('inbox')}
+            className="btn-primary hover-scale"
+            style={{
+              padding: '16px 20px',
+              minHeight: '56px',
+              fontSize: '1rem',
+              fontWeight: '800',
+              background: 'var(--primary)',
+              boxShadow: '0 4px 18px rgba(99, 102, 241, 0.4)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '10px'
+            }}
+          >
+            <Package size={20} />
+            <span>صندوق الوارد ومتابعة الطلبات</span>
+          </button>
 
-          {/* Closed Pilots Card */}
-          <div className="card" style={{ borderRight: '4px solid var(--danger)' }}>
-            <h4 style={{ color: 'var(--text-muted)', marginBottom: '16px', fontSize: '0.9rem' }}>شيفت مغلق ({closedPilots.length})</h4>
-            <div className="flex flex-wrap" style={{ gap: '10px' }}>
-              {closedPilots.map(p => (
-                <span key={p.id} style={{ padding: '6px 14px', borderRadius: '20px', background: 'rgba(255,255,255,0.05)', fontSize: '0.85rem', color: 'var(--text-muted)', border: '1px solid var(--border)', display: 'inline-flex', gap: '4px' }}>
-                  <strong>{p.name}</strong>
-                  <span style={{ opacity: 0.5, fontSize: '0.75rem' }}>({p.shift || '8:00A - 6:00P'})</span>
-                </span>
-              ))}
-              {closedPilots.length === 0 && <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>لا يوجد طيارين مسجلين</p>}
-            </div>
-          </div>
+          {/* Cashier Order Entry Actions */}
+          {isShiftOpen && userRole === 'casher' && onOpenModal && (
+            <>
+              <button
+                onClick={() => onOpenModal('manual')}
+                className="btn-primary hover-scale"
+                style={{
+                  background: '#22c55e',
+                  color: '#000',
+                  minHeight: '56px',
+                  fontWeight: '800',
+                  fontSize: '0.95rem',
+                  boxShadow: '0 4px 14px rgba(34, 197, 94, 0.3)'
+                }}
+              >
+                <Plus size={20} />
+                <span>أوردر المطبخ</span>
+              </button>
+
+              <button
+                onClick={() => onOpenModal('external')}
+                className="btn-primary hover-scale"
+                style={{
+                  background: '#f97316',
+                  color: '#000',
+                  minHeight: '56px',
+                  fontWeight: '800',
+                  fontSize: '0.95rem',
+                  boxShadow: '0 4px 14px rgba(249, 115, 22, 0.3)'
+                }}
+              >
+                <Plus size={20} />
+                <span>أوردر خارجي / تطبيقات</span>
+              </button>
+
+              <button
+                onClick={() => onOpenModal('trip')}
+                className="btn-primary hover-scale"
+                style={{
+                  background: '#ef4444',
+                  color: '#fff',
+                  minHeight: '56px',
+                  fontWeight: '800',
+                  fontSize: '0.95rem',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.3)'
+                }}
+              >
+                <Plus size={20} />
+                <span>مشوار خاص</span>
+              </button>
+            </>
+          )}
+
+          {/* Quick Pilot Management Link */}
+          <button
+            onClick={() => onNavigate && onNavigate('pilots')}
+            style={{
+              padding: '14px 18px',
+              minHeight: '56px',
+              background: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid var(--border)',
+              borderRadius: '10px',
+              color: 'var(--text-main)',
+              fontWeight: '700',
+              fontSize: '0.95rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px'
+            }}
+          >
+            <Bike size={18} color="var(--primary)" />
+            <span>إدارة أسطول الطيارين</span>
+          </button>
         </div>
       </section>
     </div>
@@ -1985,7 +2496,12 @@ function App() {
 
           <div style={{ position: 'relative' }}>
             {/* 🔐 تأمين الصفحات - الأدمن والكاشير */}
-            {activeTab === 'dashboard' && (userRole === 'admin' || userRole === 'casher') && <DashboardView />}
+            {activeTab === 'dashboard' && (userRole === 'admin' || userRole === 'casher') && (
+              <DashboardView
+                onNavigate={(tab) => setActiveTab(tab)}
+                onOpenModal={(modal) => setActiveModal(modal)}
+              />
+            )}
             {activeTab === 'inbox' && <OrderInbox onReedit={handleReedit} />}
             {activeTab === 'pilots' && (userRole === 'admin' || userRole === 'casher') && <PilotManagement />}
             {activeTab === 'reservations' && (userRole === 'casher') && <ReservationView />}

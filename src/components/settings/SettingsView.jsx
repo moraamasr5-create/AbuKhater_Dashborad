@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { 
   Settings, Save, RefreshCw, Power, DollarSign, MapPin, 
   CreditCard, Clock, AlertCircle, CheckCircle2, Shield, Plus, Trash2,
-  Truck, Calendar, Percent, UtensilsCrossed, Search, Check, X, Filter
+  Truck, Calendar, Percent, UtensilsCrossed, Search, Check, X, Filter,
+  ChevronDown, ChevronUp, ChevronLeft, Info, Sliders, Lock
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
+import { MenuManagementView } from './MenuManagementView';
 
 const DEFAULT_AREAS = [
   { name: 'المطرية الرئيسي', lat: 30.126, lng: 31.298, zone: 1, fee: 20 },
@@ -30,6 +32,10 @@ const SettingsView = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
+
+  // Areas Accordion & Filter
+  const [isAreasOpen, setIsAreasOpen] = useState(false);
+  const [areaSearch, setAreaSearch] = useState('');
 
   // Menu items states
   const [menuItems, setMenuItems] = useState([]);
@@ -180,7 +186,7 @@ const SettingsView = () => {
         await supabaseService.updateRestaurantSetting(item.key, item.value);
       }
 
-      showFeedback('success', 'تم حفظ جميع الإعدادات وتحديث محرك إنشاء الطلبات (create_order) بنجاح!');
+      showFeedback('success', 'تم حفظ وتطبيق جميع الإعدادات وقواعد التسعير بنجاح');
     } catch (err) {
       console.error('Failed to save settings:', err);
       showFeedback('error', 'حدث خطأ أثناء حفظ الإعدادات');
@@ -279,6 +285,11 @@ const SettingsView = () => {
     new Map(menuItems.filter(i => i.categoryId).map(i => [i.categoryId, { id: i.categoryId, name: i.categoryName || 'عام', slug: i.categorySlug }])).values()
   );
 
+  // Filtered areas for compact list
+  const filteredAreas = areas.filter(a => 
+    !areaSearch || a.name.toLowerCase().includes(areaSearch.toLowerCase()) || String(a.zone).includes(areaSearch)
+  );
+
   if (loading) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', gap: '16px' }}>
@@ -289,84 +300,211 @@ const SettingsView = () => {
   }
 
   return (
-    <div style={{ paddingBottom: '60px' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: '800', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <Settings size={28} color="var(--primary)" />
-            <span>إعدادات النظام والأسعار والمنيو</span>
-          </h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-            تتحكم هذه الصفحة مباشرة في محرك إنشاء الطلبات (create_order) وإتاحة أصناف المنيو وقواعد التوصيل.
-          </p>
+    <div style={{ paddingBottom: '60px', maxWidth: '1280px', margin: '0 auto' }}>
+      
+      {/* Top Bar: Title & Quick Actions */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        marginBottom: '20px', 
+        flexWrap: 'wrap', 
+        gap: '16px',
+        padding: '16px 20px',
+        background: 'var(--card-bg)',
+        border: '1px solid var(--border)',
+        borderRadius: '16px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{ 
+            width: '46px', 
+            height: '46px', 
+            borderRadius: '12px', 
+            background: 'rgba(234, 179, 8, 0.15)', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            color: 'var(--primary)'
+          }}>
+            <Settings size={26} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: '800', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span>إعدادات النظام والأسعار</span>
+            </h1>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', margin: '2px 0 0 0' }}>
+              تحكم مركزي مباشر في محرك الطلبات وقواعد التسعير والدفع والتوصيل
+            </p>
+          </div>
         </div>
 
-        {activeSubTab === 'general' ? (
-          <button
-            onClick={handleSaveAll}
-            disabled={saving}
-            className="btn-primary"
-            style={{
-              background: 'var(--accent)',
-              color: 'white',
-              padding: '12px 24px',
-              fontSize: '1rem',
-              fontWeight: 'bold',
-              boxShadow: '0 4px 15px rgba(16, 185, 129, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '12px'
-            }}
-          >
-            {saving ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
-            <span>{saving ? 'جاري الحفظ...' : 'حفظ التعديلات الآن'}</span>
-          </button>
-        ) : (
-          <button
-            onClick={loadMenuItems}
-            disabled={loadingMenu}
-            className="btn-primary"
-            style={{
-              background: 'rgba(255, 255, 255, 0.1)',
-              color: 'white',
-              padding: '10px 18px',
-              fontSize: '0.9rem',
-              fontWeight: 'bold',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              borderRadius: '10px',
-              border: '1px solid var(--border)'
-            }}
-          >
-            <RefreshCw className={loadingMenu ? 'animate-spin' : ''} size={18} />
-            <span>تحديث المنيو</span>
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {activeSubTab === 'general' ? (
+            <button
+              onClick={handleSaveAll}
+              disabled={saving}
+              className="btn-primary"
+              style={{
+                background: 'var(--accent)',
+                color: 'white',
+                minHeight: '44px',
+                padding: '10px 22px',
+                fontSize: '0.95rem',
+                fontWeight: 'bold',
+                boxShadow: '0 4px 14px rgba(16, 185, 129, 0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                cursor: saving ? 'wait' : 'pointer'
+              }}
+            >
+              {saving ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
+              <span>{saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}</span>
+            </button>
+          ) : (
+            <button
+              onClick={loadMenuItems}
+              disabled={loadingMenu}
+              className="btn-primary"
+              style={{
+                background: 'rgba(255, 255, 255, 0.08)',
+                color: 'white',
+                minHeight: '44px',
+                padding: '10px 18px',
+                fontSize: '0.9rem',
+                fontWeight: 'bold',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                borderRadius: '12px',
+                border: '1px solid var(--border)',
+                cursor: loadingMenu ? 'wait' : 'pointer'
+              }}
+            >
+              <RefreshCw className={loadingMenu ? 'animate-spin' : ''} size={18} />
+              <span>تحديث الأصناف</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* 5-Second Overview Status Strip */}
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+        gap: '12px', 
+        marginBottom: '20px' 
+      }}>
+        {/* Status 1: Restaurant State */}
+        <div style={{ 
+          background: isOpen ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', 
+          border: `1px solid ${isOpen ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
+          borderRadius: '12px',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Power size={18} color={isOpen ? '#10b981' : '#ef4444'} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>حالة المطعم:</span>
+          </div>
+          <span style={{ fontWeight: 'bold', color: isOpen ? '#34d399' : '#f87171', fontSize: '0.9rem' }}>
+            {isOpen ? '🟢 مفتوح للطلبات' : '🔴 مغلق مؤقتاً'}
+          </span>
+        </div>
+
+        {/* Status 2: Delivery State */}
+        <div style={{ 
+          background: deliveryEnabled ? 'rgba(56, 189, 248, 0.1)' : 'rgba(100, 116, 139, 0.1)', 
+          border: `1px solid ${deliveryEnabled ? 'rgba(56, 189, 248, 0.3)' : 'rgba(100, 116, 139, 0.3)'}`,
+          borderRadius: '12px',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <Truck size={18} color={deliveryEnabled ? '#38bdf8' : '#94a3b8'} />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>خدمة التوصيل:</span>
+          </div>
+          <span style={{ fontWeight: 'bold', color: deliveryEnabled ? '#38bdf8' : '#94a3b8', fontSize: '0.9rem' }}>
+            {deliveryEnabled ? 'مفعلة' : 'معطلة'}
+          </span>
+        </div>
+
+        {/* Status 3: Base Delivery Fee */}
+        <div style={{ 
+          background: 'rgba(255, 255, 255, 0.03)', 
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <DollarSign size={18} color="var(--primary)" />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>التوصيل الأساسي:</span>
+          </div>
+          <span style={{ fontWeight: 'bold', color: 'white', fontSize: '0.9rem' }}>
+            {baseDeliveryFee} ج.م <small style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>({baseDistanceKm} كم)</small>
+          </span>
+        </div>
+
+        {/* Status 4: Delivery Zones Count */}
+        <div style={{ 
+          background: 'rgba(255, 255, 255, 0.03)', 
+          border: '1px solid var(--border)',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <MapPin size={18} color="#a855f7" />
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>مناطق التوصيل:</span>
+          </div>
+          <span style={{ fontWeight: 'bold', color: '#c084fc', fontSize: '0.9rem' }}>
+            {areas.length} منطقة مسجلة
+          </span>
+        </div>
       </div>
 
       {/* Sub Tab Navigation */}
-      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', flexWrap: 'wrap' }}>
+      <div style={{ 
+        display: 'flex', 
+        gap: '8px', 
+        marginBottom: '20px', 
+        background: 'rgba(0, 0, 0, 0.2)',
+        padding: '6px',
+        borderRadius: '14px',
+        border: '1px solid var(--border)'
+      }}>
         <button
           type="button"
           onClick={() => setActiveSubTab('general')}
           style={{
-            background: activeSubTab === 'general' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+            flex: '1',
+            minHeight: '44px',
+            background: activeSubTab === 'general' ? 'var(--primary)' : 'transparent',
             color: activeSubTab === 'general' ? '#000' : 'white',
             fontWeight: 'bold',
-            padding: '10px 20px',
+            padding: '10px 16px',
             borderRadius: '10px',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '8px',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            fontSize: '0.95rem'
           }}
         >
-          <Settings size={18} />
+          <Sliders size={18} />
           <span>إعدادات النظام والأسعار والتوصيل</span>
         </button>
 
@@ -377,17 +515,21 @@ const SettingsView = () => {
             loadMenuItems();
           }}
           style={{
-            background: activeSubTab === 'menu_items' ? 'var(--primary)' : 'rgba(255, 255, 255, 0.05)',
+            flex: '1',
+            minHeight: '44px',
+            background: activeSubTab === 'menu_items' ? 'var(--primary)' : 'transparent',
             color: activeSubTab === 'menu_items' ? '#000' : 'white',
             fontWeight: 'bold',
-            padding: '10px 20px',
+            padding: '10px 16px',
             borderRadius: '10px',
             border: 'none',
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
+            justifyContent: 'center',
             gap: '8px',
-            transition: 'all 0.2s'
+            transition: 'all 0.2s',
+            fontSize: '0.95rem'
           }}
         >
           <UtensilsCrossed size={18} />
@@ -396,8 +538,9 @@ const SettingsView = () => {
             <span style={{
               background: activeSubTab === 'menu_items' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)',
               padding: '2px 8px',
-              borderRadius: '12px',
-              fontSize: '0.75rem'
+              borderRadius: '10px',
+              fontSize: '0.75rem',
+              fontWeight: '800'
             }}>
               {menuItems.filter(i => i.status === 'available').length}/{menuItems.length}
             </span>
@@ -405,12 +548,12 @@ const SettingsView = () => {
         </button>
       </div>
 
-      {/* Status Feedback Banner */}
+      {/* Feedback Alert Message */}
       {statusMsg && (
         <div style={{
-          padding: '14px 20px',
+          padding: '14px 18px',
           borderRadius: '12px',
-          marginBottom: '24px',
+          marginBottom: '20px',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
@@ -419,131 +562,208 @@ const SettingsView = () => {
           border: `1px solid ${statusMsg.type === 'success' ? '#10b981' : '#ef4444'}`,
           color: statusMsg.type === 'success' ? '#34d399' : '#f87171'
         }}>
-          {statusMsg.type === 'success' ? <CheckCircle2 size={22} /> : <AlertCircle size={22} />}
-          <span>{statusMsg.message}</span>
+          {statusMsg.type === 'success' ? <CheckCircle2 size={20} /> : <AlertCircle size={20} />}
+          <span style={{ fontSize: '0.95rem' }}>{statusMsg.message}</span>
         </div>
       )}
 
       {/* Tab 1: General Settings & Delivery */}
       {activeSubTab === 'general' && (
-        <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
-        
-        {/* Card 1: حالة المطعم ومواعيد الوردية */}
-        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-            <Power size={20} color="var(--primary)" />
-            <span>حالة المطعم ومواعيد الوردية</span>
-          </h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: 'white' }}>استقبال الطلبات (أونلاين)</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>يمنع إنشاء أي طلبات جديدة إذا تم الإغلاق</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          {/* Section 1: 🏪 تشغيل المطعم والورديات (Primary Operations) */}
+          <div className="card" style={{ 
+            background: 'var(--card-bg)', 
+            border: '1px solid var(--border)', 
+            borderRadius: '16px', 
+            padding: '20px' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#10b981' }}>
+                  <Power size={20} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'white', margin: 0 }}>
+                    🏪 تشغيل المطعم والورديات
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>حالة استقبال الطلبات والتحكم في الورديات اليومية</span>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsOpen(!isOpen)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  background: isOpen ? '#10b981' : '#ef4444',
-                  color: 'white',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {isOpen ? 'مفتوح للطلبات' : 'مغلق حالياً'}
-              </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: 'white' }}>إلزامية الوردية المفتوحة</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>يرفض الطلبات أوتوماتيكياً إذا لم تكن هناك وردية مفتوحة</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' }}>
+              {/* Toggle 1: Open / Close */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '14px 16px', 
+                background: 'rgba(255, 255, 255, 0.02)', 
+                borderRadius: '12px', 
+                border: '1px solid var(--border)' 
+              }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', color: 'white', fontSize: '0.95rem' }}>استقبال الطلبات (أونلاين)</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>إغلاق الاستقبال يمنع إنشاء طلبات جديدة فوراً</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsOpen(!isOpen)}
+                  style={{
+                    minHeight: '44px',
+                    minWidth: '130px',
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    background: isOpen ? '#10b981' : '#ef4444',
+                    color: 'white',
+                    transition: 'all 0.2s',
+                    fontSize: '0.9rem',
+                    boxShadow: isOpen ? '0 2px 8px rgba(16, 185, 129, 0.3)' : '0 2px 8px rgba(239, 68, 68, 0.3)'
+                  }}
+                >
+                  {isOpen ? '🟢 مفتوح للطلبات' : '🔴 مغلق حالياً'}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setRequireActiveShift(!requireActiveShift)}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: '10px',
-                  border: 'none',
-                  fontWeight: 'bold',
-                  cursor: 'pointer',
-                  background: requireActiveShift ? '#3b82f6' : '#64748b',
-                  color: 'white',
-                  transition: 'all 0.2s'
-                }}
-              >
-                {requireActiveShift ? 'مُفعّل' : 'معطّل'}
-              </button>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  وقت بدء الوردية:
-                </label>
-                <input
-                  type="time"
-                  value={shiftOpenTime}
-                  onChange={(e) => setShiftOpenTime(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-                />
+              {/* Toggle 2: Require Active Shift */}
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                padding: '14px 16px', 
+                background: 'rgba(255, 255, 255, 0.02)', 
+                borderRadius: '12px', 
+                border: '1px solid var(--border)' 
+              }}>
+                <div>
+                  <div style={{ fontWeight: 'bold', color: 'white', fontSize: '0.95rem' }}>إلزامية وجود وردية مفتوحة</div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>رفض الطلبات تلقائياً إذا لم تكن هناك وردية نشطة</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRequireActiveShift(!requireActiveShift)}
+                  style={{
+                    minHeight: '44px',
+                    minWidth: '100px',
+                    padding: '8px 16px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    background: requireActiveShift ? '#3b82f6' : '#64748b',
+                    color: 'white',
+                    transition: 'all 0.2s',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {requireActiveShift ? 'مُفعّل' : 'معطّل'}
+                </button>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  وقت انتهاء الوردية:
-                </label>
-                <input
-                  type="time"
-                  value={shiftCloseTime}
-                  onChange={(e) => setShiftCloseTime(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-                />
+
+              {/* Shift Times */}
+              <div style={{ 
+                gridColumn: '1 / -1',
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', 
+                gap: '12px',
+                padding: '14px 16px',
+                background: 'rgba(255, 255, 255, 0.02)',
+                borderRadius: '12px',
+                border: '1px solid var(--border)'
+              }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                    وقت بدء الوردية (يومياً):
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftOpenTime}
+                    onChange={(e) => setShiftOpenTime(e.target.value)}
+                    style={{ 
+                      width: '100%', 
+                      minHeight: '44px',
+                      padding: '8px 12px', 
+                      borderRadius: '10px', 
+                      background: 'rgba(255,255,255,0.05)', 
+                      border: '1px solid var(--border)', 
+                      color: 'white',
+                      fontSize: '0.95rem'
+                    }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                    وقت إغلاق الوردية (يومياً):
+                  </label>
+                  <input
+                    type="time"
+                    value={shiftCloseTime}
+                    onChange={(e) => setShiftCloseTime(e.target.value)}
+                    style={{ 
+                      width: '100%', 
+                      minHeight: '44px',
+                      padding: '8px 12px', 
+                      borderRadius: '10px', 
+                      background: 'rgba(255,255,255,0.05)', 
+                      border: '1px solid var(--border)', 
+                      color: 'white',
+                      fontSize: '0.95rem'
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Card 2: قواعد تسعير التوصيل والمسافات */}
-        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-            <Truck size={20} color="var(--accent)" />
-            <span>تسعير التوصيل والمسافات (GPS)</span>
-          </h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: 'white' }}>تفعيل خدمة التوصيل (Delivery)</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إذا تم التعطيل، يقبل النظام فقط طلبات الاستلام والصالة</div>
+          {/* Section 2: 💰 الأسعار والرسوم وقواعد التوصيل (Pricing & Delivery Engine) */}
+          <div className="card" style={{ 
+            background: 'var(--card-bg)', 
+            border: '1px solid var(--border)', 
+            borderRadius: '16px', 
+            padding: '20px' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(234, 179, 8, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)' }}>
+                  <Truck size={20} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'white', margin: 0 }}>
+                    💰 الأسعار وقواعد التوصيل (GPS & Distance)
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>حساب أسعار التوصيل التلقائية حسب المسافة وإحداثيات GPS</span>
+                </div>
               </div>
+
+              {/* Delivery Toggle Button */}
               <button
                 type="button"
                 onClick={() => setDeliveryEnabled(!deliveryEnabled)}
                 style={{
-                  padding: '6px 14px',
+                  minHeight: '40px',
+                  padding: '6px 16px',
                   borderRadius: '10px',
                   border: 'none',
                   fontWeight: 'bold',
                   cursor: 'pointer',
                   background: deliveryEnabled ? '#10b981' : '#ef4444',
                   color: 'white',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  fontSize: '0.85rem'
                 }}
               >
-                {deliveryEnabled ? 'مفعّل' : 'معطّل'}
+                {deliveryEnabled ? 'خدمة التوصيل: مفعلة' : 'خدمة التوصيل: معطلة'}
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+              {/* Base Fee */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
                   السعر الأساسي للتوصيل (ج.م):
                 </label>
                 <input
@@ -551,12 +771,14 @@ const SettingsView = () => {
                   min="0"
                   value={baseDeliveryFee}
                   onChange={(e) => setBaseDeliveryFee(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#34d399', fontWeight: 'bold', fontSize: '1.05rem' }}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  المسافة الأساسية المشمولة (كم):
+
+              {/* Base Distance */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  المسافة المشمولة بالسعر الأساسي (كم):
                 </label>
                 <input
                   type="number"
@@ -564,14 +786,13 @@ const SettingsView = () => {
                   min="0"
                   value={baseDistanceKm}
                   onChange={(e) => setBaseDistanceKm(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+              {/* Rate per KM */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
                   سعر كل كم إضافي (ج.م/كم):
                 </label>
                 <input
@@ -580,12 +801,14 @@ const SettingsView = () => {
                   min="0"
                   value={deliveryPerKmRate}
                   onChange={(e) => setDeliveryPerKmRate(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  أقصى مسافة توصيل (كم):
+
+              {/* Max Distance */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  أقصى نطاق توصيل مسموح (كم):
                 </label>
                 <input
                   type="number"
@@ -593,59 +816,90 @@ const SettingsView = () => {
                   max="50"
                   value={maxDeliveryDistance}
                   onChange={(e) => setMaxDeliveryDistance(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
-            </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  خطوة تقريب السعر (مضاعفات):
+              {/* Rounding Step */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  تقريب سعر التوصيل (مضاعفات):
                 </label>
                 <select
                   value={deliveryRoundingStep}
                   onChange={(e) => setDeliveryRoundingStep(Number(e.target.value))}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: '#1e293b', border: '1px solid var(--border)', color: 'white', fontSize: '0.9rem' }}
                 >
                   <option value={5}>أقرب 5 جنيهات (5, 10, 15...)</option>
                   <option value={1}>رقم صحيح بدون كسور (1 ج)</option>
                   <option value={0}>بدون تقريب</option>
                 </select>
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  الحد الأدنى للطلب (ج.م):
+
+              {/* Minimum Order */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  الحد الأدنى لقيمة الطلب (ج.م):
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={minOrderAmount}
                   onChange={(e) => setMinOrderAmount(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '1rem' }}
                 />
               </div>
             </div>
+
+            {/* Formula Helper Info Strip */}
+            <div style={{ 
+              marginTop: '16px', 
+              padding: '10px 14px', 
+              background: 'rgba(234, 179, 8, 0.08)', 
+              borderRadius: '10px', 
+              border: '1px solid rgba(234, 179, 8, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '0.82rem',
+              color: 'var(--text-muted)'
+            }}>
+              <Info size={16} color="var(--primary)" />
+              <span>
+                معادلة الحساب: <strong style={{ color: 'white' }}>{baseDeliveryFee} ج.م</strong> لأول <strong style={{ color: 'white' }}>{baseDistanceKm} كم</strong>، ثم <strong style={{ color: 'white' }}>{deliveryPerKmRate} ج.م/كم</strong> إضافي، بحد أقصى <strong style={{ color: 'white' }}>{maxDeliveryDistance} كم</strong>.
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* Card 3: بيانات الدفع ورسوم الخدمة الإلكترونية */}
-        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-            <CreditCard size={20} color="#a855f7" />
-            <span>الحسابات ورسوم الخدمة الإلكترونية</span>
-          </h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
-              <div>
-                <div style={{ fontWeight: 'bold', color: 'white' }}>رسوم الخدمة الإلكترونية</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>تطبق على إنستاباي والمحافظ الرقمية فقط</div>
+          {/* Section 3: 💳 الدفع الإلكتروني والحسابات المالية (Payment & Accounts) */}
+          <div className="card" style={{ 
+            background: 'var(--card-bg)', 
+            border: '1px solid var(--border)', 
+            borderRadius: '16px', 
+            padding: '20px' 
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#a855f7' }}>
+                  <CreditCard size={20} />
+                </div>
+                <div>
+                  <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'white', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span>💳 بيانات الدفع ورسوم الخدمة الإلكترونية</span>
+                    <span style={{ fontSize: '0.7rem', padding: '2px 8px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', color: '#f87171', border: '1px solid rgba(239, 68, 68, 0.3)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Lock size={10} /> بيانات حساسة
+                    </span>
+                  </h2>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>حسابات التحويل المالي (InstaPay ومحافظ فودافون) ورسوم الخدمة</span>
+                </div>
               </div>
+
+              {/* Service Fee Toggle */}
               <button
                 type="button"
                 onClick={() => setServiceFeeEnabled(!serviceFeeEnabled)}
                 style={{
+                  minHeight: '40px',
                   padding: '6px 14px',
                   borderRadius: '10px',
                   border: 'none',
@@ -653,448 +907,345 @@ const SettingsView = () => {
                   cursor: 'pointer',
                   background: serviceFeeEnabled ? '#a855f7' : '#64748b',
                   color: 'white',
-                  transition: 'all 0.2s'
+                  transition: 'all 0.2s',
+                  fontSize: '0.85rem'
                 }}
               >
-                {serviceFeeEnabled ? 'مفعّل' : 'معطّل'}
+                {serviceFeeEnabled ? 'رسوم الخدمة: مفعلة' : 'رسوم الخدمة: معطلة'}
               </button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  قيمة الشريحة (ج.م):
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+              {/* InstaPay IPA */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  عنوان إنستاباي (InstaPay IPA):
+                </label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={instapayIpa}
+                  onChange={(e) => setInstapayIpa(e.target.value)}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#38bdf8', fontWeight: 'bold', fontSize: '0.95rem' }}
+                />
+              </div>
+
+              {/* Wallet Number */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  رقم المحفظة الإلكترونية (فودافون كاش / أورنج):
+                </label>
+                <input
+                  type="text"
+                  dir="ltr"
+                  value={walletNumber}
+                  onChange={(e) => setWalletNumber(e.target.value)}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#34d399', fontWeight: 'bold', fontSize: '0.95rem' }}
+                />
+              </div>
+
+              {/* Account Name */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  اسم صاحب الحساب التجاري (للتأكيد):
+                </label>
+                <input
+                  type="text"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.95rem' }}
+                />
+              </div>
+
+              {/* Service Fee Chunk */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  قيمة شريحة التحويل (ج.م):
                 </label>
                 <input
                   type="number"
                   min="50"
                   value={serviceFeeChunk}
                   onChange={(e) => setServiceFeeChunk(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.95rem' }}
                 />
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  رسوم الشريحة (ج.م):
+
+              {/* Fee Per Chunk */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  رسوم الشريحة (ج.م لكل {serviceFeeChunk} ج):
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={serviceFeePerChunk}
                   onChange={(e) => setServiceFeePerChunk(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.95rem' }}
                 />
               </div>
-            </div>
 
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                عنوان انستاباي (InstaPay IPA):
-              </label>
-              <input
-                type="text"
-                dir="ltr"
-                value={instapayIpa}
-                onChange={(e) => setInstapayIpa(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                رقم المحفظة الإلكترونية (فودافون كاش / أورنج):
-              </label>
-              <input
-                type="text"
-                dir="ltr"
-                value={walletNumber}
-                onChange={(e) => setWalletNumber(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-              />
-            </div>
-
-            <div>
-              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                اسم صاحب الحساب التجاري:
-              </label>
-              <input
-                type="text"
-                value={accountName}
-                onChange={(e) => setAccountName(e.target.value)}
-                style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Card 4: إعدادات عربون الحجوزات */}
-        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-          <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-            <Calendar size={20} color="#38bdf8" />
-            <span>عربون الحجوزات وإدارتها</span>
-          </h2>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  مبلغ العربون الأساسي (ج.م):
+              {/* Reservation Deposit */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
+                  عربون الحجز الأساسي (ج.م):
                 </label>
                 <input
                   type="number"
                   min="0"
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  مصاريف خدمة الحجز (ج.م):
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={reservationFee}
-                  onChange={(e) => setReservationFee(e.target.value)}
-                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                  style={{ width: '100%', minHeight: '44px', padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: '#38bdf8', fontWeight: 'bold', fontSize: '0.95rem' }}
                 />
               </div>
             </div>
-
-            <div style={{ padding: '12px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
-              <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>
-                الإجمالي المطلوب من العميل لتأكيد الحجز: {(Number(depositAmount) || 0) + (Number(reservationFee) || 0)} ج.م
-              </div>
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                يتم تحديث المبلغ في تطبيق المنيو فوراً ويطلب من العميل رفع إيصال التحويل.
-              </div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Section: مناطق التوصيل ورسومها المحددة مسبقاً */}
-      <div className="card" style={{ marginTop: '24px', background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <h2 style={{ fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-              <MapPin size={22} color="var(--primary)" />
-              <span>مناطق التوصيل ورسومها المباشرة ({areas.length} منطقة)</span>
-            </h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '4px' }}>
-              هذه المناطق تظهر للعميل في قائمة الاختيار السريع عند تحديد عنوان التوصيل.
-            </p>
           </div>
 
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              placeholder="اسم المنطقة الجديدة"
-              value={newAreaName}
-              onChange={(e) => setNewAreaName(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.85rem', width: '140px' }}
-            />
-            <input
-              type="number"
-              placeholder="السعر (ج)"
-              value={newAreaFee}
-              onChange={(e) => setNewAreaFee(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.85rem', width: '90px' }}
-            />
-            <button
-              type="button"
-              onClick={handleAddArea}
-              className="btn-primary"
-              style={{ background: 'var(--primary)', padding: '8px 14px', borderRadius: '8px', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-            >
-              <Plus size={16} />
-              <span>إضافة منطقة</span>
-            </button>
-          </div>
-        </div>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.9rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
-                <th style={{ padding: '12px' }}>المنطقة</th>
-                <th style={{ padding: '12px' }}>النطاق (Zone)</th>
-                <th style={{ padding: '12px' }}>سعر التوصيل (ج.م)</th>
-                <th style={{ padding: '12px', textAlign: 'center' }}>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {areas.map((area, index) => (
-                <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)' }}>
-                  <td style={{ padding: '10px 12px', fontWeight: 'bold', color: 'white' }}>{area.name}</td>
-                  <td style={{ padding: '10px 12px', color: 'var(--text-muted)' }}>
-                    نطاق {area.zone || 1}
-                  </td>
-                  <td style={{ padding: '10px 12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <input
-                        type="number"
-                        min="0"
-                        value={area.fee}
-                        onChange={(e) => handleUpdateAreaFee(index, e.target.value)}
-                        style={{
-                          width: '90px',
-                          padding: '6px 10px',
-                          borderRadius: '8px',
-                          background: 'rgba(255,255,255,0.05)',
-                          border: '1px solid var(--border)',
-                          color: '#34d399',
-                          fontWeight: 'bold'
-                        }}
-                      />
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>ج.م</span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteArea(index)}
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.1)',
-                        border: '1px solid rgba(239, 68, 68, 0.2)',
-                        color: '#f87171',
-                        padding: '6px 10px',
-                        borderRadius: '8px',
-                        cursor: 'pointer'
-                      }}
-                      title="حذف المنطقة"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
-  )}
-
-  {/* Tab 2: Menu Items & Availability Management */}
-  {activeSubTab === 'menu_items' && (
-    <div>
-      {/* Controls Bar: Search, Category, Status */}
-      <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
-          
-          {/* Search */}
-          <div style={{ position: 'relative', flex: '1 1 240px' }}>
-            <Search size={18} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input
-              type="text"
-              placeholder="ابحث عن صنف بالاسم أو الوصف..."
-              value={menuSearch}
-              onChange={(e) => setMenuSearch(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 38px 10px 14px',
-                borderRadius: '10px',
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: '1px solid var(--border)',
-                color: 'white',
-                fontSize: '0.9rem'
-              }}
-            />
-          </div>
-
-          {/* Category Filter */}
-          <div style={{ flex: '0 1 200px' }}>
-            <select
-              value={selectedCategory}
-              onChange={(e) => setSelectedCategory(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 14px',
-                borderRadius: '10px',
-                background: '#1e293b',
-                border: '1px solid var(--border)',
-                color: 'white',
-                fontSize: '0.9rem'
+          {/* Section 4: 🚚 مناطق التوصيل الـ16 (Compact Accordion & Drawer UX) */}
+          <div className="card" style={{ 
+            background: 'var(--card-bg)', 
+            border: '1px solid var(--border)', 
+            borderRadius: '16px', 
+            padding: '20px',
+            overflow: 'hidden'
+          }}>
+            {/* Header / Click to Expand */}
+            <div 
+              onClick={() => setIsAreasOpen(!isAreasOpen)}
+              style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center', 
+                cursor: 'pointer',
+                userSelect: 'none',
+                padding: '4px 0'
               }}
             >
-              <option value="all">جميع التصنيفات ({categoriesList.length})</option>
-              {categoriesList.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.name}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {[
-              { id: 'all', label: 'الكل' },
-              { id: 'available', label: '🟢 متاح' },
-              { id: 'out_of_stock', label: '🔴 نفذت الكمية' },
-              { id: 'paused', label: '⏸️ موقوف' }
-            ].map(st => (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => setStatusFilter(st.id)}
-                style={{
-                  background: statusFilter === st.id ? 'var(--primary)' : 'rgba(255,255,255,0.05)',
-                  color: statusFilter === st.id ? '#000' : 'white',
-                  border: '1px solid var(--border)',
-                  padding: '8px 14px',
-                  borderRadius: '8px',
-                  fontSize: '0.85rem',
-                  fontWeight: 'bold',
-                  cursor: 'pointer'
-                }}
-              >
-                {st.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Summary counters */}
-        <div style={{ marginTop: '16px', paddingTop: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', gap: '16px', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          <span>إجمالي المعروض: <strong style={{ color: 'white' }}>{filteredMenuItems.length}</strong></span>
-          <span>المتاح: <strong style={{ color: '#34d399' }}>{menuItems.filter(i => i.status === 'available').length}</strong></span>
-          <span>نفذت الكمية: <strong style={{ color: '#f87171' }}>{menuItems.filter(i => i.status === 'out_of_stock').length}</strong></span>
-          <span>موقوف / مخفي: <strong style={{ color: '#fbbf24' }}>{menuItems.filter(i => i.status === 'paused' || i.status === 'hidden').length}</strong></span>
-        </div>
-      </div>
-
-      {/* Menu Items Grid */}
-      {loadingMenu ? (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '12px' }}>
-          <RefreshCw className="animate-spin" size={32} color="var(--primary)" />
-          <p style={{ color: 'var(--text-muted)' }}>جاري جلب أصناف المنيو من الخادم...</p>
-        </div>
-      ) : filteredMenuItems.length === 0 ? (
-        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '40px', textAlign: 'center' }}>
-          <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>لا توجد أصناف تطابق معايير البحث.</p>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-          {filteredMenuItems.map(item => {
-            const isAvailable = item.status === 'available';
-            const isUpdating = updatingItemId === item.id;
-
-            return (
-              <div
-                key={item.id}
-                className="card"
-                style={{
-                  background: 'var(--card-bg)',
-                  border: `1px solid ${isAvailable ? 'rgba(52, 211, 153, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
-                  borderRadius: '14px',
-                  padding: '16px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'space-between',
-                  opacity: isAvailable ? 1 : 0.75,
-                  transition: 'all 0.2s'
-                }}
-              >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: 'rgba(168, 85, 247, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#c084fc' }}>
+                  <MapPin size={22} />
+                </div>
                 <div>
-                  {/* Top Row: Category badge & Price */}
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                    <span style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      color: '#94a3b8',
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontSize: '0.75rem',
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', color: 'white', margin: 0 }}>
+                      🚚 مناطق التوصيل ورسومها المحددة مسبقاً
+                    </h2>
+                    <span style={{ 
+                      background: 'rgba(192, 132, 252, 0.15)', 
+                      color: '#c084fc', 
+                      fontSize: '0.78rem', 
+                      padding: '2px 8px', 
+                      borderRadius: '8px',
                       fontWeight: 'bold'
                     }}>
-                      {item.categoryName || 'عام'}
-                    </span>
-                    
-                    <span style={{ fontSize: '1.1rem', fontWeight: '800', color: 'var(--primary)' }}>
-                      {item.price} <small style={{ fontSize: '0.75rem' }}>ج.م</small>
+                      {areas.length} منطقة
                     </span>
                   </div>
-
-                  {/* Item Name */}
-                  <h3 style={{ fontSize: '1.05rem', fontWeight: 'bold', color: 'white', marginBottom: '6px' }}>
-                    {item.name}
-                  </h3>
-
-                  {/* Description */}
-                  {item.description && (
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '12px', lineHeight: '1.4', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {item.description}
-                    </p>
-                  )}
-                </div>
-
-                {/* Bottom Controls */}
-                <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
-                  {/* Detailed status select */}
-                  <select
-                    value={item.status}
-                    onChange={(e) => handleUpdateItemStatus(item.id, e.target.value)}
-                    disabled={isUpdating}
-                    style={{
-                      flex: '1',
-                      padding: '6px 8px',
-                      borderRadius: '8px',
-                      background: '#1e293b',
-                      border: '1px solid var(--border)',
-                      color: isAvailable ? '#34d399' : '#f87171',
-                      fontSize: '0.8rem',
-                      fontWeight: 'bold'
-                    }}
-                  >
-                    <option value="available">🟢 متاح للطلب</option>
-                    <option value="out_of_stock">🔴 نفذت الكمية</option>
-                    <option value="paused">⏸️ موقوف مؤقتًا</option>
-                    <option value="hidden">👁️ مخفي</option>
-                  </select>
-
-                  {/* Quick Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleItemAvailability(item)}
-                    disabled={isUpdating}
-                    style={{
-                      background: isAvailable ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                      color: isAvailable ? '#f87171' : '#34d399',
-                      border: `1px solid ${isAvailable ? '#ef4444' : '#10b981'}`,
-                      padding: '6px 12px',
-                      borderRadius: '8px',
-                      fontSize: '0.8rem',
-                      fontWeight: 'bold',
-                      cursor: isUpdating ? 'wait' : 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px'
-                    }}
-                    title={isAvailable ? 'تعطيل الصنف (نفذت الكمية)' : 'إتاحة الصنف للطلب'}
-                  >
-                    {isUpdating ? (
-                      <RefreshCw className="animate-spin" size={14} />
-                    ) : isAvailable ? (
-                      <>
-                        <X size={14} />
-                        <span>تعطيل</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check size={14} />
-                        <span>إتاحة</span>
-                      </>
-                    )}
-                  </button>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '2px 0 0 0' }}>
+                    تظهر في قائمة الاختيار السريع للعنوان في تطبيق المنيو
+                  </p>
                 </div>
               </div>
-            );
-          })}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minHeight: '44px', padding: '0 8px' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--primary)', fontWeight: 'bold' }}>
+                  {isAreasOpen ? 'إخفاء التفاصيل' : 'عرض وإدارة المناطق ›'}
+                </span>
+                <div style={{ 
+                  width: '32px', 
+                  height: '32px', 
+                  borderRadius: '8px', 
+                  background: 'rgba(255, 255, 255, 0.05)', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  color: 'white' 
+                }}>
+                  {isAreasOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsed Preview Strip (when closed) */}
+            {!isAreasOpen && (
+              <div style={{ 
+                marginTop: '14px', 
+                padding: '12px 16px', 
+                background: 'rgba(255, 255, 255, 0.02)', 
+                borderRadius: '12px', 
+                border: '1px solid rgba(255, 255, 255, 0.05)',
+                display: 'flex', 
+                gap: '8px', 
+                flexWrap: 'wrap',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>أبرز المناطق:</span>
+                {areas.slice(0, 6).map((a, i) => (
+                  <span key={i} style={{ 
+                    background: 'rgba(255, 255, 255, 0.06)', 
+                    color: 'white', 
+                    fontSize: '0.78rem', 
+                    padding: '3px 8px', 
+                    borderRadius: '6px' 
+                  }}>
+                    {a.name} ({a.fee} ج)
+                  </span>
+                ))}
+                {areas.length > 6 && (
+                  <span style={{ fontSize: '0.78rem', color: 'var(--primary)' }}>
+                    +{areas.length - 6} مناطق أخرى
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Expanded Detailed Area Management */}
+            {isAreasOpen && (
+              <div style={{ marginTop: '20px', paddingTop: '16px', borderTop: '1px solid rgba(255, 255, 255, 0.08)' }}>
+                {/* Search & Add New Area Toolbar */}
+                <div style={{ 
+                  display: 'flex', 
+                  gap: '10px', 
+                  flexWrap: 'wrap', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between', 
+                  marginBottom: '16px' 
+                }}>
+                  {/* Search Filter */}
+                  <div style={{ position: 'relative', flex: '1 1 200px' }}>
+                    <Search size={16} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+                    <input
+                      type="text"
+                      placeholder="بحث في المناطق أو النطاق..."
+                      value={areaSearch}
+                      onChange={(e) => setAreaSearch(e.target.value)}
+                      style={{
+                        width: '100%',
+                        minHeight: '40px',
+                        padding: '8px 34px 8px 12px',
+                        borderRadius: '8px',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        border: '1px solid var(--border)',
+                        color: 'white',
+                        fontSize: '0.85rem'
+                      }}
+                    />
+                  </div>
+
+                  {/* Add New Area Input Row */}
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      type="text"
+                      placeholder="اسم المنطقة الجديدة"
+                      value={newAreaName}
+                      onChange={(e) => setNewAreaName(e.target.value)}
+                      style={{ minHeight: '40px', padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.85rem', width: '150px' }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="السعر (ج)"
+                      value={newAreaFee}
+                      onChange={(e) => setNewAreaFee(e.target.value)}
+                      style={{ minHeight: '40px', padding: '6px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', fontSize: '0.85rem', width: '90px' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddArea}
+                      className="btn-primary"
+                      style={{ 
+                        background: 'var(--primary)', 
+                        minHeight: '40px', 
+                        padding: '6px 14px', 
+                        borderRadius: '8px', 
+                        fontSize: '0.85rem', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px' 
+                      }}
+                    >
+                      <Plus size={16} />
+                      <span>إضافة منطقة</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Compact Table / List */}
+                <div style={{ overflowX: 'auto', maxHeight: '420px', overflowY: 'auto', borderRadius: '10px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'right', fontSize: '0.85rem' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: '#1e293b', zIndex: 1 }}>
+                      <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)' }}>
+                        <th style={{ padding: '10px 14px' }}>المنطقة</th>
+                        <th style={{ padding: '10px 14px' }}>النطاق (Zone)</th>
+                        <th style={{ padding: '10px 14px' }}>سعر التوصيل</th>
+                        <th style={{ padding: '10px 14px', textAlign: 'center' }}>إجراءات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredAreas.map((area, index) => {
+                        const originalIndex = areas.findIndex(a => a.name === area.name);
+                        return (
+                          <tr key={index} style={{ borderBottom: '1px solid rgba(255,255,255,0.03)', background: index % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                            <td style={{ padding: '8px 14px', fontWeight: 'bold', color: 'white' }}>{area.name}</td>
+                            <td style={{ padding: '8px 14px', color: 'var(--text-muted)' }}>
+                              <span style={{ background: 'rgba(255,255,255,0.06)', padding: '2px 6px', borderRadius: '4px', fontSize: '0.75rem' }}>
+                                نطاق {area.zone || 1}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px 14px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={area.fee}
+                                  onChange={(e) => handleUpdateAreaFee(originalIndex !== -1 ? originalIndex : index, e.target.value)}
+                                  style={{
+                                    width: '85px',
+                                    padding: '5px 8px',
+                                    borderRadius: '6px',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid var(--border)',
+                                    color: '#34d399',
+                                    fontWeight: 'bold',
+                                    fontSize: '0.9rem'
+                                  }}
+                                />
+                                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>ج.م</span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '8px 14px', textAlign: 'center' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteArea(originalIndex !== -1 ? originalIndex : index)}
+                                style={{
+                                  background: 'rgba(239, 68, 68, 0.1)',
+                                  border: '1px solid rgba(239, 68, 68, 0.2)',
+                                  color: '#f87171',
+                                  padding: '5px 8px',
+                                  borderRadius: '6px',
+                                  cursor: 'pointer'
+                                }}
+                                title="حذف المنطقة"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+
         </div>
       )}
-    </div>
-  )}
+
+      {/* Tab 2: Menu Items & Categories Full Management */}
+      {activeSubTab === 'menu_items' && (
+        <MenuManagementView />
+      )}
     </div>
   );
 };
