@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, Save, RefreshCw, Power, DollarSign, MapPin, 
-  CreditCard, Clock, AlertCircle, CheckCircle2, Shield, Plus, Trash2
+  CreditCard, Clock, AlertCircle, CheckCircle2, Shield, Plus, Trash2,
+  Truck, Calendar, Percent
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 
 const DEFAULT_AREAS = [
-  { name: 'المطرية - الرئيسي', lat: 30.126, lng: 31.298, zone: 1, fee: 20 },
+  { name: 'المطرية الرئيسي', lat: 30.126, lng: 31.298, zone: 1, fee: 20 },
   { name: 'المسلة', lat: 30.132, lng: 31.302, zone: 1, fee: 20 },
   { name: 'مسطرد', lat: 30.141, lng: 31.295, zone: 1, fee: 25 },
   { name: 'الشارع الجديد', lat: 30.148, lng: 31.292, zone: 1, fee: 25 },
@@ -29,25 +30,40 @@ const SettingsView = () => {
   const [saving, setSaving] = useState(false);
   const [statusMsg, setStatusMsg] = useState(null);
 
-  // Form states
+  // Form states - General & Shift
   const [isOpen, setIsOpen] = useState(true);
-  const [shiftOpenTime, setShiftOpenTime] = useState('08:00');
+  const [requireActiveShift, setRequireActiveShift] = useState(true);
+  const [shiftOpenTime, setShiftOpenTime] = useState('06:00');
   const [shiftCloseTime, setShiftCloseTime] = useState('04:00');
-  const [minDeliveryFee, setMinDeliveryFee] = useState(20);
-  const [deliveryPerKmRate, setDeliveryPerKmRate] = useState(1.25);
-  const [maxDeliveryDistance, setMaxDeliveryDistance] = useState(15);
+
+  // Form states - Delivery Pricing
+  const [deliveryEnabled, setDeliveryEnabled] = useState(true);
+  const [baseDeliveryFee, setBaseDeliveryFee] = useState(25);
+  const [baseDistanceKm, setBaseDistanceKm] = useState(0.5);
+  const [deliveryPerKmRate, setDeliveryPerKmRate] = useState(12.5);
+  const [maxDeliveryDistance, setMaxDeliveryDistance] = useState(10);
+  const [deliveryRoundingStep, setDeliveryRoundingStep] = useState(5);
   const [minOrderAmount, setMinOrderAmount] = useState(0);
+
+  // Form states - Payment & Service Fee
+  const [serviceFeeEnabled, setServiceFeeEnabled] = useState(true);
+  const [serviceFeeChunk, setServiceFeeChunk] = useState(500);
+  const [serviceFeePerChunk, setServiceFeePerChunk] = useState(10);
   const [instapayIpa, setInstapayIpa] = useState('abu_khatar@instapay');
   const [walletNumber, setWalletNumber] = useState('01144423700');
   const [accountName, setAccountName] = useState('مطعم أبو خاطر');
-  const [areas, setAreas] = useState(DEFAULT_AREAS);
 
-  // New Area Modal / inline inputs
+  // Form states - Reservations
+  const [depositAmount, setDepositAmount] = useState(100);
+  const [reservationFee, setReservationFee] = useState(5);
+
+  // Form states - Fixed Zones
+  const [areas, setAreas] = useState(DEFAULT_AREAS);
   const [newAreaName, setNewAreaName] = useState('');
   const [newAreaFee, setNewAreaFee] = useState(30);
   const [newAreaZone, setNewAreaZone] = useState(1);
 
-  // Load settings
+  // Load settings from Supabase
   const loadSettings = async () => {
     try {
       setLoading(true);
@@ -56,15 +72,37 @@ const SettingsView = () => {
         if (settings.is_restaurant_open !== undefined) {
           setIsOpen(settings.is_restaurant_open === 'true' || settings.is_restaurant_open === true);
         }
+        if (settings.require_active_shift_for_orders !== undefined) {
+          setRequireActiveShift(settings.require_active_shift_for_orders === 'true' || settings.require_active_shift_for_orders === true);
+        }
+        if (settings.delivery_enabled !== undefined) {
+          setDeliveryEnabled(settings.delivery_enabled === 'true' || settings.delivery_enabled === true);
+        }
+        if (settings.payment_service_fee_enabled !== undefined) {
+          setServiceFeeEnabled(settings.payment_service_fee_enabled === 'true' || settings.payment_service_fee_enabled === true);
+        }
+
         if (settings.shift_open_time) setShiftOpenTime(settings.shift_open_time);
         if (settings.shift_close_time) setShiftCloseTime(settings.shift_close_time);
-        if (settings.min_delivery_fee) setMinDeliveryFee(Number(settings.min_delivery_fee));
+        if (settings.delivery_base_fee) setBaseDeliveryFee(Number(settings.delivery_base_fee));
+        else if (settings.min_delivery_fee) setBaseDeliveryFee(Number(settings.min_delivery_fee));
+
+        if (settings.delivery_base_distance_km) setBaseDistanceKm(Number(settings.delivery_base_distance_km));
         if (settings.delivery_per_km_rate) setDeliveryPerKmRate(Number(settings.delivery_per_km_rate));
         if (settings.max_delivery_distance_km) setMaxDeliveryDistance(Number(settings.max_delivery_distance_km));
+        if (settings.delivery_rounding_step) setDeliveryRoundingStep(Number(settings.delivery_rounding_step));
         if (settings.min_order_amount) setMinOrderAmount(Number(settings.min_order_amount));
+
+        if (settings.payment_service_fee_chunk) setServiceFeeChunk(Number(settings.payment_service_fee_chunk));
+        if (settings.payment_service_fee_per_chunk) setServiceFeePerChunk(Number(settings.payment_service_fee_per_chunk));
+
+        if (settings.reservation_deposit_amount) setDepositAmount(Number(settings.reservation_deposit_amount));
+        if (settings.reservation_service_fee) setReservationFee(Number(settings.reservation_service_fee));
+
         if (settings.payment_instapay_ipa) setInstapayIpa(settings.payment_instapay_ipa);
         if (settings.payment_wallet_number) setWalletNumber(settings.payment_wallet_number);
         if (settings.payment_account_name) setAccountName(settings.payment_account_name);
+
         if (settings.fixed_delivery_zones) {
           try {
             const parsed = typeof settings.fixed_delivery_zones === 'string'
@@ -89,7 +127,6 @@ const SettingsView = () => {
   useEffect(() => {
     loadSettings();
     const subscription = supabaseService.subscribeToRestaurantSettings(() => {
-      // Background refresh if external change occurs
       loadSettings();
     });
     return () => {
@@ -99,7 +136,7 @@ const SettingsView = () => {
 
   const showFeedback = (type, message) => {
     setStatusMsg({ type, message });
-    setTimeout(() => setStatusMsg(null), 4000);
+    setTimeout(() => setStatusMsg(null), 4500);
   };
 
   const handleSaveAll = async (e) => {
@@ -108,12 +145,22 @@ const SettingsView = () => {
       setSaving(true);
       const updates = [
         { key: 'is_restaurant_open', value: isOpen ? 'true' : 'false' },
+        { key: 'require_active_shift_for_orders', value: requireActiveShift ? 'true' : 'false' },
+        { key: 'delivery_enabled', value: deliveryEnabled ? 'true' : 'false' },
         { key: 'shift_open_time', value: shiftOpenTime },
         { key: 'shift_close_time', value: shiftCloseTime },
-        { key: 'min_delivery_fee', value: String(minDeliveryFee) },
+        { key: 'delivery_base_fee', value: String(baseDeliveryFee) },
+        { key: 'min_delivery_fee', value: String(baseDeliveryFee) },
+        { key: 'delivery_base_distance_km', value: String(baseDistanceKm) },
         { key: 'delivery_per_km_rate', value: String(deliveryPerKmRate) },
         { key: 'max_delivery_distance_km', value: String(maxDeliveryDistance) },
+        { key: 'delivery_rounding_step', value: String(deliveryRoundingStep) },
         { key: 'min_order_amount', value: String(minOrderAmount) },
+        { key: 'payment_service_fee_enabled', value: serviceFeeEnabled ? 'true' : 'false' },
+        { key: 'payment_service_fee_chunk', value: String(serviceFeeChunk) },
+        { key: 'payment_service_fee_per_chunk', value: String(serviceFeePerChunk) },
+        { key: 'reservation_deposit_amount', value: String(depositAmount) },
+        { key: 'reservation_service_fee', value: String(reservationFee) },
         { key: 'payment_instapay_ipa', value: instapayIpa },
         { key: 'payment_wallet_number', value: walletNumber },
         { key: 'payment_account_name', value: accountName },
@@ -124,7 +171,7 @@ const SettingsView = () => {
         await supabaseService.updateRestaurantSetting(item.key, item.value);
       }
 
-      showFeedback('success', 'تم حفظ جميع الإعدادات ومزامنتها بنجاح مع تطبيق المنيو!');
+      showFeedback('success', 'تم حفظ جميع الإعدادات وتحديث محرك إنشاء الطلبات (create_order) بنجاح!');
     } catch (err) {
       console.error('Failed to save settings:', err);
       showFeedback('error', 'حدث خطأ أثناء حفظ الإعدادات');
@@ -178,7 +225,7 @@ const SettingsView = () => {
             <span>إعدادات النظام والأسعار والتوصيل</span>
           </h1>
           <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginTop: '4px' }}>
-            تتحكم هذه الصفحة مباشرة في منيو العميل وأسعار التوصيل وحسابات الدفع الإلكتروني.
+            تتحكم هذه الصفحة مباشرة في محرك إنشاء الطلبات (create_order) والمنيو والأسعار.
           </p>
         </div>
 
@@ -225,18 +272,18 @@ const SettingsView = () => {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px' }}>
         
-        {/* Card 1: حالة المطعم ومواعيد العمل */}
+        {/* Card 1: حالة المطعم ومواعيد الوردية */}
         <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
             <Power size={20} color="var(--primary)" />
-            <span>حالة المطعم ومواعيد العمل</span>
+            <span>حالة المطعم ومواعيد الوردية</span>
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
               <div>
                 <div style={{ fontWeight: 'bold', color: 'white' }}>استقبال الطلبات (أونلاين)</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إذا تم الإغلاق، سيظهر تنبيه للعميل في المنيو</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>يمنع إنشاء أي طلبات جديدة إذا تم الإغلاق</div>
               </div>
               <button
                 type="button"
@@ -253,6 +300,29 @@ const SettingsView = () => {
                 }}
               >
                 {isOpen ? 'مفتوح للطلبات' : 'مغلق حالياً'}
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: 'white' }}>إلزامية الوردية المفتوحة</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>يرفض الطلبات أوتوماتيكياً إذا لم تكن هناك وردية مفتوحة</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRequireActiveShift(!requireActiveShift)}
+                style={{
+                  padding: '8px 16px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  background: requireActiveShift ? '#3b82f6' : '#64748b',
+                  color: 'white',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {requireActiveShift ? 'مُفعّل' : 'معطّل'}
               </button>
             </div>
 
@@ -286,21 +356,73 @@ const SettingsView = () => {
         {/* Card 2: قواعد تسعير التوصيل والمسافات */}
         <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
-            <DollarSign size={20} color="var(--accent)" />
-            <span>تسعير التوصيل والمسافات</span>
+            <Truck size={20} color="var(--accent)" />
+            <span>تسعير التوصيل والمسافات (GPS)</span>
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: 'white' }}>تفعيل خدمة التوصيل (Delivery)</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>إذا تم التعطيل، يقبل النظام فقط طلبات الاستلام والصالة</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeliveryEnabled(!deliveryEnabled)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  background: deliveryEnabled ? '#10b981' : '#ef4444',
+                  color: 'white',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {deliveryEnabled ? 'مفعّل' : 'معطّل'}
+              </button>
+            </div>
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  الحد الأدنى للتوصيل (ج.م):
+                  السعر الأساسي للتوصيل (ج.م):
                 </label>
                 <input
                   type="number"
                   min="0"
-                  value={minDeliveryFee}
-                  onChange={(e) => setMinDeliveryFee(e.target.value)}
+                  value={baseDeliveryFee}
+                  onChange={(e) => setBaseDeliveryFee(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  المسافة الأساسية المشمولة (كم):
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={baseDistanceKm}
+                  onChange={(e) => setBaseDistanceKm(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  سعر كل كم إضافي (ج.م/كم):
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={deliveryPerKmRate}
+                  onChange={(e) => setDeliveryPerKmRate(e.target.value)}
                   style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
                 />
               </div>
@@ -322,16 +444,17 @@ const SettingsView = () => {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                  سعر كل كم إضافي (ج.م):
+                  خطوة تقريب السعر (مضاعفات):
                 </label>
-                <input
-                  type="number"
-                  step="0.25"
-                  min="0"
-                  value={deliveryPerKmRate}
-                  onChange={(e) => setDeliveryPerKmRate(e.target.value)}
+                <select
+                  value={deliveryRoundingStep}
+                  onChange={(e) => setDeliveryRoundingStep(Number(e.target.value))}
                   style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
-                />
+                >
+                  <option value={5}>أقرب 5 جنيهات (5, 10, 15...)</option>
+                  <option value={1}>رقم صحيح بدون كسور (1 ج)</option>
+                  <option value={0}>بدون تقريب</option>
+                </select>
               </div>
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
@@ -349,14 +472,64 @@ const SettingsView = () => {
           </div>
         </div>
 
-        {/* Card 3: بيانات التحويل والدفع الإلكتروني */}
+        {/* Card 3: بيانات الدفع ورسوم الخدمة الإلكترونية */}
         <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
             <CreditCard size={20} color="#a855f7" />
-            <span>بيانات التحويل والدفع الإلكتروني</span>
+            <span>الحسابات ورسوم الخدمة الإلكترونية</span>
           </h2>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: 'rgba(255, 255, 255, 0.03)', borderRadius: '12px', border: '1px solid var(--border)' }}>
+              <div>
+                <div style={{ fontWeight: 'bold', color: 'white' }}>رسوم الخدمة الإلكترونية</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>تطبق على إنستاباي والمحافظ الرقمية فقط</div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setServiceFeeEnabled(!serviceFeeEnabled)}
+                style={{
+                  padding: '6px 14px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  background: serviceFeeEnabled ? '#a855f7' : '#64748b',
+                  color: 'white',
+                  transition: 'all 0.2s'
+                }}
+              >
+                {serviceFeeEnabled ? 'مفعّل' : 'معطّل'}
+              </button>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  قيمة الشريحة (ج.م):
+                </label>
+                <input
+                  type="number"
+                  min="50"
+                  value={serviceFeeChunk}
+                  onChange={(e) => setServiceFeeChunk(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  رسوم الشريحة (ج.م):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={serviceFeePerChunk}
+                  onChange={(e) => setServiceFeePerChunk(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+            </div>
+
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
                 عنوان انستاباي (InstaPay IPA):
@@ -366,7 +539,6 @@ const SettingsView = () => {
                 dir="ltr"
                 value={instapayIpa}
                 onChange={(e) => setInstapayIpa(e.target.value)}
-                placeholder="example@instapay"
                 style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
               />
             </div>
@@ -380,22 +552,66 @@ const SettingsView = () => {
                 dir="ltr"
                 value={walletNumber}
                 onChange={(e) => setWalletNumber(e.target.value)}
-                placeholder="01144423700"
                 style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
               />
             </div>
 
             <div>
               <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
-                اسم صاحب الحساب المعروض للعميل:
+                اسم صاحب الحساب التجاري:
               </label>
               <input
                 type="text"
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
-                placeholder="مطعم أبو خاطر"
                 style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
               />
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: إعدادات عربون الحجوزات */}
+        <div className="card" style={{ background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: '16px', padding: '20px' }}>
+          <h2 style={{ fontSize: '1.15rem', fontWeight: 'bold', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: 'white' }}>
+            <Calendar size={20} color="#38bdf8" />
+            <span>عربون الحجوزات وإدارتها</span>
+          </h2>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  مبلغ العربون الأساسي (ج.م):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>
+                  مصاريف خدمة الحجز (ج.م):
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={reservationFee}
+                  onChange={(e) => setReservationFee(e.target.value)}
+                  style={{ width: '100%', padding: '10px', borderRadius: '10px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: '12px', background: 'rgba(56, 189, 248, 0.1)', borderRadius: '12px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
+              <div style={{ fontSize: '0.85rem', fontWeight: 'bold', color: '#38bdf8' }}>
+                الإجمالي المطلوب من العميل لتأكيد الحجز: {(Number(depositAmount) || 0) + (Number(reservationFee) || 0)} ج.م
+              </div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
+                يتم تحديث المبلغ في تطبيق المنيو فوراً ويطلب من العميل رفع إيصال التحويل.
+              </div>
             </div>
           </div>
         </div>
