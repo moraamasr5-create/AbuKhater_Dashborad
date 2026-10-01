@@ -210,6 +210,13 @@ export const AppProvider = ({ children }) => {
 
     loadConfig();
 
+    // جلب تقارير الورديات السابقة المعتمدة من قاعدة البيانات
+    supabaseService.fetchShiftReports().then(reports => {
+      if (reports && reports.length > 0) {
+        setDailyReports(reports);
+      }
+    }).catch(err => console.warn('[DailyReports] Could not load reports:', err?.message));
+
     // أي تعديل للأوقات من قاعدة البيانات يُطبَّق فوراً على كل المستخدمين
     configSub = supabaseService.subscribeToAppConfig(() => {
       supabaseService.fetchAppConfig().then(applyConfigMap);
@@ -715,10 +722,21 @@ export const AppProvider = ({ children }) => {
     };
 
     try {
-      // استدعاء RPC close_shift من خلال saveShiftReport
-      await supabaseService.saveShiftReport(snapshot);
+      // استدعاء RPC close_shift من خلال saveShiftReport المعتمدة من السيرفر
+      const serverStats = await supabaseService.saveShiftReport(snapshot);
 
-      setDailyReports(prev => [snapshot, ...prev]);
+      const authoritativeReport = {
+        ...snapshot,
+        ...(serverStats || {}),
+        ordersCount: serverStats?.ordersCount ?? snapshot.ordersCount,
+        totalDeliveryFees: serverStats?.totalDeliveryFees ?? snapshot.totalDeliveryFees,
+        totalAttendancePay: serverStats?.totalAttendancePay ?? snapshot.totalAttendancePay,
+        totalPilotDues: serverStats?.totalPilotDues ?? snapshot.totalPilotDues,
+        pilotStats: serverStats?.pilotStats ?? snapshot.pilotStats,
+        financials: serverStats?.financials ?? {}
+      };
+
+      setDailyReports(prev => [authoritativeReport, ...prev]);
 
       logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
 

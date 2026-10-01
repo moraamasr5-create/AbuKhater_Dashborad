@@ -760,20 +760,68 @@ export const supabaseService = {
   },
 
   // ─────────────────────────────────────────────────────────
-  // 8. saveShiftReport
-  //    يحفظ تقرير إغلاق الوردية في جدول shifts
-  //    مع الـ offline fallback عند انقطاع الاتصال
+  // 8. saveShiftReport & close_shift
+  //    يغلق الوردية في Supabase مع الحساب المالي المعتمد من السيرفر
   // ─────────────────────────────────────────────────────────
   async saveShiftReport(reportData, skipQueue = false) {
     return withOfflineSupport('saveShiftReport', async () => {
-      const { error } = await supabase.rpc('close_shift', {
-        p_shift_id: reportData.id,
-        p_stats: reportData,
+      const { data, error } = await supabase.rpc('close_shift', {
+        p_shift_id: String(reportData.id),
+        p_stats: null, // الحساب المالي يتم بالكامل authoritative من جهة السيرفر
         p_force_close: Boolean(reportData.forceClose)
       });
 
       if (error) throw error;
+      return data;
     }, reportData, skipQueue);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 8.2 fetchShiftReports
+  //    يجلب تقارير الورديات المغلقة مع الإحصائيات المالية المعتمدة
+  // ─────────────────────────────────────────────────────────
+  async fetchShiftReports() {
+    return withOfflineSupport('fetchShiftReports', async () => {
+      const { data, error } = await supabase
+        .from('shifts')
+        .select('*')
+        .eq('status', 'closed')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data || []).map(row => ({
+        id: row.id,
+        date: row.date,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        status: row.status,
+        ordersCount: row.total_orders || row.stats?.ordersCount || 0,
+        totalDeliveryFees: row.stats?.totalDeliveryFees || 0,
+        totalAttendancePay: row.stats?.totalAttendancePay || 0,
+        totalPilotDues: row.stats?.totalPilotDues || 0,
+        pilotStats: row.stats?.pilotStats || row.stats?.pilotPerformance || [],
+        financials: row.stats?.financials || {},
+        sourceBreakdown: row.stats?.sourceBreakdown || {},
+        reservationStats: row.stats?.reservationStats || {},
+        stats: row.stats,
+        ...row.stats
+      }));
+    }, null);
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // 8.3 getShiftStats
+  //    يحسب الإحصائيات اللحظية للوردية من قاعدة البيانات مباشرة
+  // ─────────────────────────────────────────────────────────
+  async getShiftStats(shiftId) {
+    if (!shiftId) return null;
+    return withOfflineSupport('getShiftStats', async () => {
+      const { data, error } = await supabase.rpc('calculate_shift_stats', {
+        p_shift_id: String(shiftId)
+      });
+      if (error) throw error;
+      return data;
+    }, { shiftId });
   },
 
   // ─────────────────────────────────────────────────────────
