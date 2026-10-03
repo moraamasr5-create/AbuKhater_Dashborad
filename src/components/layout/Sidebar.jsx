@@ -102,12 +102,16 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                 })}
             </div>
 
-            {/* 🌐 Network Status Indicator — مضغوط */}
+            {/* 🌐 Network Status Indicator */}
             <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '6px 12px', fontSize: '0.78rem', fontWeight: '700',
+                padding: '6px 12px', fontSize: '0.78rem', fontWeight: '800',
                 color: isOnline ? '#34d399' : '#f87171',
-                margin: '12px 0 4px 0'
+                background: isOnline ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                border: `1px solid ${isOnline ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
+                borderRadius: '10px',
+                margin: '12px 0 6px 0',
+                boxShadow: 'var(--highlight-top), var(--elevation-1)'
             }}>
                 {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
                 <span>{isOnline ? 'متصل بالإنترنت' : 'وضع بدون إنترنت'}</span>
@@ -125,7 +129,14 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     closeSidebar();
                                 }}
                                 className="btn-primary"
-                                style={{ width: '100%', background: 'var(--accent)', color: '#000', fontWeight: '800', minHeight: '44px' }}
+                                style={{
+                                    width: '100%',
+                                    background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)',
+                                    color: '#000',
+                                    fontWeight: '900',
+                                    minHeight: '44px',
+                                    boxShadow: 'var(--bevel-btn), 0 4px 14px var(--accent-glow)'
+                                }}
                             >
                                 <Play size={18} />
                                 <span>فتح وردية جديدة</span>
@@ -133,8 +144,16 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         ) : (
                             <button
                                 onClick={() => setShowCloseShiftConfirm(true)}
-                                className="btn-primary"
-                                style={{ width: '100%', background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)', border: '1px solid var(--danger)', fontWeight: '800', minHeight: '44px' }}
+                                className="btn-danger-outline"
+                                style={{
+                                    width: '100%',
+                                    background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.08) 100%)',
+                                    color: '#f87171',
+                                    border: '1px solid rgba(239, 68, 68, 0.4)',
+                                    fontWeight: '800',
+                                    minHeight: '44px',
+                                    boxShadow: 'var(--bevel-btn-secondary), 0 2px 8px rgba(239, 68, 68, 0.25)'
+                                }}
                             >
                                 <Square size={16} />
                                 <span>إغلاق الوردية</span>
@@ -151,12 +170,11 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                             closeSidebar();
                             await logoutStaff();
                         }}
-                        className="btn-primary"
+                        className="btn-secondary"
                         style={{
-                            flex: 1, background: 'rgba(255, 255, 255, 0.04)',
-                            border: '1px solid var(--border)', color: 'var(--text-muted)',
+                            flex: 1,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            gap: '6px', minHeight: '44px', fontSize: '0.85rem'
+                            gap: '6px', minHeight: '44px', fontSize: '0.88rem'
                         }}
                     >
                         <LogOut size={16} />
@@ -169,12 +187,10 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                 onOpenSecurity();
                                 closeSidebar();
                             }}
-                            className="btn-primary"
+                            className="icon-btn"
                             style={{
                                 width: '44px',
                                 minHeight: '44px',
-                                background: 'rgba(255, 255, 255, 0.04)',
-                                border: '1px solid var(--border)',
                                 padding: 0,
                                 flexShrink: 0
                             }}
@@ -190,19 +206,21 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
             {/* In-App Close Shift Confirmation Modal */}
             {showCloseShiftConfirm && createPortal((
                 <div style={{
-                    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+                    position: 'fixed', inset: 0, background: 'rgba(4, 7, 14, 0.8)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px'
+                    zIndex: 9999, backdropFilter: 'blur(10px)', padding: '16px'
                 }}>
                     <div className="glass-card" style={{
                         width: '100%', maxWidth: '380px', padding: '24px',
-                        background: '#131b2e', border: '1px solid rgba(239, 68, 68, 0.4)',
-                        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+                        background: 'linear-gradient(180deg, #162035 0%, #111827 100%)',
+                        border: '1px solid rgba(239, 68, 68, 0.45)',
+                        boxShadow: 'var(--highlight-top-strong), var(--elevation-5)',
+                        borderRadius: '20px'
                     }}>
-                        <h3 style={{ color: '#ef4444', margin: '0 0 10px 0', fontSize: '1.2rem', fontWeight: '800' }}>
+                        <h3 style={{ color: '#f87171', margin: '0 0 10px 0', fontSize: '1.25rem', fontWeight: '900' }}>
                             إغلاق الوردية الحالية
                         </h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px' }}>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '22px', lineHeight: '1.5' }}>
                             هل أنت متأكد من رغبتك في إغلاق الوردية الحالية واعتماد التقارير المالية؟
                         </p>
                         <div style={{ display: 'flex', gap: '10px' }}>
@@ -213,13 +231,20 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                     closeSidebar();
                                 }}
                                 className="btn-primary"
-                                style={{ flex: 1, background: 'var(--danger)', color: '#fff', fontWeight: '800' }}
+                                style={{
+                                    flex: 1,
+                                    background: 'linear-gradient(180deg, #ef4444 0%, #dc2626 100%)',
+                                    color: '#fff',
+                                    fontWeight: '800',
+                                    boxShadow: 'var(--bevel-btn), 0 4px 14px var(--danger-glow)'
+                                }}
                             >
                                 تأكيد الإغلاق
                             </button>
                             <button
                                 onClick={() => setShowCloseShiftConfirm(false)}
-                                style={{ flex: 0.6, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', borderRadius: '10px' }}
+                                className="btn-secondary"
+                                style={{ flex: 0.6 }}
                             >
                                 تراجع
                             </button>

@@ -2034,10 +2034,13 @@ const SecurityModal = ({ onClose }) => {
         onClick={e => e.stopPropagation()}
         style={{
           width: '100%',
-          maxWidth: '330px',
-          padding: '16px',
+          maxWidth: '360px',
+          padding: '20px',
           position: 'relative',
-          border: '1px solid var(--border)'
+          background: 'linear-gradient(180deg, #162035 0%, #111827 100%)',
+          border: '1px solid var(--border-strong)',
+          boxShadow: 'var(--highlight-top-strong), var(--elevation-5)',
+          borderRadius: '20px'
         }}
       >
         <h3 className="flex" style={{ fontSize: '1.15rem', margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: '10px', color: 'white' }}>
@@ -2059,8 +2062,7 @@ const SecurityModal = ({ onClose }) => {
                 type="time"
                 value={openTime}
                 onChange={e => setOpenTime(e.target.value)}
-                className="glass-card"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '8px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center' }}
+                style={{ padding: '8px', textAlign: 'center' }}
                 required
               />
             </div>
@@ -2070,14 +2072,13 @@ const SecurityModal = ({ onClose }) => {
                 type="time"
                 value={closeTime}
                 onChange={e => setCloseTime(e.target.value)}
-                className="glass-card"
-                style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '8px', border: '1px solid var(--border)', borderRadius: '8px', textAlign: 'center' }}
+                style={{ padding: '8px', textAlign: 'center' }}
                 required
               />
             </div>
           </div>
           {shiftMsg && <div style={{ fontSize: '0.78rem', fontWeight: 'bold', textAlign: 'center', color: shiftMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>{shiftMsg}</div>}
-          <button type="submit" disabled={shiftSaving} className="btn-primary" style={{ height: '36px', justifyContent: 'center', fontSize: '0.82rem', background: 'var(--accent)', opacity: shiftSaving ? 0.6 : 1 }}>
+          <button type="submit" disabled={shiftSaving} className="btn-primary" style={{ height: '36px', justifyContent: 'center', fontSize: '0.82rem', background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)', color: '#000', fontWeight: '800', opacity: shiftSaving ? 0.6 : 1 }}>
             {shiftSaving ? 'جاري الحفظ...' : 'حفظ أوقات التشغيل'}
           </button>
         </form>
@@ -2089,16 +2090,20 @@ const SecurityModal = ({ onClose }) => {
             <div style={{ display: 'flex', gap: '8px' }}>
               <button
                 type="button"
-                className="btn-primary"
-                style={{ flex: 1, height: '38px', background: targetUser === 'admin' ? 'var(--primary)' : 'rgba(255,255,255,0.05)', color: 'white', border: targetUser === 'admin' ? 'none' : '1px solid var(--border)', justifyContent: 'center', fontSize: '0.8rem' }}
+                className={targetUser === 'admin' ? 'btn-primary' : 'btn-secondary'}
+                style={{ flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.8rem' }}
                 onClick={() => { setTargetUser('admin'); setError(''); setSuccess(''); }}
               >
                 المشرف (Admin)
               </button>
               <button
                 type="button"
-                className="btn-primary"
-                style={{ flex: 1, height: '38px', background: targetUser === 'casher' ? 'var(--accent)' : 'rgba(255,255,255,0.05)', color: 'white', border: targetUser === 'casher' ? 'none' : '1px solid var(--border)', justifyContent: 'center', fontSize: '0.8rem' }}
+                className={targetUser === 'casher' ? 'btn-primary' : 'btn-secondary'}
+                style={{
+                  flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.8rem',
+                  background: targetUser === 'casher' ? 'linear-gradient(180deg, #10b981 0%, #059669 100%)' : undefined,
+                  color: targetUser === 'casher' ? '#000' : undefined
+                }}
                 onClick={() => { setTargetUser('casher'); setError(''); setSuccess(''); }}
               >
                 الكاشير (Casher)
@@ -2113,8 +2118,7 @@ const SecurityModal = ({ onClose }) => {
               type="password"
               inputMode="numeric"
               pattern="[0-9]*"
-              className="glass-card"
-              style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
+              style={{ padding: '10px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
               value={newPin}
               onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
               placeholder="••••"
@@ -2129,8 +2133,7 @@ const SecurityModal = ({ onClose }) => {
               type="password"
               inputMode="numeric"
               pattern="[0-9]*"
-              className="glass-card"
-              style={{ background: 'rgba(255,255,255,0.05)', color: 'white', padding: '10px', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
+              style={{ padding: '10px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
               value={confirmPin}
               onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
               placeholder="••••"
@@ -2143,7 +2146,7 @@ const SecurityModal = ({ onClose }) => {
 
           <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
             <button type="submit" className="btn-primary" style={{ flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.85rem' }}>حفظ التعديل</button>
-            <button type="button" onClick={onClose} style={{ flex: 0.5, height: '38px', background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)', cursor: 'pointer', borderRadius: '8px', fontSize: '0.85rem' }}>إلغاء</button>
+            <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 0.5, height: '38px', fontSize: '0.85rem' }}>إلغاء</button>
           </div>
         </form>
       </div>

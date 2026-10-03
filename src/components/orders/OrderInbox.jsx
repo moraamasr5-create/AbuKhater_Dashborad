@@ -122,20 +122,22 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)',
+      position: 'fixed', inset: 0, background: 'rgba(4, 7, 14, 0.8)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px'
+      zIndex: 9999, backdropFilter: 'blur(10px)', padding: '16px'
     }}>
       <div className="glass-card" style={{
         width: '100%', maxWidth: '440px', padding: '24px',
-        background: '#131b2e', border: '1px solid rgba(239, 68, 68, 0.35)',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+        background: 'linear-gradient(180deg, #162035 0%, #111827 100%)',
+        border: '1px solid rgba(239, 68, 68, 0.45)',
+        boxShadow: 'var(--highlight-top-strong), var(--elevation-5)',
+        borderRadius: '20px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#ef4444', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f87171', marginBottom: '14px' }}>
           <AlertTriangle size={24} />
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800' }}>إلغاء الطلب #{orderNumber}</h3>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '900' }}>إلغاء الطلب #{orderNumber}</h3>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px', lineHeight: '1.5' }}>
           يرجى تحديد أو كتابة سبب إلغاء هذا الطلب لحفظه في سجل العمليات:
         </p>
 
@@ -146,11 +148,12 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
               type="button"
               onClick={() => setReason(r)}
               style={{
-                background: reason === r ? 'rgba(239, 68, 68, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                background: reason === r ? 'rgba(239, 68, 68, 0.22)' : 'rgba(255, 255, 255, 0.05)',
                 color: reason === r ? '#f87171' : 'var(--text-main)',
-                border: `1px solid ${reason === r ? '#ef4444' : 'rgba(255, 255, 255, 0.1)'}`,
+                border: `1px solid ${reason === r ? 'rgba(239, 68, 68, 0.5)' : 'var(--border)'}`,
+                boxShadow: reason === r ? 'var(--highlight-top), 0 2px 8px rgba(239, 68, 68, 0.25)' : 'var(--elevation-1)',
                 padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer',
-                minHeight: '34px'
+                minHeight: '34px', fontWeight: reason === r ? '800' : '600'
               }}
             >
               {r}
@@ -165,9 +168,7 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
           placeholder="اكتب سبب الإلغاء هنا..."
           rows={3}
           style={{
-            width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-            borderRadius: '10px', padding: '12px', color: 'white', fontSize: '0.9rem',
-            marginBottom: '20px', resize: 'none'
+            width: '100%', marginBottom: '20px', resize: 'none'
           }}
         />
 
@@ -183,8 +184,11 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
             }}
             className="btn-primary"
             style={{
-              flex: 1, background: '#ef4444', color: 'white',
-              boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)'
+              flex: 1,
+              background: 'linear-gradient(180deg, #ef4444 0%, #dc2626 100%)',
+              color: 'white',
+              boxShadow: 'var(--bevel-btn), 0 4px 14px var(--danger-glow)',
+              fontWeight: '800'
             }}
           >
             تأكيد الإلغاء
@@ -194,10 +198,8 @@ const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
               setReason('');
               onClose();
             }}
-            style={{
-              flex: 0.6, background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--text-muted)', borderRadius: '10px', minHeight: '44px'
-            }}
+            className="btn-secondary"
+            style={{ flex: 0.6 }}
           >
             تراجع
           </button>
@@ -222,20 +224,22 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0, 0, 0, 0.75)',
+      position: 'fixed', inset: 0, background: 'rgba(4, 7, 14, 0.8)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px'
+      zIndex: 9999, backdropFilter: 'blur(10px)', padding: '16px'
     }}>
       <div className="glass-card" style={{
         width: '100%', maxWidth: '440px', padding: '24px',
-        background: '#131b2e', border: '1px solid rgba(245, 158, 11, 0.35)',
-        boxShadow: '0 20px 50px rgba(0,0,0,0.6)'
+        background: 'linear-gradient(180deg, #162035 0%, #111827 100%)',
+        border: '1px solid rgba(245, 158, 11, 0.45)',
+        boxShadow: 'var(--highlight-top-strong), var(--elevation-5)',
+        borderRadius: '20px'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#f59e0b', marginBottom: '14px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#fbbf24', marginBottom: '14px' }}>
           <AlertCircle size={24} />
-          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '800' }}>تسجيل تعذر توصيل #{orderNumber}</h3>
+          <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: '900' }}>تسجيل تعذر توصيل #{orderNumber}</h3>
         </div>
-        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px' }}>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '16px', lineHeight: '1.5' }}>
           حدد سبب عدم تسليم الطلب لإرجاع الطيار وتسجيل الحالة:
         </p>
 
@@ -246,11 +250,12 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
               type="button"
               onClick={() => setReason(r)}
               style={{
-                background: reason === r ? 'rgba(245, 158, 11, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                background: reason === r ? 'rgba(245, 158, 11, 0.22)' : 'rgba(255, 255, 255, 0.05)',
                 color: reason === r ? '#fbbf24' : 'var(--text-main)',
-                border: `1px solid ${reason === r ? '#f59e0b' : 'rgba(255, 255, 255, 0.1)'}`,
+                border: `1px solid ${reason === r ? 'rgba(245, 158, 11, 0.5)' : 'var(--border)'}`,
+                boxShadow: reason === r ? 'var(--highlight-top), 0 2px 8px rgba(245, 158, 11, 0.25)' : 'var(--elevation-1)',
                 padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', cursor: 'pointer',
-                minHeight: '34px'
+                minHeight: '34px', fontWeight: reason === r ? '800' : '600'
               }}
             >
               {r}
@@ -265,9 +270,7 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
           placeholder="اكتب ملاحظة التوصيل هنا..."
           rows={3}
           style={{
-            width: '100%', background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border)',
-            borderRadius: '10px', padding: '12px', color: 'white', fontSize: '0.9rem',
-            marginBottom: '20px', resize: 'none'
+            width: '100%', marginBottom: '20px', resize: 'none'
           }}
         />
 
@@ -283,8 +286,11 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
             }}
             className="btn-primary"
             style={{
-              flex: 1, background: '#f59e0b', color: 'black',
-              boxShadow: '0 4px 14px rgba(245, 158, 11, 0.4)'
+              flex: 1,
+              background: 'linear-gradient(180deg, #f59e0b 0%, #d97706 100%)',
+              color: '#000',
+              boxShadow: 'var(--bevel-btn), 0 4px 14px var(--warning-glow)',
+              fontWeight: '900'
             }}
           >
             تسجيل الفشل
@@ -294,10 +300,8 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
               setReason('');
               onClose();
             }}
-            style={{
-              flex: 0.6, background: 'transparent', border: '1px solid var(--border)',
-              color: 'var(--text-muted)', borderRadius: '10px', minHeight: '44px'
-            }}
+            className="btn-secondary"
+            style={{ flex: 0.6 }}
           >
             تراجع
           </button>
