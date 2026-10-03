@@ -588,10 +588,14 @@ button.kpi-card:hover { border-color: var(--border-strong); background: var(--bg
   .sidebar {
     position: sticky;
     top: 0;
+    right: auto !important;
     height: 100vh;
+    width: auto !important;
+    max-width: none !important;
     visibility: visible !important;
     transform: none !important;
     pointer-events: auto !important;
+    box-shadow: none !important;
   }
 
   .sidebar-overlay { display: none !important; }
@@ -602,49 +606,62 @@ button.kpi-card:hover { border-color: var(--border-strong); background: var(--bg
 /* Tablet + Mobile: drawer navigation */
 @media (max-width: 1024px) {
   .floating-sidebar-toggle {
-    display: inline-flex !important;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    position: fixed;
+    top: 8px;
+    right: 12px;
+    z-index: 10001;
     width: 44px;
     height: 44px;
-    min-width: 44px;
     border-radius: 12px;
-    background: #1e1b4b !important;
-    border: 2px solid #8b5cf6 !important;
-    color: #ffffff !important;
-    box-shadow: 0 4px 14px rgba(139, 92, 246, 0.45) !important;
+    background: #1e293b;
+    border: 1.5px solid rgba(255, 255, 255, 0.25);
+    color: #ffffff;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
     cursor: pointer;
     touch-action: manipulation;
-    flex-shrink: 0;
-    transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    font-size: 1.35rem;
+    line-height: 1;
+    transition: transform 0.15s ease, background 0.15s ease;
   }
   .floating-sidebar-toggle:hover {
-    background: #2e1065 !important;
-    border-color: #a78bfa !important;
+    background: #334155;
   }
   .floating-sidebar-toggle:active {
     transform: scale(0.92);
   }
 
+  .topbar {
+    padding: 8px 68px 8px 12px !important;
+    min-height: 56px;
+  }
+
   .sidebar {
     position: fixed;
     top: 0;
-    right: 0;
-    height: 100%;
+    right: -320px;
+    height: 100vh;
+    height: 100dvh;
     width: 290px;
     max-width: 85vw;
-    z-index: 999;
-    transform: translateX(100%);
-    transition: transform 0.22s ease-out;
-    box-shadow: -15px 0 40px rgba(0, 0, 0, 0.6);
+    z-index: 9999;
+    transition: right 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+    box-shadow: none;
     visibility: hidden;
     pointer-events: none;
   }
 
   .sidebar.open {
-    transform: translateX(0);
-    visibility: visible;
-    pointer-events: auto;
+    right: 0 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    box-shadow: -10px 0 35px rgba(0, 0, 0, 0.75) !important;
+  }
+
+  .sidebar-header {
+    padding-right: 48px !important;
   }
 
   .sidebar-close-btn {
@@ -674,7 +691,7 @@ button.kpi-card:hover { border-color: var(--border-strong); background: var(--bg
 /* Mobile */
 @media (max-width: 767px) {
   .app-container { padding: 14px 12px 96px; }
-  .topbar { padding: 8px 12px; min-height: 56px; }
+  .topbar { padding: 8px 68px 8px 12px !important; min-height: 56px; }
   .topbar .create-label { display: none; }
   .page-title { font-size: 1.25rem; }
   .page-subtitle { display: none; }

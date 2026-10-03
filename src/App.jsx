@@ -1002,7 +1002,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
   const handleOnlineSearch = async (query) => {
     setAreaSearch(query);
     setShowAreaSuggestions(true);
-    
+
     if (!navigator.onLine || !query) {
       setOnlineSuggestions([]);
       return;
@@ -1029,7 +1029,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
     const mainStreet = place.display_name.split(',')[0];
     setAreaSearch(mainStreet);
     setShowAreaSuggestions(false);
-    
+
     try {
       // OSRM Routing
       const osrmRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${RESTAURANT_COORDS.lng},${RESTAURANT_COORDS.lat};${lon},${lat}?overview=false`);
@@ -1039,14 +1039,14 @@ const ManualOrderForm = ({ onClose, initialData }) => {
           const routeDistanceKm = +(osrmData.routes[0].distance / 1000).toFixed(2);
           const routeDurationMin = Math.ceil(osrmData.routes[0].duration / 60);
           const fee = getDeliveryFee(routeDistanceKm);
-          
+
           setFormData({
             ...formData,
             area: mainStreet,
             customArea: place.display_name,
             lat: lat,
             lng: lon,
-            distance: routeDistanceKm, 
+            distance: routeDistanceKm,
             route_distance_km: routeDistanceKm,
             route_duration_minutes: routeDurationMin,
             deliveryFee: fee,
@@ -1058,7 +1058,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
     } catch (e) {
       console.error("OSRM routing failed:", e);
     }
-    
+
     // Fallback if OSRM fails
     const haversineDist = calculateDistance(RESTAURANT_COORDS.lat, RESTAURANT_COORDS.lng, lat, lon);
     setFormData({
@@ -1267,23 +1267,23 @@ const ManualOrderForm = ({ onClose, initialData }) => {
                 {/* Online Nominatim Suggestions */}
                 {navigator.onLine && onlineSuggestions.length > 0 && (
                   <div style={{ marginBottom: '10px' }}>
-                     <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '6px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#3b82f6', borderBottom: '1px solid rgba(59, 130, 246, 0.2)' }}>
-                        🌐 نتائج البحث المباشر
-                     </div>
-                     {onlineSuggestions.map(place => (
-                       <div
-                         key={place.place_id}
-                         onClick={() => selectOnlineAddress(place)}
-                         className="hover-scale"
-                         style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '4px' }}
-                       >
-                         <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{place.display_name.split(',')[0]}</span>
-                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{place.display_name}</span>
-                       </div>
-                     ))}
+                    <div style={{ background: 'rgba(59, 130, 246, 0.1)', padding: '6px 16px', fontSize: '0.75rem', fontWeight: 'bold', color: '#3b82f6', borderBottom: '1px solid rgba(59, 130, 246, 0.2)' }}>
+                      🌐 نتائج البحث المباشر
+                    </div>
+                    {onlineSuggestions.map(place => (
+                      <div
+                        key={place.place_id}
+                        onClick={() => selectOnlineAddress(place)}
+                        className="hover-scale"
+                        style={{ padding: '12px 16px', cursor: 'pointer', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '4px' }}
+                      >
+                        <span style={{ fontWeight: 'bold', fontSize: '0.9rem' }}>{place.display_name.split(',')[0]}</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{place.display_name}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
-                
+
                 {/* Fallback Local Areas */}
                 <div style={{ opacity: navigator.onLine ? 0.7 : 1 }}>
                   {[1, 2, 3, 4].map(zoneNum => {
@@ -1338,7 +1338,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
               <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(79, 70, 229, 0.1)', border: '1px solid var(--primary)', color: 'var(--primary)', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Ruler size={14} /> {formData.distance} كم
               </div>
-              
+
               {formData.calculated_by === 'osrm' ? (
                 <div style={{ padding: '4px 10px', borderRadius: '8px', background: 'rgba(59, 130, 246, 0.1)', border: '1px solid #3b82f6', color: '#3b82f6', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
                   <Clock size={14} /> وقت الرحلة: ~{formData.route_duration_minutes} دقيقة
@@ -2016,28 +2016,28 @@ const SecurityModal = ({ onClose }) => {
   };
 
   return (
-    <div 
-      onClick={onClose} 
-      style={{ 
-        position: 'fixed', 
-        inset: 0, 
-        background: 'rgba(0,0,0,0.8)', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        zIndex: 100000, 
-        backdropFilter: 'blur(12px)' 
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(0,0,0,0.8)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 100000,
+        backdropFilter: 'blur(12px)'
       }}
     >
-      <div 
-        className="glass-card" 
-        onClick={e => e.stopPropagation()} 
-        style={{ 
-          width: '100%', 
-          maxWidth: '330px', 
-          padding: '16px', 
-          position: 'relative', 
-          border: '1px solid var(--border)' 
+      <div
+        className="glass-card"
+        onClick={e => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: '330px',
+          padding: '16px',
+          position: 'relative',
+          border: '1px solid var(--border)'
         }}
       >
         <h3 className="flex" style={{ fontSize: '1.15rem', margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: '10px', color: 'white' }}>
@@ -2328,6 +2328,21 @@ function App() {
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
 
+      {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
+      <button
+        type="button"
+        className="floating-sidebar-toggle no-print"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleSidebar();
+        }}
+        aria-label="القائمة الجانبية"
+        aria-expanded={isSidebarOpen}
+        title="🗃"
+      >
+        <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>🗃</span>
+      </button>
+
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -2338,18 +2353,6 @@ function App() {
       <main className="main-content">
         {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
         <div className="topbar no-print">
-          {/* 🗃 زر القائمة في أعلى الشاشة للهواتف */}
-          <button
-            type="button"
-            className="floating-sidebar-toggle no-print"
-            onClick={toggleSidebar}
-            aria-label="القائمة الجانبية 🗃"
-            aria-expanded={isSidebarOpen}
-            title="القائمة الجانبية 🗃"
-          >
-            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>🗃</span>
-          </button>
-
           <h1 className="topbar-title">{currentNav?.label || ''}</h1>
 
           {userRole !== 'driver' && (

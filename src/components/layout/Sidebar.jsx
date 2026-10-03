@@ -47,7 +47,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
     return (
         <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`} aria-label="القائمة الرئيسية">
             {/* Header Brand — مضغوط مع زر إغلاق للموبايل */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px', padding: '0 4px' }}>
+            <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px', padding: '0 4px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                     <div style={{
                         width: '42px', height: '42px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
