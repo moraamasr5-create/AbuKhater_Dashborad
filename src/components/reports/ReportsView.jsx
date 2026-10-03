@@ -22,6 +22,24 @@ const ReportsView = () => {
   const [showDues, setShowDues] = React.useState(false);
   const [showArchives, setShowArchives] = React.useState(false);
   const [previewProofUrl, setPreviewProofUrl] = React.useState(null);
+  const [hiddenReservationIds, setHiddenReservationIds] = React.useState(() => {
+    try {
+      const saved = sessionStorage.getItem('hidden_report_reservations');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const handleHideReservation = (id) => {
+    setHiddenReservationIds(prev => {
+      const updated = [...prev, id];
+      try {
+        sessionStorage.setItem('hidden_report_reservations', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+  };
 
   const handlePrintShiftReport = (report) => {
     const printWindow = window.open('', '_blank', 'width=400,height=600');
@@ -524,9 +542,30 @@ const ReportsView = () => {
 
           {/* Reservations Summary Section - Concise & Abbreviated */}
           <section style={{ marginBottom: '32px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
-              <UtensilsCrossed size={20} color="#8b5cf6" />
-              <h4 style={{ fontSize: '1.2rem', margin: 0 }}>ملخص حجزات الوردية</h4>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <UtensilsCrossed size={20} color="#8b5cf6" />
+                <h4 style={{ fontSize: '1.2rem', margin: 0 }}>ملخص حجزات الوردية</h4>
+              </div>
+              {hiddenReservationIds.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHiddenReservationIds([]);
+                    try { sessionStorage.removeItem('hidden_report_reservations'); } catch (e) {}
+                  }}
+                  style={{
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    fontSize: '0.8rem',
+                    cursor: 'pointer',
+                    textDecoration: 'underline'
+                  }}
+                >
+                  إعادة إظهار الكل ({hiddenReservationIds.length})
+                </button>
+              )}
             </div>
             <div className="glass-card" style={{ overflowX: 'auto', background: 'rgba(139, 92, 246, 0.05)' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
@@ -540,10 +579,12 @@ const ReportsView = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {reservations.length === 0 ? (
-                    <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>لا توجد حجوزات نشطة</td></tr>
-                  ) : (
-                    reservations.map(res => (
+                  {(() => {
+                    const visibleReservations = (reservations || []).filter(res => !hiddenReservationIds.includes(res.id));
+                    if (visibleReservations.length === 0) {
+                      return <tr><td colSpan="5" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>لا توجد حجوزات نشطة</td></tr>;
+                    }
+                    return visibleReservations.map(res => (
                       <tr key={res.id} style={{ borderBottom: '1px solid var(--border)' }}>
                         <td style={{ padding: '12px' }}>
                           <div style={{ fontWeight: '600' }}>{res.customerName}</div>
@@ -558,22 +599,44 @@ const ReportsView = () => {
                           {res.status === 'confirmed' && <div style={{ fontSize: '0.65rem' }}>#{res.refNumber}</div>}
                         </td>
                         <td style={{ padding: '12px', textAlign: 'center' }}>
-                          {res.paymentProof ? (
-                            <ReceiptThumbnail
-                              src={res.paymentProof}
-                              size={40}
-                              borderRadius={4}
-                              border="1px solid #8b5cf6"
-                              style={{ margin: '0 auto' }}
-                              onOpen={(url) => setPreviewProofUrl(url)}
-                            />
-                          ) : (
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>لا يوجد</span>
-                          )}
+                          <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                            {res.paymentProof ? (
+                              <ReceiptThumbnail
+                                src={res.paymentProof}
+                                size={40}
+                                borderRadius={4}
+                                border="1px solid #8b5cf6"
+                                style={{ margin: '0 auto' }}
+                                onOpen={(url) => setPreviewProofUrl(url)}
+                              />
+                            ) : (
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>لا يوجد</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleHideReservation(res.id)}
+                              title="حذف من العرض"
+                              style={{
+                                background: 'rgba(239, 68, 68, 0.12)',
+                                border: '1px solid rgba(239, 68, 68, 0.25)',
+                                color: '#f87171',
+                                cursor: 'pointer',
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '6px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'all 0.2s'
+                              }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
-                    ))
-                  )}
+                    ));
+                  })()}
                 </tbody>
               </table>
             </div>
