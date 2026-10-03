@@ -2339,21 +2339,6 @@ function App() {
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
 
-      {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
-      <button
-        type="button"
-        className="floating-sidebar-toggle"
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleSidebar();
-        }}
-        aria-label="القائمة الجانبية"
-        aria-expanded={isSidebarOpen}
-        title="القائمة الجانبية 🗃"
-      >
-        <span style={{ fontSize: '1.35rem', lineHeight: 1 }}>🗃</span>
-      </button>
-
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
