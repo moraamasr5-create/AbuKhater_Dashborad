@@ -889,8 +889,8 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
               <Check size={22} />
             </span>
             <div style={{ flex: '1 1 220px' }}>
-              <div style={{ fontWeight: 800, color: '#34d399' }}>لا يوجد ما يحتاج إجراء الآن</div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>كل الطلبات مقبولة أو مسندة أو تم تسليمها.</div>
+              <div style={{ fontWeight: 800, color: '#34d399' }}>كـل شـيئ بخـير لا يوجد طلب مهمل.</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>  لا يوجد ما يحتاج إجراء الآن .</div>
             </div>
             <button onClick={() => onNavigate && onNavigate('inbox')} className="btn-secondary">
               عرض الطلبات
@@ -925,19 +925,19 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
         {/* 📈 المستوى الثالث: تفاصيل عند الطلب */}
         <Disclosure
           className="glass-card"
-          title="إحصائيات إضافية"
+          title="اخر الاخبار"
           icon={<BarChart3 size={16} color="var(--text-muted)" />}
         >
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginTop: '4px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>أسطول التوصيل</div>
+              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>نظام الطيارين</div>
               <div className="kv-row"><span>متاح بالمطعم</span><strong>{availablePilots.length}</strong></div>
               <div className="kv-row"><span>في رحلات توصيل</span><strong>{onDeliveryPilots.length}</strong></div>
               <div className="kv-row"><span>غير متصلين (شيفت مغلق)</span><strong>{pilots.length - activePilots.length}</strong></div>
               <div className="kv-row"><span>التالي بالدور</span><strong>{suggestedPilot ? suggestedPilot.name : 'لا يوجد'}</strong></div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>الرحلات بالخارج</div>
+              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>الطلبات بالخارج</div>
               {pilotsWithOrders.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {pilotsWithOrders.map(p => (
@@ -951,11 +951,11 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>طلبات اليوم</div>
               <div className="kv-row"><span>مكتمل</span><strong style={{ color: '#34d399' }}>{completedCount}</strong></div>
-              <div className="kv-row"><span>ملغي / تعذر</span><strong style={{ color: '#f87171' }}>{cancelledCount}</strong></div>
+              <div className="kv-row"><span>ملغي / فشل</span><strong style={{ color: '#f87171' }}>{cancelledCount}</strong></div>
               {isShiftOpen && currentShift?.date && (
                 <div className="kv-row"><span>تاريخ الوردية</span><strong>{currentShift.date}</strong></div>
               )}
-              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>تحديث لحظي وتلقائي</div>
+              <div style={{ fontSize: '0.35rem', color: 'var(--text-dim)' }}>تحديث لحظي وتلقائي</div>
             </div>
           </div>
         </Disclosure>
