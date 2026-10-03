@@ -2338,8 +2338,9 @@ function App() {
       <main className="main-content">
         {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
         <div className="topbar no-print">
-          <button className="menu-toggle" onClick={toggleSidebar} aria-label="فتح القائمة" aria-expanded={isSidebarOpen}>
-            <Menu size={22} />
+          <button className="menu-toggle" onClick={toggleSidebar} aria-label="فتح القائمة الرئيسية" aria-expanded={isSidebarOpen}>
+            <Menu size={20} />
+            <span>القائمة</span>
           </button>
           <h1 className="topbar-title">{currentNav?.label || ''}</h1>
 
@@ -2449,7 +2450,7 @@ function App() {
             )}
             {activeTab === 'inbox' && <OrderInbox onReedit={handleReedit} />}
             {activeTab === 'pilots' && (userRole === 'admin' || userRole === 'casher') && <PilotManagement />}
-            {activeTab === 'reservations' && (userRole === 'casher') && <ReservationView />}
+            {activeTab === 'reservations' && (userRole === 'admin' || userRole === 'casher') && <ReservationView />}
             {activeTab === 'feedback' && userRole === 'admin' && <FeedbackView />}
             {activeTab === 'reports' && userRole === 'admin' && <ReportsView />}
             {activeTab === 'settings' && userRole === 'admin' && <SettingsView />}
@@ -2491,9 +2492,9 @@ function App() {
             {item.id === 'inbox' && actionCount > 0 && <span className="nav-count">{actionCount}</span>}
           </button>
         ))}
-        <button type="button" onClick={toggleSidebar} aria-label="كل الأقسام" className={isSidebarOpen ? 'is-active' : ''}>
+        <button type="button" onClick={toggleSidebar} aria-label="القائمة الجانبية" className={isSidebarOpen ? 'is-active' : ''}>
           <Menu size={22} />
-          <span>المزيد</span>
+          <span>القائمة</span>
         </button>
       </nav>
 

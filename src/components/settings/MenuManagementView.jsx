@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { 
-  UtensilsCrossed, Plus, Search, Filter, Check, X, 
-  ChevronDown, ChevronUp, ArrowUp, ArrowDown, Edit3, Trash2, 
-  Upload, Image as ImageIcon, Star, AlertCircle, CheckCircle2, 
+import {
+  UtensilsCrossed, Plus, Search, Filter, Check, X,
+  ChevronDown, ChevronUp, ArrowUp, ArrowDown, Edit3, Trash2,
+  Upload, Image as ImageIcon, Star, AlertCircle, CheckCircle2,
   RefreshCw, Layers, Eye, EyeOff, DollarSign, Tag, MoveVertical,
   ExternalLink, Sparkles, ShieldAlert, Lock
 } from 'lucide-react';
@@ -151,10 +151,10 @@ export const MenuManagementView = () => {
     setUpdatingItemId(item.id);
 
     // Apply immediate local update
-    setItems(prev => prev.map(i => i.id === item.id ? { 
-      ...i, 
-      status: nextStatus, 
-      isAvailable: !isCurrentlyAvailable 
+    setItems(prev => prev.map(i => i.id === item.id ? {
+      ...i,
+      status: nextStatus,
+      isAvailable: !isCurrentlyAvailable
     } : i));
 
     try {
@@ -560,7 +560,7 @@ export const MenuManagementView = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', width: '100%', direction: 'rtl' }}>
-      
+
       {/* ───────────────────────────────────────────────────────
           Status Alert Feedback
       ─────────────────────────────────────────────────────── */}
@@ -692,7 +692,7 @@ export const MenuManagementView = () => {
         gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
         gap: '12px'
       }}>
-        <div 
+        <div
           onClick={() => setFilterStatus('all')}
           style={{
             background: filterStatus === 'all' ? 'rgba(255, 170, 0, 0.12)' : 'rgba(255, 255, 255, 0.03)',
@@ -707,7 +707,7 @@ export const MenuManagementView = () => {
           <div style={{ fontSize: '1.25rem', fontWeight: '800', color: 'white' }}>{totalCount} صنف</div>
         </div>
 
-        <div 
+        <div
           onClick={() => setFilterStatus('available')}
           style={{
             background: filterStatus === 'available' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(255, 255, 255, 0.03)',
@@ -722,7 +722,7 @@ export const MenuManagementView = () => {
           <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#10b981' }}>{availableCount} صنف 🟢</div>
         </div>
 
-        <div 
+        <div
           onClick={() => setFilterStatus('out_of_stock')}
           style={{
             background: filterStatus === 'out_of_stock' ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.03)',
@@ -737,7 +737,7 @@ export const MenuManagementView = () => {
           <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#ef4444' }}>{outOfStockCount} صنف ⚪</div>
         </div>
 
-        <div 
+        <div
           onClick={() => setFilterStatus('hidden_paused')}
           style={{
             background: filterStatus === 'hidden_paused' ? 'rgba(249, 115, 22, 0.15)' : 'rgba(255, 255, 255, 0.03)',
@@ -752,7 +752,7 @@ export const MenuManagementView = () => {
           <div style={{ fontSize: '1.25rem', fontWeight: '800', color: '#f97316' }}>{hiddenOrPausedCount} صنف 🟠</div>
         </div>
 
-        <div 
+        <div
           onClick={() => setFilterStatus('popular')}
           style={{
             background: filterStatus === 'popular' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255, 255, 255, 0.03)',
@@ -981,7 +981,7 @@ export const MenuManagementView = () => {
                   </div>
 
                   {/* Category Action Buttons */}
-                  <div 
+                  <div
                     style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
                     onClick={(e) => e.stopPropagation()} // Prevent accordion toggle when clicking actions
                   >
@@ -992,7 +992,7 @@ export const MenuManagementView = () => {
                           type="button"
                           onClick={() => handleMoveCategoryOrder(category, 'up')}
                           disabled={catIndex === 0}
-                          title="تحريك القسم لأعلى"
+                          title="🔼"
                           style={{
                             width: '34px',
                             height: '34px',
@@ -1012,7 +1012,7 @@ export const MenuManagementView = () => {
                           type="button"
                           onClick={() => handleMoveCategoryOrder(category, 'down')}
                           disabled={catIndex === categories.length - 1}
-                          title="تحريك القسم لأسفل"
+                          title="🔽"
                           style={{
                             width: '34px',
                             height: '34px',
@@ -1081,7 +1081,7 @@ export const MenuManagementView = () => {
                         color: 'var(--text-muted)',
                         fontSize: '0.88rem'
                       }}>
-                        لا توجد أصناف في هذا القسم حالياً. 
+                        لا توجد أصناف في هذا القسم حالياً.
                         <button
                           type="button"
                           onClick={() => handleOpenItemDrawer(null, category.id)}
@@ -1123,7 +1123,7 @@ export const MenuManagementView = () => {
                           >
                             {/* Left part: Item Image & Information */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1', minWidth: '260px' }}>
-                              
+
                               {/* Real Image Thumbnail */}
                               <div style={{
                                 width: '56px',
@@ -1233,14 +1233,14 @@ export const MenuManagementView = () => {
 
                             {/* Right part: Quick Controls & Edit Button */}
                             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                              
+
                               {/* Reorder within category */}
                               <div style={{ display: 'flex', gap: '3px' }}>
                                 <button
                                   type="button"
                                   onClick={() => handleMoveItemOrder(item, 'up', catItems)}
                                   disabled={itemIdx === 0}
-                                  title="تحريك لأعلى"
+                                  title="⏫"
                                   style={{
                                     width: '32px',
                                     height: '32px',
@@ -1260,7 +1260,7 @@ export const MenuManagementView = () => {
                                   type="button"
                                   onClick={() => handleMoveItemOrder(item, 'down', catItems)}
                                   disabled={itemIdx === catItems.length - 1}
-                                  title="تحريك لأسفل"
+                                  title="⏬"
                                   style={{
                                     width: '32px',
                                     height: '32px',
@@ -1408,7 +1408,7 @@ export const MenuManagementView = () => {
 
             {/* Drawer Form Body */}
             <form onSubmit={handleSaveItem} style={{ flex: '1', overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              
+
               {/* Item Name */}
               <div>
                 <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: 'bold' }}>
@@ -1577,7 +1577,7 @@ export const MenuManagementView = () => {
                 justifyContent: 'space-between',
                 cursor: 'pointer'
               }}
-              onClick={() => setItemForm({ ...itemForm, is_popular: !itemForm.is_popular })}
+                onClick={() => setItemForm({ ...itemForm, is_popular: !itemForm.is_popular })}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Star size={18} style={{ color: '#f59e0b' }} fill={itemForm.is_popular ? '#f59e0b' : 'transparent'} />
@@ -1851,7 +1851,7 @@ export const MenuManagementView = () => {
 
             {/* Modal Content */}
             <div style={{ flex: '1', overflowY: 'auto', padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              
+
               {/* Add New Category Form */}
               <form onSubmit={handleCreateCategory} style={{
                 background: 'rgba(255, 255, 255, 0.03)',
@@ -2163,7 +2163,7 @@ export const MenuManagementView = () => {
             <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '20px' }}>
               هل أنت متأكد من رغبتك في حذف <strong style={{ color: 'white' }}>"{deleteConfirm.item.name}"</strong>؟
               <br />
-              {deleteConfirm.type === 'item' 
+              {deleteConfirm.type === 'item'
                 ? 'سيتم إزالة الصنف نهائياً من المنيو وقاعدة البيانات.'
                 : 'سيتم حذف القسم نهائياً.'}
             </p>

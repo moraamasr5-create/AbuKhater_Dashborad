@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
+import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 // 🟢 مصدر واحد لعناصر التنقل (يستخدمه الشريط الجانبي والشريط السفلي والعنوان العلوي)
 // group: يحدد قسم العنصر في القائمة حسب النموذج الذهني للمستخدم
 export const NAV_ITEMS = [
     { id: 'dashboard', label: 'الرئيسية', short: 'الرئيسية', icon: Home, roles: ['admin', 'casher'], group: null },
-    { id: 'inbox', label: 'الطلبات', short: 'الطلبات', icon: Inbox, roles: ['admin', 'casher', 'driver'], group: 'التشغيل' },
+    { id: 'inbox', label: 'صندوق الطلبات', short: 'الطلبات', icon: Inbox, roles: ['admin', 'casher', 'driver'], group: 'التشغيل' },
     { id: 'pilots', label: 'الطيارين والورديات', short: 'الطيارين', icon: Users, roles: ['admin', 'casher'], group: 'التشغيل' },
-    { id: 'reservations', label: 'حجز مطعم / كافيه', short: 'الحجوزات', icon: UtensilsCrossed, roles: ['casher'], group: 'الإدارة' },
+    { id: 'reservations', label: 'حجوزات المطعم', short: 'الحجوزات', icon: UtensilsCrossed, roles: ['admin', 'casher'], group: 'التشغيل' },
     { id: 'feedback', label: 'الشكاوى والمقترحات', short: 'الشكاوى', icon: MessageSquare, roles: ['admin'], group: 'الإدارة' },
     { id: 'reports', label: 'التقارير والأرباح', short: 'التقارير', icon: BarChart3, roles: ['admin'], group: 'التقارير' },
     { id: 'settings', label: 'الإعدادات والأسعار', short: 'الإعدادات', icon: Settings, roles: ['admin'], group: 'النظام' },
@@ -46,20 +46,44 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
 
     return (
         <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`} aria-label="القائمة الرئيسية">
-            {/* Header Brand — مضغوط */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', padding: '0 4px' }}>
-                <div style={{
-                    width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
-                    background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>
-                    <img src="/logo.png" alt="Abu Khater" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                </div>
-                <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>توصيل أبو خاطر</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : ''}
+            {/* Header Brand + زر إغلاق القائمة في الموبايل والتابلت */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', padding: '0 4px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+                    <div style={{
+                        width: '42px', height: '42px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                        background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    }}>
+                        <img src="/logo.png" alt="Abu Khater" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>توصيل أبو خاطر</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : ''}
+                        </div>
                     </div>
                 </div>
+
+                <button
+                    type="button"
+                    onClick={closeSidebar}
+                    className="sidebar-close-btn"
+                    aria-label="إغلاق القائمة"
+                    style={{
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        border: '1px solid var(--border)',
+                        color: 'white',
+                        borderRadius: '8px',
+                        width: '36px',
+                        height: '36px',
+                        display: 'none',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        flexShrink: 0
+                    }}
+                >
+                    <X size={20} />
+                </button>
             </div>
 
             {/* Navigation Menu — مقسمة لمجموعات */}
