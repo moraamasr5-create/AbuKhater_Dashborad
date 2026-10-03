@@ -2328,6 +2328,18 @@ function App() {
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
 
+      {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
+      <button
+        type="button"
+        className="floating-sidebar-toggle no-print"
+        onClick={toggleSidebar}
+        aria-label="القائمة الجانبية"
+        aria-expanded={isSidebarOpen}
+        title="القائمة الجانبية 🗃"
+      >
+        <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>🗃</span>
+      </button>
+
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -2338,10 +2350,6 @@ function App() {
       <main className="main-content">
         {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
         <div className="topbar no-print">
-          <button className="menu-toggle" onClick={toggleSidebar} aria-label="فتح القائمة الرئيسية" aria-expanded={isSidebarOpen}>
-            <Menu size={20} />
-            <span>القائمة</span>
-          </button>
           <h1 className="topbar-title">{currentNav?.label || ''}</h1>
 
           {userRole !== 'driver' && (
@@ -2492,9 +2500,9 @@ function App() {
             {item.id === 'inbox' && actionCount > 0 && <span className="nav-count">{actionCount}</span>}
           </button>
         ))}
-        <button type="button" onClick={toggleSidebar} aria-label="القائمة الجانبية" className={isSidebarOpen ? 'is-active' : ''}>
+        <button type="button" onClick={toggleSidebar} aria-label="كل الأقسام" className={isSidebarOpen ? 'is-active' : ''}>
           <Menu size={22} />
-          <span>القائمة</span>
+          <span>المزيد</span>
         </button>
       </nav>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff, X } from 'lucide-react';
+import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 // 🟢 مصدر واحد لعناصر التنقل (يستخدمه الشريط الجانبي والشريط السفلي والعنوان العلوي)
@@ -46,9 +46,9 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
 
     return (
         <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`} aria-label="القائمة الرئيسية">
-            {/* Header Brand + زر إغلاق القائمة في الموبايل والتابلت */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', padding: '0 4px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            {/* Header Brand — مضغوط مع زر إغلاق للموبايل */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '14px', padding: '0 4px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
                     <div style={{
                         width: '42px', height: '42px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
                         background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
@@ -57,32 +57,19 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                     </div>
                     <div style={{ minWidth: 0 }}>
                         <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>توصيل أبو خاطر</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : ''}
+                        <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--accent)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : (userRole === 'admin' ? ' • Admin 1' : '')}
                         </div>
                     </div>
                 </div>
-
                 <button
                     type="button"
                     onClick={closeSidebar}
                     className="sidebar-close-btn"
                     aria-label="إغلاق القائمة"
-                    style={{
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid var(--border)',
-                        color: 'white',
-                        borderRadius: '8px',
-                        width: '36px',
-                        height: '36px',
-                        display: 'none',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        flexShrink: 0
-                    }}
+                    title="إغلاق القائمة"
                 >
-                    <X size={20} />
+                    ✕
                 </button>
             </div>
 
