@@ -615,22 +615,25 @@ const ReportsView = () => {
                             <button
                               type="button"
                               onClick={() => handleHideReservation(res.id)}
-                              title="حذف من العرض"
+                              title="إخفاء"
                               style={{
                                 background: 'rgba(239, 68, 68, 0.12)',
                                 border: '1px solid rgba(239, 68, 68, 0.25)',
                                 color: '#f87171',
                                 cursor: 'pointer',
-                                width: '32px',
-                                height: '32px',
+                                padding: '4px 10px',
+                                minHeight: '32px',
                                 borderRadius: '6px',
                                 display: 'inline-flex',
                                 alignItems: 'center',
-                                justifyContent: 'center',
+                                gap: '4px',
+                                fontSize: '0.8rem',
+                                fontWeight: 'bold',
                                 transition: 'all 0.2s'
                               }}
                             >
-                              <Trash2 size={15} />
+                              <Trash2 size={13} />
+                              <span>إخفاء</span>
                             </button>
                           </div>
                         </td>
