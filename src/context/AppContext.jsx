@@ -1003,19 +1003,19 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Step 1: Manager Confirms Details -> Waiting For Driver
+  // Step 1: Manager Confirms Details -> Preparing (Kitchen)
   const confirmOrder = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || !['pending', 'pending_timer'].includes(order.status)) return;
 
-    const updatedOrder = { ...order, status: 'waiting_driver', confirmedAt: getSafeISOTime() };
+    const updatedOrder = { ...order, status: 'preparing', confirmedAt: getSafeISOTime() };
 
     setOrders(prev => prev.map(o =>
       o.id === orderId ? updatedOrder : o
     ));
-    logAction('ORDER_CONFIRM', `Order #${orderId} confirmed. Waiting for driver.`, 'Supervisor');
+    logAction('ORDER_CONFIRM', `Order #${orderId} confirmed. Sent to kitchen (preparing).`, 'Supervisor');
     if (order.supabaseId) {
-      updateExternalOrderStatus(order.supabaseId, 'confirmed');
+      updateExternalOrderStatus(order.supabaseId, 'preparing');
     }
 
     try {
@@ -1026,10 +1026,32 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Step 2: Assign Driver (Locks Order, Ready to Print)
+  // Step 2 (Pickup): Kitchen Finished -> Ready for Customer Pickup
+  const readyOrder = async (orderId) => {
+    const order = orders.find(o => o.id === orderId);
+    if (!order || (order.status !== 'preparing' && order.status !== 'waiting_driver')) return;
+
+    const readyAt = getSafeISOTime();
+    const updatedOrder = { ...order, status: 'ready', readyAt };
+
+    setOrders(prev => prev.map(o =>
+      o.id === orderId ? updatedOrder : o
+    ));
+    logAction('ORDER_READY', `Pickup Order #${orderId} is ready for customer pickup.`, 'Supervisor');
+    if (order.supabaseId) {
+      updateExternalOrderStatus(order.supabaseId, 'ready');
+    }
+  };
+
+  // Step 2 (Delivery): Assign Driver (Locks Order, Ready to Print)
   const assignPilot = async (orderId, pilotId) => {
     const order = orders.find(o => o.id === orderId);
-    if (!order || ['driver_assigned', 'active', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(order.status)) return;
+    if (!order || ['driver_assigned', 'out_for_delivery', 'active', 'delivered', 'completed', 'cancelled', 'failed_delivery', 'ready'].includes(order.status)) return;
+
+    if (order.type === 'pickup') {
+      alert('⚠️ هذا الطلب استلام من المطعم (Pickup) ولا يتم إسناده لطيار.');
+      return;
+    }
 
     const pilot = pilots.find(p => String(p.id) === String(pilotId));
     if (!pilot) {
@@ -1093,6 +1115,11 @@ export const AppProvider = ({ children }) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || order.status !== 'driver_assigned' || !(order.deliveryId || order.pilotId)) return;
 
+    if (order.type === 'pickup') {
+      alert('⚠️ طلب الاستلام (Pickup) لا يخرج في رحلة توصيل.');
+      return;
+    }
+
     const deliveryId = Number(order.deliveryId || order.pilotId);
     if (!Number.isFinite(deliveryId)) return;
 
@@ -1101,7 +1128,7 @@ export const AppProvider = ({ children }) => {
     const prevPilots = pilots;
 
     setOrders(prev => prev.map(o =>
-      o.id === orderId ? { ...o, status: 'active', startTime } : o
+      o.id === orderId ? { ...o, status: 'out_for_delivery', startTime } : o
     ));
 
     setPilots(prev => prev.map(p =>
@@ -1129,25 +1156,19 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // Step 4: Complete (Pilot Returns -> Status Available + Queue Update)
+  // Step 4: Complete (Pickup picked up OR Pilot Returns -> Status Available + Queue Update)
   /**
-   * إتمام الطلب: يُعيد الطيار لقائمة الانتظار ويحدّث الحالة
+   * إتمام الطلب: يُعيد الطيار لقائمة الانتظار (في حالة الدليفري) ويحدّث الحالة
    */
   const completeOrder = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || order.status === 'completed' || order.status === 'delivered') return;
 
     const nowTime = getSafeISOTime();
-    const deliveryId = Number(order.deliveryId || order.pilotId);
+    const isPickup = order.type === 'pickup';
+    const deliveryId = isPickup ? null : Number(order.deliveryId || order.pilotId);
     const prevOrders = orders;
     const prevPilots = pilots;
-
-    const otherPending = Number.isFinite(deliveryId) && orders.some(o =>
-      Number(o.deliveryId || o.pilotId) === deliveryId &&
-      o.id !== orderId &&
-      (o.status === 'active' || o.status === 'driver_assigned')
-    );
-    const nextPilotState = otherPending ? 'on_delivery' : 'available';
 
     setOrders(prev => prev.map(o =>
       o.id === orderId
@@ -1155,7 +1176,14 @@ export const AppProvider = ({ children }) => {
         : o
     ));
 
-    if (Number.isFinite(deliveryId)) {
+    if (!isPickup && Number.isFinite(deliveryId)) {
+      const otherPending = orders.some(o =>
+        Number(o.deliveryId || o.pilotId) === deliveryId &&
+        o.id !== orderId &&
+        (o.status === 'out_for_delivery' || o.status === 'active' || o.status === 'driver_assigned')
+      );
+      const nextPilotState = otherPending ? 'on_delivery' : 'available';
+
       setPilots(prev => prev.map(p => {
         if (Number(p.id) !== deliveryId) return p;
         const returnTimeUpdates = nextPilotState === 'available'
@@ -1165,23 +1193,27 @@ export const AppProvider = ({ children }) => {
       }));
     }
 
-    logAction('ORDER_COMPLETE', `Order #${orderId} completed`, 'Supervisor');
+    logAction('ORDER_COMPLETE', isPickup ? `Pickup Order #${orderId} picked up by customer` : `Order #${orderId} delivered`, 'Supervisor');
 
     if (!order.supabaseId) return;
 
     pendingUpdatesRef.current.add(String(order.supabaseId));
-    if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.add(String(deliveryId));
+    if (!isPickup && Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.add(String(deliveryId));
 
     try {
-      await supabaseService.completeOrderDelivery(order.supabaseId);
+      if (isPickup || !Number.isFinite(deliveryId)) {
+        await supabaseService.updateOrderStatus(order.supabaseId, 'delivered');
+      } else {
+        await supabaseService.completeOrderDelivery(order.supabaseId);
+      }
     } catch (e) {
       setOrders(prevOrders);
       setPilots(prevPilots);
-      alert(`⚠️ فشل إتمام التوصيل: ${e?.message || 'خطأ غير معروف'}`);
+      alert(`⚠️ فشل إتمام الطلب: ${e?.message || 'خطأ غير معروف'}`);
     } finally {
       setTimeout(() => {
         pendingUpdatesRef.current.delete(String(order.supabaseId));
-        if (Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.delete(String(deliveryId));
+        if (!isPickup && Number.isFinite(deliveryId)) pendingPilotUpdatesRef.current.delete(String(deliveryId));
       }, 2000);
     }
   };
@@ -1189,6 +1221,11 @@ export const AppProvider = ({ children }) => {
   const failDelivery = async (orderId, reason) => {
     const order = orders.find(o => o.id === orderId);
     if (!order || order.status === 'failed_delivery') return;
+
+    if (order.type === 'pickup') {
+      alert('⚠️ فشل التوصيل متاح لطلبات الدليفري فقط.');
+      return;
+    }
 
     const nowTime = getSafeISOTime();
     const deliveryId = Number(order.deliveryId || order.pilotId);
@@ -1198,7 +1235,7 @@ export const AppProvider = ({ children }) => {
     const otherPending = Number.isFinite(deliveryId) && orders.some(o =>
       Number(o.deliveryId || o.pilotId) === deliveryId &&
       o.id !== orderId &&
-      (o.status === 'active' || o.status === 'driver_assigned')
+      (o.status === 'out_for_delivery' || o.status === 'active' || o.status === 'driver_assigned')
     );
     const nextPilotState = otherPending ? 'on_delivery' : 'available';
 
@@ -1471,7 +1508,7 @@ export const AppProvider = ({ children }) => {
         isAdmin: userRole === 'admin',
         ...opts
       }),
-      openShift, closeShift, addOrder, deleteOrder, cancelOrder, confirmOrder, completeOrder, failDelivery, togglePilotShift, updateOrder, addNewPilot, deletePilot,
+      openShift, closeShift, addOrder, deleteOrder, cancelOrder, confirmOrder, readyOrder, completeOrder, failDelivery, togglePilotShift, updateOrder, addNewPilot, deletePilot,
       retryReceiptUpload,
       addReservation, confirmReservation, deleteReservation,
       isShiftOpen: currentShift?.status === 'open',

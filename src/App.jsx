@@ -1,5 +1,5 @@
 // Developed & Owned by AmrMamdouh - 01038035884
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Sidebar, { NAV_ITEMS, getActionCount } from './components/layout/Sidebar';
 import OrderInbox from './components/orders/OrderInbox';
 import ReportsView from './components/reports/ReportsView';
@@ -282,19 +282,21 @@ const PilotManagement = () => {
     }
   };
 
-  // Counts
-  const activePilots = pilots.filter(p => p.shiftStatus === 'open');
-  const availablePilots = activePilots.filter(p => p.state === 'available');
-  const onDeliveryPilots = activePilots.filter(p => isPilotOnDelivery(p.state));
-  const closedPilots = pilots.filter(p => p.shiftStatus !== 'open');
+  // Counts (Memoized for smooth re-renders)
+  const activePilots = useMemo(() => pilots.filter(p => p.shiftStatus === 'open'), [pilots]);
+  const availablePilots = useMemo(() => activePilots.filter(p => p.state === 'available'), [activePilots]);
+  const onDeliveryPilots = useMemo(() => activePilots.filter(p => isPilotOnDelivery(p.state)), [activePilots]);
+  const closedPilots = useMemo(() => pilots.filter(p => p.shiftStatus !== 'open'), [pilots]);
 
-  // Filtered pilots
-  const filteredPilots = pilots.filter(p => {
-    if (filterTab === 'available') return p.shiftStatus === 'open' && p.state === 'available';
-    if (filterTab === 'on_delivery') return p.shiftStatus === 'open' && isPilotOnDelivery(p.state);
-    if (filterTab === 'closed') return p.shiftStatus !== 'open';
-    return true;
-  });
+  // Filtered pilots (Memoized)
+  const filteredPilots = useMemo(() => {
+    return pilots.filter(p => {
+      if (filterTab === 'available') return p.shiftStatus === 'open' && p.state === 'available';
+      if (filterTab === 'on_delivery') return p.shiftStatus === 'open' && isPilotOnDelivery(p.state);
+      if (filterTab === 'closed') return p.shiftStatus !== 'open';
+      return true;
+    });
+  }, [pilots, filterTab]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -766,37 +768,40 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
     return Math.max(0, Math.floor(diffMs / 60000));
   };
 
-  // 1. Level A: Needs Attention Now (يحتاج انتباهي الآن)
-  const pendingOrders = orders.filter(o => ['pending', 'pending_timer'].includes(o.status));
-  const waitingOrders = orders.filter(o => ['waiting_driver', 'preparing'].includes(o.status));
-  const activeOrders = orders.filter(o => o.status === 'active');
-  const delayedOrders = orders.filter(o =>
-    ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned', 'active'].includes(o.status) &&
+  // 1. Level A: Needs Attention Now (يحتاج انتباهي الآن - Memoized)
+  const pendingOrders = useMemo(() => orders.filter(o => ['pending', 'pending_timer'].includes(o.status)), [orders]);
+  const waitingOrders = useMemo(() => orders.filter(o => o.type !== 'pickup' && ['waiting_driver', 'preparing'].includes(o.status)), [orders]);
+  const readyPickupOrders = useMemo(() => orders.filter(o => o.type === 'pickup' && o.status === 'ready'), [orders]);
+  const activeOrders = useMemo(() => orders.filter(o => o.status === 'active' || o.status === 'out_for_delivery'), [orders]);
+  const delayedOrders = useMemo(() => orders.filter(o =>
+    ['pending', 'pending_timer', 'waiting_driver', 'preparing', 'driver_assigned', 'active', 'out_for_delivery', 'ready'].includes(o.status) &&
     getElapsedMinutes(o.startTime || o.timestamp) >= 30
-  );
+  ), [orders]);
 
-  const hasUrgentIssues = pendingOrders.length > 0 || delayedOrders.length > 0 || waitingOrders.length > 0;
+  const hasUrgentIssues = pendingOrders.length > 0 || delayedOrders.length > 0 || waitingOrders.length > 0 || readyPickupOrders.length > 0;
 
-  // 2. Level B: Current Status (الوضع التشغيلي اللحظي)
-  const activePilots = pilots.filter(p => p.shiftStatus === 'open');
-  const availablePilots = activePilots.filter(p => p.state === 'available');
-  const onDeliveryPilots = activePilots.filter(p => isPilotOnDelivery(p.state));
+  // 2. Level B: Current Status (الوضع التشغيلي اللحظي - Memoized)
+  const activePilots = useMemo(() => pilots.filter(p => p.shiftStatus === 'open'), [pilots]);
+  const availablePilots = useMemo(() => activePilots.filter(p => p.state === 'available'), [activePilots]);
+  const onDeliveryPilots = useMemo(() => activePilots.filter(p => isPilotOnDelivery(p.state)), [activePilots]);
   const suggestedPilot = getSuggestedPilot();
 
-  // Group active orders by pilot
-  const ordersByPilot = activeOrders.reduce((acc, o) => {
-    const key = String(o.pilotId || o.deliveryId);
-    if (!acc[key]) acc[key] = [];
-    acc[key].push(o);
-    return acc;
-  }, {});
+  // Group active orders by pilot (Memoized)
+  const ordersByPilot = useMemo(() => {
+    return activeOrders.reduce((acc, o) => {
+      const key = String(o.pilotId || o.deliveryId);
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(o);
+      return acc;
+    }, {});
+  }, [activeOrders]);
 
-  const pilotsWithOrders = pilots.filter(p => ordersByPilot[String(p.id)]);
-  const completedCount = orders.filter(o => o.status === 'completed' || o.status === 'delivered').length;
-  const cancelledCount = orders.filter(o => o.status === 'cancelled' || o.status === 'failed_delivery').length;
+  const pilotsWithOrders = useMemo(() => pilots.filter(p => ordersByPilot[String(p.id)]), [pilots, ordersByPilot]);
+  const completedCount = useMemo(() => orders.filter(o => o.status === 'completed' || o.status === 'delivered').length, [orders]);
+  const cancelledCount = useMemo(() => orders.filter(o => o.status === 'cancelled' || o.status === 'failed_delivery').length, [orders]);
 
-  // صفوف "يحتاج انتباهك" — كل صف: ماذا يحدث + الإجراء التالي
-  const attentionRows = [
+  // صفوف "يحتاج انتباهك" — كل صف: ماذا يحدث + الإجراء التالي (Memoized)
+  const attentionRows = useMemo(() => [
     pendingOrders.length > 0 && {
       key: 'pending', tone: 'warning', icon: <AlertCircle size={20} />,
       title: `${pendingOrders.length} طلب جديد بانتظار القبول`,
@@ -816,17 +821,23 @@ const DashboardView = ({ onNavigate, onOpenModal }) => {
         ? `المقترح بالدور: ${suggestedPilot.name}`
         : 'لا يوجد طيار متاح — افتح وردية طيار أو انتظر عودة طيار',
       action: 'إسناد طيار', actionIcon: <UserPlus size={18} />
+    },
+    readyPickupOrders.length > 0 && {
+      key: 'ready_pickup', tone: 'info', icon: <Package size={20} />,
+      title: `${readyPickupOrders.length} طلب جاهز للاستلام بالفرع`,
+      hint: 'العميل يمكنه استلام طلبه الآن من المطعم',
+      action: 'تسليم العميل', actionIcon: <Check size={18} />
     }
-  ].filter(Boolean);
+  ].filter(Boolean), [pendingOrders, delayedOrders, waitingOrders, readyPickupOrders, suggestedPilot]);
 
   const toneColor = { warning: '#f59e0b', danger: '#ef4444', info: '#3b82f6' };
 
-  const kpis = [
-    { id: 'action', label: 'تحتاج إجراء', value: pendingOrders.length + waitingOrders.length, color: (pendingOrders.length + waitingOrders.length) > 0 ? '#fbbf24' : 'var(--text-main)', icon: <AlertCircle size={15} />, nav: 'inbox' },
+  const kpis = useMemo(() => [
+    { id: 'action', label: 'تحتاج إجراء', value: pendingOrders.length + waitingOrders.length + readyPickupOrders.length, color: (pendingOrders.length + waitingOrders.length + readyPickupOrders.length) > 0 ? '#fbbf24' : 'var(--text-main)', icon: <AlertCircle size={15} />, nav: 'inbox' },
     { id: 'active', label: 'في الطريق', value: activeOrders.length, color: '#93c5fd', icon: <MapPin size={15} />, nav: 'inbox' },
     { id: 'pilots', label: 'طيار متاح', value: availablePilots.length, color: availablePilots.length > 0 ? '#34d399' : '#f87171', icon: <Bike size={15} />, nav: 'pilots' },
     { id: 'today', label: 'طلبات اليوم', value: orders.length, color: 'var(--text-main)', icon: <Package size={15} />, nav: null },
-  ];
+  ], [pendingOrders.length, waitingOrders.length, readyPickupOrders.length, activeOrders.length, availablePilots.length, orders.length]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

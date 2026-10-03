@@ -5,7 +5,7 @@ import {
   Check, X, AlertCircle, UserPlus, RotateCcw, Clock, Bike,
   RefreshCw, ShoppingCart, ChevronDown, ChevronUp, MapPin,
   Search, Filter, Phone, DollarSign, AlertTriangle, Printer,
-  Eye, CheckCircle2, Flame, Sparkles, Navigation, Layers
+  Eye, CheckCircle2, Flame, Sparkles, Navigation, Layers, Package
 } from 'lucide-react';
 import { printerService } from '../../services/printerService';
 import { ReceiptThumbnail } from '../../services/storageService';
@@ -46,14 +46,14 @@ const getElapsedMinutes = (timestamp) => {
   return Math.max(0, Math.floor(diffMs / 60000));
 };
 
-// ⏱️ مكون حساب وعرض الوقت المنقضي بألوان تحذيرية حية
-const LiveElapsedBadge = ({ timestamp, startTime, isOut }) => {
+// ⏱️ مكون حساب وعرض الوقت المنقضي بألوان تحذيرية حية (Memoized للأداء العالي)
+const LiveElapsedBadge = React.memo(({ timestamp, startTime, isOut }) => {
   const [minutes, setMinutes] = useState(() => getElapsedMinutes(startTime || timestamp));
 
   useEffect(() => {
     const update = () => setMinutes(getElapsedMinutes(startTime || timestamp));
     update();
-    const timer = setInterval(update, 10000);
+    const timer = setInterval(update, 15000);
     return () => clearInterval(timer);
   }, [timestamp, startTime]);
 
@@ -105,7 +105,7 @@ const LiveElapsedBadge = ({ timestamp, startTime, isOut }) => {
       <span>{label}</span>
     </div>
   );
-};
+});
 
 // 🚫 نافذة مودال عصرية لإلغاء الطلب (بديل لـ prompt)
 const CancelOrderModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
@@ -313,13 +313,13 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
 
 const OrderInbox = ({ onReedit }) => {
   const {
-    orders, pilots, confirmOrder, deleteOrder, cancelOrder, isShiftOpen,
+    orders, pilots, confirmOrder, readyOrder, deleteOrder, cancelOrder, isShiftOpen,
     assignPilot, startDelivery, completeOrder, failDelivery, getSuggestedPilot,
     syncExternalOrders, userRole, isThermalPrintMode, retryReceiptUpload
   } = useApp();
 
   // Filters & State
-  const [statusTab, setStatusTab] = useState('all'); // 'all' | 'pending' | 'waiting_driver' | 'driver_assigned' | 'delayed'
+  const [statusTab, setStatusTab] = useState('all'); // 'all' | 'pending' | 'preparing' | 'ready' | 'driver_assigned' | 'delayed'
   const [sourceFilter, setSourceFilter] = useState('all'); // 'all' | 'online' | 'restaurant' | 'talabat' | 'trip'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPilot, setSelectedPilot] = useState({});
@@ -345,7 +345,7 @@ const OrderInbox = ({ onReedit }) => {
   const rawInboxOrders = useMemo(() => {
     return orders.filter(o => {
       if (userRole === 'admin' || userRole === 'casher') {
-        return ['pending', 'pending_timer', 'waiting_driver', 'driver_assigned'].includes(o.status);
+        return ['pending', 'pending_timer', 'preparing', 'waiting_driver', 'ready', 'driver_assigned'].includes(o.status);
       } else {
         return ['driver_assigned'].includes(o.status);
       }
@@ -355,13 +355,15 @@ const OrderInbox = ({ onReedit }) => {
   // إحصائيات الفلاتر اللحظية
   const stageCounts = useMemo(() => {
     const pendingCount = rawInboxOrders.filter(o => ['pending', 'pending_timer'].includes(o.status)).length;
-    const waitingCount = rawInboxOrders.filter(o => ['waiting_driver', 'preparing'].includes(o.status)).length;
+    const preparingCount = rawInboxOrders.filter(o => ['preparing', 'waiting_driver'].includes(o.status)).length;
+    const readyPickupCount = rawInboxOrders.filter(o => o.status === 'ready').length;
     const assignedCount = rawInboxOrders.filter(o => o.status === 'driver_assigned').length;
     const delayedCount = rawInboxOrders.filter(o => getElapsedMinutes(o.timestamp) >= 30).length;
     return {
       all: rawInboxOrders.length,
       pending: pendingCount,
-      waiting_driver: waitingCount,
+      preparing: preparingCount,
+      ready: readyPickupCount,
       driver_assigned: assignedCount,
       delayed: delayedCount
     };
@@ -373,8 +375,10 @@ const OrderInbox = ({ onReedit }) => {
       // 1. Status tab filter
       if (statusTab === 'pending') {
         if (!['pending', 'pending_timer'].includes(o.status)) return false;
-      } else if (statusTab === 'waiting_driver') {
-        if (!['waiting_driver', 'preparing'].includes(o.status)) return false;
+      } else if (statusTab === 'preparing' || statusTab === 'waiting_driver') {
+        if (!['preparing', 'waiting_driver'].includes(o.status)) return false;
+      } else if (statusTab === 'ready') {
+        if (o.status !== 'ready') return false;
       } else if (statusTab === 'driver_assigned') {
         if (o.status !== 'driver_assigned') return false;
       } else if (statusTab === 'delayed') {
@@ -439,19 +443,29 @@ const OrderInbox = ({ onReedit }) => {
 
   const availablePilots = useMemo(() => pilots.filter(p => p.shiftStatus === 'open'), [pilots]);
 
-  // Handle local countdown for grace period
+  // Handle local countdown for grace period — optimized to only run when pending_timer orders exist
   useEffect(() => {
+    const hasPendingTimer = rawInboxOrders.some(o => o.status === 'pending_timer');
+    if (!hasPendingTimer) {
+      setAuditTimers({});
+      return;
+    }
+
     const interval = setInterval(() => {
-      const now = new Date();
+      const now = Date.now();
       const newTimers = {};
+      let anyActive = false;
       rawInboxOrders.forEach(order => {
-        if (order.status === 'pending_timer') {
-          const diff = Math.max(0, 5 - Math.floor((now - new Date(order.timestamp)) / 1000));
+        if (order.status === 'pending_timer' && order.timestamp) {
+          const diff = Math.max(0, 5 - Math.floor((now - new Date(order.timestamp).getTime()) / 1000));
           newTimers[order.id] = diff;
+          if (diff > 0) anyActive = true;
         }
       });
       setAuditTimers(newTimers);
+      if (!anyActive) clearInterval(interval);
     }, 500);
+
     return () => clearInterval(interval);
   }, [rawInboxOrders]);
 
@@ -541,12 +555,13 @@ const OrderInbox = ({ onReedit }) => {
       {/* 🧭 Stage Tabs & Search Toolbar */}
       <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {/* Stage Status Tabs */}
-        <div className="tab-strip" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
+        <div className="tab-strip" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '14px', overflowX: 'auto' }}>
           {[
             { id: 'all', label: 'جميع المراحل', count: stageCounts.all, color: '#6366f1' },
             { id: 'pending', label: 'طلبات جديدة', count: stageCounts.pending, color: '#f59e0b', highlight: stageCounts.pending > 0 },
-            { id: 'waiting_driver', label: 'بانتظار طيار', count: stageCounts.waiting_driver, color: '#10b981' },
-            { id: 'driver_assigned', label: 'مع الطيار', count: stageCounts.driver_assigned, color: '#3b82f6' },
+            { id: 'preparing', label: 'بالمطبخ / قيد التحضير', count: stageCounts.preparing, color: '#10b981' },
+            { id: 'ready', label: 'جاهز للاستلام 🛍️', count: stageCounts.ready, color: '#8b5cf6', highlight: stageCounts.ready > 0 },
+            { id: 'driver_assigned', label: 'مع الطيار 🛵', count: stageCounts.driver_assigned, color: '#3b82f6' },
             { id: 'delayed', label: 'طلبات متأخرة', count: stageCounts.delayed, color: '#ef4444', highlight: stageCounts.delayed > 0 },
           ].map(tab => {
             const isActive = statusTab === tab.id;
@@ -694,16 +709,24 @@ const OrderInbox = ({ onReedit }) => {
                   statusBg = 'rgba(245, 158, 11, 0.05)';
                 } else if (order.status === 'waiting_driver' || order.status === 'preparing') {
                   statusColor = '#10b981';
-                  statusLabel = 'بالمطبخ / بانتظار طيار';
+                  statusLabel = order.type === 'pickup' ? 'قيد التحضير بالمطبخ 🍳' : 'بالمطبخ / بانتظار طيار 🛵';
                   statusBg = 'rgba(16, 185, 129, 0.05)';
+                } else if (order.status === 'ready') {
+                  statusColor = '#8b5cf6';
+                  statusLabel = 'جاهز للاستلام بالفرع 🛍️';
+                  statusBg = 'rgba(139, 92, 246, 0.06)';
                 } else if (order.status === 'driver_assigned') {
                   statusColor = '#3b82f6';
-                  statusLabel = 'مسند للطيار';
+                  statusLabel = 'مسند للطيار 🛵';
                   statusBg = 'rgba(59, 130, 246, 0.05)';
                 } else if (order.status === 'active' || order.status === 'out_for_delivery') {
                   statusColor = '#22c55e';
                   statusLabel = 'في الطريق للتسليم 🚚';
                   statusBg = 'rgba(34, 197, 94, 0.06)';
+                } else if (order.status === 'delivered' || order.status === 'completed') {
+                  statusColor = '#22c55e';
+                  statusLabel = order.type === 'pickup' ? 'تم الاستلام بالفرع ✅' : 'تم التوصيل ✅';
+                  statusBg = 'rgba(34, 197, 94, 0.04)';
                 }
 
                 // Pilot badge for driver assigned state
@@ -745,6 +768,9 @@ const OrderInbox = ({ onReedit }) => {
                           <span style={{ fontSize: '1.35rem', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '0.5px' }}>
                             #{order.originalId || order.id}
                           </span>
+                          {order.type === 'pickup' && (
+                            <span style={{ fontSize: '0.72rem', background: '#ec4899', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 'bold' }}>🛍️ استلام (Pickup)</span>
+                          )}
                           {order.type === 'talabat' && (
                             <span style={{ fontSize: '0.72rem', background: '#f97316', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 'bold' }}>طلبات</span>
                           )}
@@ -882,78 +908,40 @@ const OrderInbox = ({ onReedit }) => {
                         </div>
                       )}
 
-                      {/* Stage 2: Waiting Driver -> Pilot Assignment */}
+                      {/* Stage 2: Preparing / Kitchen */}
                       {(order.status === 'waiting_driver' || order.status === 'preparing') && (userRole === 'admin' || userRole === 'casher') && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-                          {suggestedPilot && (
-                            <div style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              background: 'rgba(16, 185, 129, 0.1)',
-                              border: '1px solid rgba(16, 185, 129, 0.3)',
-                              padding: '8px 12px',
-                              borderRadius: '10px',
-                              flexWrap: 'wrap',
-                              gap: '8px'
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
-                                <Sparkles size={16} color="#34d399" />
-                                <span>الطيار المقترح بالدور: <strong style={{ color: '#34d399' }}>{suggestedPilot.name}</strong></span>
-                              </div>
-                              <button
-                                onClick={() => handleAssignAndPrint(order.id, suggestedPilot.id)}
-                                className="btn-primary"
-                                style={{
-                                  background: '#10b981',
-                                  padding: '6px 14px',
-                                  minHeight: '38px',
-                                  fontSize: '0.85rem'
-                                }}
-                              >
-                                <UserPlus size={15} />
-                                <span>إسناد مباشر وطباعة</span>
-                              </button>
-                            </div>
-                          )}
-
-                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                            <select
-                              className="glass-card"
-                              style={{
-                                flex: '1 1 200px',
-                                padding: '10px 14px',
-                                background: '#172033',
-                                color: 'white',
-                                border: '1px solid var(--border)',
-                                borderRadius: '10px',
-                                fontSize: '0.9rem',
-                                minHeight: '44px'
-                              }}
-                              onChange={(e) => setSelectedPilot({ ...selectedPilot, [order.id]: e.target.value })}
-                              value={selectedPilot[order.id] || suggestedPilot?.id || ''}
-                            >
-                              <option value="">-- اختر طيار يدوي --</option>
-                              {availablePilots.map(p => (
-                                <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
-                                  {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح 🟢)'} - {p.ordersCount || 0} طلبات
-                                </option>
-                              ))}
-                            </select>
-
+                        order.type === 'pickup' ? (
+                          /* Pickup Action: Mark Ready for Customer Pickup (NO PILOT) */
+                          <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                             <button
-                              onClick={() => handleAssignAndPrint(order.id)}
-                              disabled={!selectedPilot[order.id] && !suggestedPilot}
+                              onClick={() => {
+                                readyOrder(order.id);
+                                toast(`الطلب #${order.originalId || order.id} جاهز لاستلام العميل بالفرع 🛍️`);
+                              }}
                               className="btn-primary"
                               style={{
-                                background: 'var(--primary)',
-                                minHeight: '44px',
-                                padding: '10px 18px'
+                                flex: '2 1 200px',
+                                background: '#8b5cf6',
+                                boxShadow: '0 4px 14px rgba(139, 92, 246, 0.35)'
                               }}
-                              title="إسناد للطيار المختار وطباعة البون"
                             >
-                              <UserPlus size={18} />
-                              <span>إسناد وطباعة</span>
+                              <Package size={18} />
+                              <span>جاهز للاستلام بالفرع 🛍️</span>
+                            </button>
+
+                            <button
+                              onClick={() => handlePrint(order)}
+                              className="btn-primary"
+                              style={{
+                                background: 'var(--bg-surface)',
+                                border: '1px solid var(--border-strong)',
+                                color: 'var(--text-main)',
+                                flex: '1 1 120px'
+                              }}
+                              title="طباعة بون المطبخ"
+                            >
+                              <Printer size={16} />
+                              <span>طباعة بون</span>
                             </button>
 
                             <button
@@ -965,10 +953,139 @@ const OrderInbox = ({ onReedit }) => {
                               <X size={18} />
                             </button>
                           </div>
+                        ) : (
+                          /* Delivery Action: Pilot Assignment UI */
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+                            {suggestedPilot && (
+                              <div style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                background: 'rgba(16, 185, 129, 0.1)',
+                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                padding: '8px 12px',
+                                borderRadius: '10px',
+                                flexWrap: 'wrap',
+                                gap: '8px'
+                              }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.85rem' }}>
+                                  <Sparkles size={16} color="#34d399" />
+                                  <span>الطيار المقترح بالدور: <strong style={{ color: '#34d399' }}>{suggestedPilot.name}</strong></span>
+                                </div>
+                                <button
+                                  onClick={() => handleAssignAndPrint(order.id, suggestedPilot.id)}
+                                  className="btn-primary"
+                                  style={{
+                                    background: '#10b981',
+                                    padding: '6px 14px',
+                                    minHeight: '38px',
+                                    fontSize: '0.85rem'
+                                  }}
+                                >
+                                  <UserPlus size={15} />
+                                  <span>إسناد مباشر وطباعة</span>
+                                </button>
+                              </div>
+                            )}
+
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              <select
+                                className="glass-card"
+                                style={{
+                                  flex: '1 1 200px',
+                                  padding: '10px 14px',
+                                  background: '#172033',
+                                  color: 'white',
+                                  border: '1px solid var(--border)',
+                                  borderRadius: '10px',
+                                  fontSize: '0.9rem',
+                                  minHeight: '44px'
+                                }}
+                                onChange={(e) => setSelectedPilot({ ...selectedPilot, [order.id]: e.target.value })}
+                                value={selectedPilot[order.id] || suggestedPilot?.id || ''}
+                              >
+                                <option value="">-- اختر طيار يدوي --</option>
+                                {availablePilots.map(p => (
+                                  <option key={p.id} value={p.id} disabled={isPilotOnDelivery(p.state)}>
+                                    {p.name} {isPilotOnDelivery(p.state) ? '(في توصيل 🚫)' : '(متاح 🟢)'} - {p.ordersCount || 0} طلبات
+                                  </option>
+                                ))}
+                              </select>
+
+                              <button
+                                onClick={() => handleAssignAndPrint(order.id)}
+                                disabled={!selectedPilot[order.id] && !suggestedPilot}
+                                className="btn-primary"
+                                style={{
+                                  background: 'var(--primary)',
+                                  minHeight: '44px',
+                                  padding: '10px 18px'
+                                }}
+                                title="إسناد للطيار المختار وطباعة البون"
+                              >
+                                <UserPlus size={18} />
+                                <span>إسناد وطباعة</span>
+                              </button>
+
+                              <button
+                                onClick={() => setCancelModalOrder(order)}
+                                className="btn-danger-outline"
+                                style={{ minWidth: '44px' }}
+                                title="إلغاء الطلب"
+                              >
+                                <X size={18} />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      )}
+
+                      {/* Stage 2.5: Ready for Pickup (Pickup Orders Only) */}
+                      {order.status === 'ready' && (userRole === 'admin' || userRole === 'casher') && (
+                        <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
+                          <button
+                            onClick={() => {
+                              completeOrder(order.id);
+                              toast(`تم تسليم الطلب #${order.originalId || order.id} للعميل بنجاح ✅`);
+                            }}
+                            className="btn-primary"
+                            style={{
+                              flex: '2 1 200px',
+                              background: '#22c55e',
+                              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)'
+                            }}
+                          >
+                            <Check size={18} />
+                            <span>تم تسليم العميل (استلام بالفرع) ✅</span>
+                          </button>
+
+                          <button
+                            onClick={() => handlePrint(order)}
+                            className="btn-primary"
+                            style={{
+                              background: 'var(--bg-surface)',
+                              border: '1px solid var(--border-strong)',
+                              color: 'var(--text-main)',
+                              flex: '1 1 120px'
+                            }}
+                            title="طباعة بون"
+                          >
+                            <Printer size={16} />
+                            <span>طباعة بون</span>
+                          </button>
+
+                          <button
+                            onClick={() => setCancelModalOrder(order)}
+                            className="btn-danger-outline"
+                            style={{ minWidth: '44px' }}
+                            title="إلغاء الطلب"
+                          >
+                            <X size={18} />
+                          </button>
                         </div>
                       )}
 
-                      {/* Stage 3: Driver Assigned -> Start Trip */}
+                      {/* Stage 3: Driver Assigned -> Start Trip (Delivery Only) */}
                       {order.status === 'driver_assigned' && (
                         <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                           <button
@@ -1001,8 +1118,8 @@ const OrderInbox = ({ onReedit }) => {
                         </div>
                       )}
 
-                      {/* Stage 4: Active -> Complete / Fail */}
-                      {order.status === 'active' && (
+                      {/* Stage 4: Out for Delivery / Active -> Complete / Fail (Delivery Only) */}
+                      {(order.status === 'active' || order.status === 'out_for_delivery') && (
                         <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => completeOrder(order.id)}

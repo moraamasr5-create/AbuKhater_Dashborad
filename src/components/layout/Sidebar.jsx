@@ -15,9 +15,9 @@ export const NAV_ITEMS = [
     { id: 'settings', label: 'الإعدادات والأسعار', short: 'الإعدادات', icon: Settings, roles: ['admin'], group: 'النظام' },
 ];
 
-// عدد الطلبات التي تحتاج إجراء (نفس المنطق السابق لشارة صندوق الوارد)
+// عدد الطلبات التي تحتاج إجراء (مواءمة مع الحالات القياسية المعتمدة)
 export const getActionCount = (orders) =>
-    orders.filter(o => ['pending', 'pending_timer', 'waiting_driver'].includes(o.status)).length;
+    orders.filter(o => ['pending', 'pending_timer', 'preparing', 'waiting_driver', 'ready'].includes(o.status)).length;
 
 const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
     const { isShiftOpen, openShift, closeShift, orders, userRole, logoutStaff, currentStaff } = useApp();

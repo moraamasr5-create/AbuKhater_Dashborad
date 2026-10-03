@@ -335,20 +335,21 @@ export const supabaseService = {
           ? rawItems.map(i => `${i.count}x ${i.name}`).join(', ')
           : 'طلب خارجي (بدون تفاصيل)';
 
-        // Status mapping: DB English/Arabic → internal status
-        let mappedStatus = 'pending';
+        // Status mapping: DB English/Arabic → Canonical status
         const rawStatus = String(row.status || '').trim();
-        if (rawStatus === 'out_for_delivery' || rawStatus === 'active') mappedStatus = 'active';
-        else if (rawStatus === 'confirmed' || rawStatus === 'في التحضير') mappedStatus = 'waiting_driver';
-        else if (rawStatus === 'تم الإسناد للطيار') mappedStatus = 'driver_assigned';
-        else if (rawStatus === 'في الطريق للتسليم') mappedStatus = 'active';
-        else if (rawStatus === 'تم التوصيل' || rawStatus === 'delivered') mappedStatus = 'completed';
-        // نقوم بإضافة هذين السطرين قبل فلترة الحالة في دالة fetchOrders:
-        else if (rawStatus.startsWith('ملغي') || rawStatus === 'ملغي') mappedStatus = 'cancelled';
-        else if (rawStatus.startsWith('فشل التوصيل') || rawStatus === 'فشل التوصيل') mappedStatus = 'failed_delivery';
-        else if (['pending', 'waiting_driver', 'driver_assigned', 'completed', 'delivered', 'cancelled', 'failed_delivery'].includes(rawStatus)) {
-          mappedStatus = rawStatus === 'delivered' ? 'completed' : rawStatus;
-        }
+        const normalizeCanonicalStatus = (raw) => {
+          const s = String(raw || '').trim();
+          if (!s || s === 'pending' || s === 'pending_timer' || s === 'جديد') return 'pending';
+          if (s === 'preparing' || s === 'confirmed' || s === 'waiting_driver' || s === 'في التحضير' || s === 'مؤكد') return 'preparing';
+          if (s === 'ready' || s === 'جاهز' || s === 'جاهز للتسليم' || s === 'جاهز للاستلام') return 'ready';
+          if (s === 'driver_assigned' || s === 'تم الإسناد للطيار' || s === 'مسند') return 'driver_assigned';
+          if (s === 'out_for_delivery' || s === 'active' || s === 'في الطريق للتسليم' || s === 'في الطريق') return 'out_for_delivery';
+          if (s === 'delivered' || s === 'completed' || s === 'تم التوصيل' || s === 'تم التسليم' || s === 'مكتمل' || s === 'picked_up') return 'delivered';
+          if (s.startsWith('فشل التوصيل') || s === 'failed_delivery' || s === 'فشل') return 'failed_delivery';
+          if (s.startsWith('ملغي') || s === 'cancelled' || s === 'canceled') return 'cancelled';
+          return 'pending';
+        };
+        const mappedStatus = normalizeCanonicalStatus(rawStatus);
 
         // original_id: DB column first, then raw_payload fallback
         const orderId = row.original_id || rawPayload.order_id || `#${row.id.slice(0, 6)}`;
@@ -470,11 +471,14 @@ export const supabaseService = {
     return withOfflineSupport('updateOrderStatus', async () => {
       // Map frontend action to canonical state
       let canonical = newStatus;
-      if (newStatus === 'confirmed' || newStatus === 'waiting_driver') canonical = 'preparing';
+      if (newStatus === 'confirmed' || newStatus === 'waiting_driver' || newStatus === 'preparing') canonical = 'preparing';
+      else if (newStatus === 'ready') canonical = 'ready';
+      else if (newStatus === 'driver_assigned') canonical = 'driver_assigned';
       else if (newStatus === 'active' || newStatus === 'out_for_delivery') canonical = 'out_for_delivery';
-      else if (newStatus === 'completed' || newStatus === 'delivered') canonical = 'delivered';
+      else if (newStatus === 'completed' || newStatus === 'delivered' || newStatus === 'picked_up') canonical = 'delivered';
       else if (newStatus === 'failed_delivery') canonical = 'failed_delivery';
       else if (newStatus === 'cancelled') canonical = 'cancelled';
+      else if (newStatus === 'pending') canonical = 'pending';
 
       const mutationId = newMutationId();
       const { data, error } = await supabase.rpc('transition_order_status', {
