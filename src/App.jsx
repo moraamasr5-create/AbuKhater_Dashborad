@@ -2158,7 +2158,7 @@ const CREATE_OPTIONS = [
   { id: 'trip', label: 'مشوار خاص', hint: 'توصيل بدون منيو', color: '#ef4444' },
 ];
 
-const CreateOrderMenu = ({ onSelect }) => {
+const CreateOrderMenu = ({ onSelect, disabled }) => {
   const [open, setOpen] = useState(false);
   const ref = React.useRef(null);
   useEffect(() => {
@@ -2173,10 +2173,21 @@ const CreateOrderMenu = ({ onSelect }) => {
       <button
         type="button"
         className="btn-primary"
-        style={{ background: 'var(--accent)', color: '#000', fontWeight: 800 }}
+        style={{
+          background: 'var(--accent)',
+          color: '#000',
+          fontWeight: 800,
+          opacity: disabled ? 0.6 : 1
+        }}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen(o => !o)}
+        onClick={() => {
+          if (disabled) {
+            toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
+            return;
+          }
+          setOpen(o => !o);
+        }}
       >
         <Plus size={18} />
         <span className="create-label">طلب جديد</span>
@@ -2369,82 +2380,17 @@ function App() {
             </span>
           )}
 
-          {/* 🔴 إنشاء طلب - مسموح للكاشير والأدمن أثناء الوردية */}
-          {isShiftOpen && (userRole === 'casher' || userRole === 'admin') && (
-            <CreateOrderMenu onSelect={(modal) => setActiveModal(modal)} />
+          {/* 🔴 إنشاء طلب - مسموح للكاشير والأدمن */}
+          {(userRole === 'casher' || userRole === 'admin') && (
+            <CreateOrderMenu
+              disabled={!isShiftOpen}
+              onSelect={(modal) => setActiveModal(modal)}
+            />
           )}
         </div>
 
         <div className="app-container">
           <ConnectionBanner />
-
-          {/* 🔴 أزرار الطلبات اليدوية الثلاثة */}
-          {(userRole === 'casher' || userRole === 'admin') && (
-            <div className="manual-orders-bar">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isShiftOpen) {
-                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
-                    return;
-                  }
-                  setActiveModal('manual');
-                }}
-                className="manual-order-btn hover-scale"
-                style={{
-                  color: '#000',
-                  background: '#22c55e',
-                  boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)',
-                  opacity: !isShiftOpen ? 0.6 : 1
-                }}
-              >
-                <Plus size={18} />
-                <span>أوردر المطبخ</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isShiftOpen) {
-                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
-                    return;
-                  }
-                  setActiveModal('external');
-                }}
-                className="manual-order-btn hover-scale"
-                style={{
-                  color: '#000',
-                  background: '#f97316',
-                  boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
-                  opacity: !isShiftOpen ? 0.6 : 1
-                }}
-              >
-                <Plus size={18} />
-                <span>أوردر خارجي</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isShiftOpen) {
-                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
-                    return;
-                  }
-                  setActiveModal('trip');
-                }}
-                className="manual-order-btn hover-scale"
-                style={{
-                  color: '#000',
-                  background: '#ef4444',
-                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
-                  opacity: !isShiftOpen ? 0.6 : 1
-                }}
-              >
-                <Plus size={18} />
-                <span>مشوار خاص</span>
-              </button>
-            </div>
-          )}
 
           {activeModal === 'manual' && <ManualOrderForm onClose={handleCloseModal} initialData={reeditData} />}
           {activeModal === 'external' && <ExternalOrderForm onClose={handleCloseModal} initialData={reeditData} />}
