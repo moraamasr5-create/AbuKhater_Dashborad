@@ -2328,18 +2328,6 @@ function App() {
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
 
-      {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
-      <button
-        type="button"
-        className="floating-sidebar-toggle no-print"
-        onClick={toggleSidebar}
-        aria-label="القائمة الجانبية"
-        aria-expanded={isSidebarOpen}
-        title="القائمة الجانبية 🗃"
-      >
-        <span style={{ fontSize: '1.25rem', lineHeight: 1 }}>🗃</span>
-      </button>
-
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
@@ -2350,6 +2338,18 @@ function App() {
       <main className="main-content">
         {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
         <div className="topbar no-print">
+          {/* 🗃 زر القائمة في أعلى الشاشة للهواتف */}
+          <button
+            type="button"
+            className="floating-sidebar-toggle no-print"
+            onClick={toggleSidebar}
+            aria-label="القائمة الجانبية 🗃"
+            aria-expanded={isSidebarOpen}
+            title="القائمة الجانبية 🗃"
+          >
+            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>🗃</span>
+          </button>
+
           <h1 className="topbar-title">{currentNav?.label || ''}</h1>
 
           {userRole !== 'driver' && (
