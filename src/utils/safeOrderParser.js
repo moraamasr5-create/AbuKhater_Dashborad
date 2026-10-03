@@ -16,7 +16,8 @@ export const repairOrder = (order) => {
         menuItemId: item.product_id || item.menuItemId || item.menu_item_id || item.id || null,
         selected_variant: item.selected_variant || null,
         selected_options: item.selected_options || [],
-        notes: item.notes || null
+        notes: item.notes || null,
+        category: (item.category && item.category !== 'عام') ? item.category : null
     }));
 
     // 💰 معالجة الماليات (Financial Healing)

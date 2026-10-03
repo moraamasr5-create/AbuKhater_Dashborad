@@ -1,6 +1,7 @@
 // Developed & Owned by D.AmrMamdouh - 01038035884
-// Cache to prevent duplicate printing across app re-renders
-import { safeGetItem, safeSetItem } from '../utils/safeStorage';
+// Modernized Thermal Printing Foundation (80mm) for Abu Khater Delivery System
+import { safeGetItem, safeSetItem } from '../utils/safeStorage.js';
+import { parseItemCommercialDetails } from '../utils/commercialItemParser.js';
 
 const printedCacheKey = 'PRINTED_ORDERS_CACHE';
 
@@ -23,8 +24,6 @@ const setPrintedCache = (cache) => {
 
 /**
  * Escapes unsafe characters in user-provided strings to prevent HTML/XSS injection
- * @param {any} unsafe - The raw value to escape
- * @returns {string} Sanitized string safe for HTML interpolation
  */
 export const escapeHtml = (unsafe) => {
   if (unsafe === null || unsafe === undefined) return '';
@@ -38,12 +37,78 @@ export const escapeHtml = (unsafe) => {
 
 /**
  * Sanitizes multi-line notes safely converting newlines to <br/> after escaping HTML
- * @param {any} notes - The raw notes string
- * @returns {string} Sanitized HTML string
  */
 export const sanitizeNotes = (notes) => {
   if (!notes) return '';
   return escapeHtml(notes).replace(/\r?\n/g, '<br/>');
+};
+
+/**
+ * 📦 Unified Read-Only Print Presentation Model
+ * يستخرج وينسق بيانات الطلب من المصدر الموثوق (Supabase / safeOrderParser)
+ * دون تعديل المنطق التجاري أو إعادة تفسير الأسعار.
+ */
+export const normalizePrintOrder = (order, explicitPilotName = null) => {
+  if (!order) return null;
+
+  const isPickup = order.type === 'pickup';
+  const orderNumber = String(order.originalId || order.id || 'N/A');
+  const customerName = (order.customerName || order.customer?.name || (isPickup ? 'عميل استلام بالفرع' : 'عميل')).trim();
+  const phone = order.phone || order.customer?.phone || null;
+  const phone2 = order.phone2 || null;
+  const address = isPickup ? null : (order.area || order.customer?.address || null);
+  const pilotName = isPickup ? null : (explicitPilotName || order.pilotName || null);
+
+  const rawItems = Array.isArray(order.items) ? order.items : [];
+  const items = rawItems.map(rawItem => {
+    const details = parseItemCommercialDetails(rawItem);
+    const quantity = Number(rawItem.count || rawItem.quantity || 1) || 1;
+    const unitPrice = Number(rawItem.price || rawItem.unit_price || 0) || 0;
+    const lineTotal = quantity * unitPrice;
+
+    return {
+      productName: details.productName || 'صنف',
+      variantName: details.variantName || null,
+      optionNames: Array.isArray(details.optionNames) ? details.optionNames : [],
+      notes: details.notes || null,
+      category: details.category || null,
+      quantity,
+      unitPrice,
+      lineTotal
+    };
+  });
+
+  const subtotal = Number(order.subtotal) || items.reduce((sum, i) => sum + i.lineTotal, 0);
+  const deliveryFee = isPickup ? 0 : Number(order.deliveryFee || order.delivery_fee || 0);
+  const serviceFee = Number(order.serviceFee || order.service_fee || 0);
+  const total = Number(order.total) || (subtotal + deliveryFee + serviceFee);
+  const paidNow = Number(order.paidNow || 0);
+  const remainingAmount = Number(order.remainingAmount !== undefined ? order.remainingAmount : (total - paidNow));
+  const paymentMethod = order.paymentMethod || 'كاش';
+  const timestamp = order.timestamp || order.created_at || new Date().toISOString();
+
+  return {
+    orderNumber,
+    isPickup,
+    orderType: isPickup ? 'pickup' : 'delivery',
+    status: order.status || 'pending',
+    timestamp,
+    customerName,
+    phone,
+    phone2,
+    address,
+    pilotName,
+    items,
+    itemsDescription: order.itemsDescription || null,
+    subtotal,
+    deliveryFee,
+    serviceFee,
+    total,
+    paidNow,
+    remainingAmount,
+    paymentMethod,
+    source: order.source || 'online'
+  };
 };
 
 class PrinterService {
@@ -73,12 +138,15 @@ class PrinterService {
         await qz.websocket.connect({ retries: 2, delay: 1000 });
       }
       this.isConnected = true;
-      
+
       // Auto-find default or XP thermal printer
       const printers = await qz.printers.find();
-      const xpPrinter = printers.find(p => p.toLowerCase().includes('xp') || p.toLowerCase().includes('pos') || p.toLowerCase().includes('thermal') || p.toLowerCase().includes('80'));
+      const xpPrinter = printers.find(p => {
+        const lower = p.toLowerCase();
+        return lower.includes('xp') || lower.includes('pos') || lower.includes('thermal') || lower.includes('80') || lower.includes('receipt');
+      });
       this.printerName = xpPrinter || (printers.length > 0 ? printers[0] : null);
-      
+
       console.log('🖨️ QZ Tray Connected. Printer selected:', this.printerName);
       this.isConnecting = false;
       return true;
@@ -107,12 +175,12 @@ class PrinterService {
     const safeTitle = escapeHtml(title);
     return `
       <!DOCTYPE html>
-      <html dir="rtl">
+      <html dir="rtl" lang="ar">
       <head>
         <meta charset="utf-8">
         <title>${safeTitle}</title>
         <style>
-          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;800;900&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800;900&display=swap');
           
           @page {
             size: 80mm auto;
@@ -121,13 +189,13 @@ class PrinterService {
           
           @media print {
             html, body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #000;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              width: 80mm !important;
+              margin: 0 !important;
+              padding: 0 !important;
+              background: #fff !important;
+              color: #000 !important;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
             body, html, .receipt-container {
               height: auto !important;
@@ -138,7 +206,7 @@ class PrinterService {
             .no-print {
               display: none !important;
             }
-            .header, .section, .items-table, .footer, .solid-line, .dashed-line, tr {
+            .header, .section, .items-table, .footer, .solid-line, .dashed-line, .double-line, .summary-box, tr {
               page-break-inside: avoid !important;
               break-inside: avoid !important;
             }
@@ -149,14 +217,16 @@ class PrinterService {
           }
           
           body {
-            font-family: 'Cairo', sans-serif;
-            margin: 0;
-            padding: 2mm 4mm;
+            font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+            margin: 0 auto;
+            padding: 3mm 4mm;
             width: 72mm;
             color: #000;
             background: #fff;
             font-size: 13px;
-            line-height: 1.4;
+            line-height: 1.35;
+            direction: rtl;
+            text-align: right;
             overflow-x: hidden;
           }
           
@@ -164,26 +234,52 @@ class PrinterService {
             width: 100%;
           }
           
-          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-          .title { font-size: 18px; font-weight: 900; margin: 0; }
+          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 6px; margin-bottom: 6px; }
+          .title { font-size: 19px; font-weight: 900; margin: 0; line-height: 1.2; }
           .subtitle { font-size: 12px; font-weight: 800; margin: 2px 0; }
-          .section { margin-bottom: 8px; }
-          .flex { display: flex; justify-content: space-between; align-items: center; gap: 4px; }
+          .section { margin-bottom: 6px; font-size: 12px; }
+          .flex { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; margin-bottom: 2px; }
           .bold { font-weight: 800; }
-          .dashed-line { border-top: 1px dashed #000; margin: 6px 0; }
-          .solid-line { border-top: 2px solid #000; margin: 6px 0; }
-          .items-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+          .dashed-line { border-top: 1px dashed #000; margin: 5px 0; }
+          .solid-line { border-top: 2px solid #000; margin: 5px 0; }
+          .double-line { border-top: 3px double #000; margin: 6px 0; }
+          
+          .items-table { width: 100%; border-collapse: collapse; margin: 6px 0; }
           .items-table th, .items-table td { padding: 3px 0; text-align: right; vertical-align: top; }
           .items-table th { border-bottom: 1px solid #000; font-weight: 900; font-size: 12px; }
           .center { text-align: center; }
-          .footer { text-align: center; font-size: 11px; margin-top: 12px; font-weight: bold; }
+          .left { text-align: left; }
+          
+          .variant-tag { font-size: 11px; font-weight: 800; color: #111; margin-top: 2px; }
+          .options-tag { font-size: 10px; font-weight: 700; color: #333; margin-top: 1px; }
+          .note-tag { font-size: 10px; font-style: italic; color: #444; margin-top: 1px; }
+          
+          .badge-box {
+            border: 2px solid #000;
+            padding: 4px 6px;
+            text-align: center;
+            font-weight: 900;
+            font-size: 13px;
+            margin: 4px 0;
+          }
+          .badge-black {
+            background: #000;
+            color: #fff;
+            padding: 4px 6px;
+            text-align: center;
+            font-weight: 900;
+            font-size: 13px;
+            margin: 4px 0;
+          }
+          
+          .footer { text-align: center; font-size: 11px; margin-top: 10px; font-weight: bold; }
         </style>
       </head>
       <body>
         <div class="receipt-container">
           ${content}
         </div>
-        <div style="text-align: center; font-size: 9px; color: #555; margin-top: 12px; border-top: 1px dotted #000; padding-top: 4px; font-family: sans-serif; direction: ltr; page-break-inside: avoid; break-inside: avoid;">
+        <div style="text-align: center; font-size: 9px; color: #555; margin-top: 10px; border-top: 1px dotted #000; padding-top: 4px; font-family: sans-serif; direction: ltr; page-break-inside: avoid; break-inside: avoid;">
           Developed & Owned by D.AmrMamdouh - 01038035884
         </div>
       </body>
@@ -241,7 +337,7 @@ class PrinterService {
     iframe.style.right = '-9999px';
     iframe.style.bottom = '-9999px';
     document.body.appendChild(iframe);
-    
+
     const doc = iframe.contentWindow.document;
     doc.open();
     doc.write(htmlContent);
@@ -276,21 +372,37 @@ class PrinterService {
     });
   }
 
-  // 1. Kitchen Receipt (بون المطبخ)
+  // ==========================================
+  // 1. KITCHEN RECEIPT (بون المطبخ والتحضير)
+  // ==========================================
   async printKitchenReceipt(order, forceReprint = false, pilotName = null) {
-    const safeOriginalId = escapeHtml(order.originalId || order.id || '');
-    const safeCustomerName = escapeHtml(order.customerName || '');
-    const safeArea = escapeHtml(order.area || '');
-    const safePilotName = escapeHtml(pilotName || order.pilotName || '');
+    const p = normalizePrintOrder(order, pilotName);
+    if (!p) return { success: false, error: 'invalid_order' };
 
-    const itemsHtml = (order.items || []).map(i => {
-      const safeItemName = escapeHtml(i.name || 'صنف');
-      const safeNotes = i.notes ? sanitizeNotes(i.notes) : '';
-      const safeCount = Number(i.count || i.quantity || 1);
+    const safeOrderNum = escapeHtml(p.orderNumber);
+    const safeCustomer = escapeHtml(p.customerName);
+    const safeArea = escapeHtml(p.address || '');
+    const safePilot = escapeHtml(p.pilotName || '');
+
+    const itemsHtml = p.items.map(item => {
+      const safeName = escapeHtml(item.productName);
+      const safeVariant = item.variantName ? `<div class="variant-tag">🔹 ${escapeHtml(item.variantName)}</div>` : '';
+      const safeOptions = item.optionNames.length > 0
+        ? `<div class="options-tag">${item.optionNames.map(o => `+ ${escapeHtml(o)}`).join(' &nbsp; ')}</div>`
+        : '';
+      const safeNotes = item.notes ? `<div class="note-tag">📝 ${sanitizeNotes(item.notes)}</div>` : '';
+
       return `
-        <tr>
-          <td class="bold" style="font-size:16px;">${safeItemName} ${safeNotes ? `<div style="font-size:12px;color:#666;">${safeNotes}</div>` : ''}</td>
-          <td class="bold center" style="font-size:18px;">${safeCount}</td>
+        <tr style="border-bottom: 1px solid #ddd;">
+          <td style="padding: 4px 0;">
+            <div style="font-size: 15px; font-weight: 900;">${safeName}</div>
+            ${safeVariant}
+            ${safeOptions}
+            ${safeNotes}
+          </td>
+          <td class="center bold" style="font-size: 20px; vertical-align: middle; width: 45px;">
+            ${item.quantity}
+          </td>
         </tr>
       `;
     }).join('');
@@ -298,117 +410,269 @@ class PrinterService {
     const content = `
       <div class="header">
         <div class="title">بون المطبخ (KITCHEN)</div>
-        <div class="subtitle">رقم الطلب: #${safeOriginalId}</div>
-        <div class="subtitle">${order.source === 'online' ? 'توصيل (Delivery)' : 'تيك أواي / صالة'}</div>
+        <div class="bold" style="font-size: 20px; margin-top: 2px;">#${safeOrderNum}</div>
+        ${p.isPickup
+          ? `<div class="badge-black">🛍️ استلام من الفرع (PICKUP)</div>`
+          : `<div class="badge-box">🚚 طلب توصيل (DELIVERY)</div>`
+        }
       </div>
+
       <div class="section">
-        <div class="flex"><span>الوقت:</span> <span class="bold">${new Date(order.timestamp || Date.now()).toLocaleTimeString('ar-EG')}</span></div>
-        ${safeCustomerName ? `<div class="flex"><span>العميل:</span> <span class="bold">${safeCustomerName}</span></div>` : ''}
-        ${safeArea ? `<div class="flex"><span>العنوان:</span> <span class="bold">${safeArea}</span></div>` : ''}
-        ${safePilotName ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${safePilotName}</div>` : ''}
+        <div class="flex">
+          <span>الوقت:</span>
+          <span class="bold">${new Date(p.timestamp).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}</span>
+        </div>
+        ${safeCustomer ? `<div class="flex"><span>العميل:</span> <span class="bold">${safeCustomer}</span></div>` : ''}
+        ${!p.isPickup && safeArea ? `<div class="flex"><span>المنطقة:</span> <span class="bold">${safeArea}</span></div>` : ''}
+        ${!p.isPickup && safePilot ? `<div class="flex"><span>الطيار:</span> <span class="bold">${safePilot}</span></div>` : ''}
       </div>
+
       <div class="solid-line"></div>
+
       <table class="items-table">
         <thead>
           <tr>
-            <th>الصنف</th>
-            <th class="center" style="width:40px;">الكمية</th>
+            <th>الصنف والمواصفات</th>
+            <th class="center" style="width: 45px;">العدد</th>
           </tr>
         </thead>
         <tbody>
           ${itemsHtml}
         </tbody>
       </table>
+
+      ${p.itemsDescription ? `
+        <div class="dashed-line"></div>
+        <div style="font-size: 11px; font-style: italic; color: #222;">
+          <strong>ملاحظات عامة:</strong> ${sanitizeNotes(p.itemsDescription)}
+        </div>
+      ` : ''}
+
       <div class="solid-line"></div>
-      <div class="footer">أبو خاطر للتوصيل • نسخة المطبخ</div>
+      <div class="footer">مطعم أبو خاطر • نسخة تحضير المطبخ</div>
     `;
 
-    const html = this.generateHtmlWrapper(`Kitchen Ticket #${safeOriginalId}`, content);
-    return await this.printReceiptHtml(html, order.id, 'kitchen', forceReprint);
+    const html = this.generateHtmlWrapper(`Kitchen Ticket #${safeOrderNum}`, content);
+    return await this.printReceiptHtml(html, p.orderNumber, 'kitchen', forceReprint);
   }
 
-  // 2. Cashier Receipt (فاتورة العميل / الكاشير)
+  // ==========================================
+  // 2. CASHIER / CUSTOMER RECEIPT (فاتورة العميل والكاشير)
+  // ==========================================
   async printCashierReceipt(order, forceReprint = false, pilotName = null) {
-    const safeOriginalId = escapeHtml(order.originalId || order.id || '');
-    const safeCustomerName = escapeHtml(order.customerName || 'عميل');
-    const safePhone = escapeHtml(order.phone || 'غير مسجل');
-    const safeArea = escapeHtml(order.area || '');
-    const safePaymentMethod = escapeHtml(order.paymentMethod || 'كاش');
-    const safePilotName = escapeHtml(pilotName || order.pilotName || '');
+    const p = normalizePrintOrder(order, pilotName);
+    if (!p) return { success: false, error: 'invalid_order' };
 
-    const itemsHtml = (order.items || []).map(i => {
-      const safeItemName = escapeHtml(i.name || 'صنف');
-      const safeCount = Number(i.count || i.quantity || 1);
-      const safePrice = Number(i.price || 0);
-      const safeTotal = safeCount * safePrice;
+    const safeOrderNum = escapeHtml(p.orderNumber);
+    const safeCustomer = escapeHtml(p.customerName);
+    const safePhone = escapeHtml(p.phone || 'غير مسجل');
+    const safePhone2 = p.phone2 ? escapeHtml(p.phone2) : null;
+    const safeArea = escapeHtml(p.address || '');
+    const safePilot = escapeHtml(p.pilotName || '');
+    const safePayment = escapeHtml(p.paymentMethod);
+
+    const itemsHtml = p.items.map(item => {
+      const safeName = escapeHtml(item.productName);
+      const safeVariant = item.variantName ? `<div class="variant-tag">🔹 ${escapeHtml(item.variantName)}</div>` : '';
+      const safeOptions = item.optionNames.length > 0
+        ? `<div class="options-tag">${item.optionNames.map(o => `+ ${escapeHtml(o)}`).join(', ')}</div>`
+        : '';
+      const safeNotes = item.notes ? `<div class="note-tag">📝 ${sanitizeNotes(item.notes)}</div>` : '';
+
       return `
-        <tr>
-          <td>${safeItemName}</td>
-          <td class="center">${safeCount}</td>
-          <td>${safePrice} ج</td>
-          <td>${safeTotal} ج</td>
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 3px 0;">
+            <div style="font-weight: 800; font-size: 13px;">${safeName}</div>
+            ${safeVariant}
+            ${safeOptions}
+            ${safeNotes}
+          </td>
+          <td class="center bold" style="font-size: 13px;">${item.quantity}</td>
+          <td class="left" style="font-size: 12px;">${item.unitPrice} ج</td>
+          <td class="left bold" style="font-size: 13px;">${item.lineTotal} ج</td>
         </tr>
       `;
     }).join('');
-
-    const subtotal = Number(order.subtotal) || Math.max(0, Number(order.total || 0) - Number(order.deliveryFee || 0));
-    const deliveryFee = Number(order.deliveryFee || 0);
-    const serviceFee = Number(order.serviceFee || 0);
-    const total = Number(order.total || 0);
-    const paidNow = Number(order.paidNow || 0);
-    const remainingAmount = Number(order.remainingAmount || 0);
 
     const content = `
       <div class="header">
         <div class="title">مطعم أبو خاطر</div>
         <div class="subtitle">إدارة وتوصيل الطلبات</div>
         <div class="dashed-line"></div>
-        <div class="bold" style="font-size:18px;">فاتورة رقم #${safeOriginalId}</div>
+        <div class="bold" style="font-size: 17px;">فاتورة رقم #${safeOrderNum}</div>
+        ${p.isPickup
+          ? `<div class="badge-black">🛍️ استلام من الفرع (PICKUP)</div>`
+          : `<div class="badge-box">🚚 طلب توصيل (DELIVERY)</div>`
+        }
       </div>
+
       <div class="section">
-        <div class="flex"><span>التاريخ والوقت:</span> <span class="bold">${new Date(order.timestamp || Date.now()).toLocaleString('ar-EG')}</span></div>
-        <div class="flex"><span>اسم العميل:</span> <span class="bold">${safeCustomerName}</span></div>
-        <div class="flex"><span>رقم الهاتف:</span> <span class="bold">${safePhone}</span></div>
-        ${safeArea ? `<div class="flex"><span>العنوان:</span> <span class="bold">${safeArea}</span></div>` : ''}
-        <div class="flex"><span>طريقة الدفع:</span> <span class="bold">${safePaymentMethod}</span></div>
-        ${safePilotName ? `<div style="margin-top:6px; font-weight:bold; border:1px solid #000; padding:6px; text-align:center; font-size:14px;">الطيار: ${safePilotName}</div>` : ''}
+        <div class="flex">
+          <span>التاريخ والوقت:</span>
+          <span class="bold">${new Date(p.timestamp).toLocaleString('ar-EG')}</span>
+        </div>
+        <div class="flex">
+          <span>العميل:</span>
+          <span class="bold">${safeCustomer}</span>
+        </div>
+        <div class="flex">
+          <span>الهاتف:</span>
+          <span class="bold">${safePhone}${safePhone2 ? ` - ${safePhone2}` : ''}</span>
+        </div>
+        ${!p.isPickup && safeArea ? `<div class="flex"><span>العنوان:</span> <span class="bold">${safeArea}</span></div>` : ''}
+        ${!p.isPickup && safePilot ? `<div class="flex"><span>الطيار:</span> <span class="bold">${safePilot}</span></div>` : ''}
+        <div class="flex">
+          <span>طريقة الدفع:</span>
+          <span class="bold">${safePayment}</span>
+        </div>
       </div>
+
       <div class="solid-line"></div>
-      <table class="items-table" style="font-size:12px;">
+
+      <table class="items-table">
         <thead>
           <tr>
-            <th>الصنف</th>
-            <th class="center" style="width:25px;">العدد</th>
-            <th>السعر</th>
-            <th>الإجمالي</th>
+            <th style="width: 50%;">الصنف</th>
+            <th class="center" style="width: 15%;">العدد</th>
+            <th class="left" style="width: 15%;">السعر</th>
+            <th class="left" style="width: 20%;">الإجمالي</th>
           </tr>
         </thead>
         <tbody>
           ${itemsHtml}
         </tbody>
       </table>
+
       <div class="solid-line"></div>
-      <div class="section" style="font-size:15px;">
-        <div class="flex"><span>المجموع:</span> <span class="bold">${subtotal} ج.م</span></div>
-        ${deliveryFee > 0 ? `<div class="flex"><span>خدمة التوصيل:</span> <span class="bold">${deliveryFee} ج.م</span></div>` : ''}
-        ${serviceFee > 0 ? `<div class="flex"><span>الخدمة:</span> <span class="bold">${serviceFee} ج.م</span></div>` : ''}
-        <div class="solid-line"></div>
-        <div class="flex" style="font-size:18px;font-weight:900;"><span>الإجمالي النهائي:</span> <span class="bold">${total} ج.م</span></div>
-        ${paidNow > 0 ? `<div class="flex" style="color:#10b981;"><span>المدفوع:</span> <span class="bold">${paidNow} ج.م</span></div>` : ''}
-        ${remainingAmount > 0 ? `<div class="flex" style="color:#ef4444;font-size:16px;"><span>المتبقي تحصيله:</span> <span class="bold">${remainingAmount} ج.م</span></div>` : ''}
+
+      <div class="section" style="font-size: 13px;">
+        <div class="flex">
+          <span>المجموع:</span>
+          <span class="bold">${p.subtotal} ج.م</span>
+        </div>
+        ${!p.isPickup && p.deliveryFee > 0 ? `
+          <div class="flex">
+            <span>خدمة التوصيل:</span>
+            <span class="bold">${p.deliveryFee} ج.م</span>
+          </div>
+        ` : ''}
+        ${p.serviceFee > 0 ? `
+          <div class="flex">
+            <span>رسوم الخدمة:</span>
+            <span class="bold">${p.serviceFee} ج.م</span>
+          </div>
+        ` : ''}
+
+        <div class="double-line"></div>
+
+        <div class="flex" style="font-size: 17px; font-weight: 900;">
+          <span>الإجمالي النهائي:</span>
+          <span>${p.total} ج.م</span>
+        </div>
+
+        ${p.paidNow > 0 ? `
+          <div class="flex" style="color: #000; font-weight: bold; font-size: 13px;">
+            <span>المدفوع:</span>
+            <span>${p.paidNow} ج.م</span>
+          </div>
+        ` : ''}
+
+        ${p.remainingAmount > 0 ? `
+          <div class="flex" style="font-size: 15px; font-weight: 900; border-top: 1px dashed #000; padding-top: 3px; margin-top: 3px;">
+            <span>المتبقي تحصيله:</span>
+            <span>${p.remainingAmount} ج.م</span>
+          </div>
+        ` : ''}
       </div>
+
       <div class="dashed-line"></div>
+
       <div class="footer">
-        <div>شكراً لزيارتكم مطعم أبو خاطر ❤️</div>
-        <div>للطلبات والشكاوى: 0100000000</div>
+        <div>شكراً لتعاملكم مع مطعم أبو خاطر ❤️</div>
+        <div>للطلبات والشكاوى: 01038035884</div>
       </div>
     `;
 
-    const html = this.generateHtmlWrapper(`Cashier Receipt #${safeOriginalId}`, content);
-    return await this.printReceiptHtml(html, order.id, 'cashier', forceReprint);
+    const html = this.generateHtmlWrapper(`Cashier Receipt #${safeOrderNum}`, content);
+    return await this.printReceiptHtml(html, p.orderNumber, 'cashier', forceReprint);
   }
 
-  // 3. Daily Report (تقرير المبيعات اليومية)
+  // ==========================================
+  // 3. DELIVERY / PILOT RECEIPT (بون تسليم الطيار)
+  // ==========================================
+  async printDeliveryReceipt(order, forceReprint = false, pilotName = null) {
+    const p = normalizePrintOrder(order, pilotName);
+    if (!p) return { success: false, error: 'invalid_order' };
+
+    if (p.isPickup) {
+      // طلبات الاستلام تطبع فاتورة الكاشير العادية
+      return await this.printCashierReceipt(order, forceReprint, pilotName);
+    }
+
+    const safeOrderNum = escapeHtml(p.orderNumber);
+    const safeCustomer = escapeHtml(p.customerName);
+    const safePhone = escapeHtml(p.phone || 'غير مسجل');
+    const safePhone2 = p.phone2 ? escapeHtml(p.phone2) : null;
+    const safeArea = escapeHtml(p.address || 'عنوان العميل');
+    const safePilot = escapeHtml(p.pilotName || 'طيار الدليفري');
+    const safePayment = escapeHtml(p.paymentMethod);
+
+    const itemsHtml = p.items.map(item => {
+      const safeName = escapeHtml(item.productName);
+      const safeVariant = item.variantName ? `<span class="variant-tag"> (🔹 ${escapeHtml(item.variantName)})</span>` : '';
+      return `
+        <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 2px;">
+          <span>• ${safeName}${safeVariant}</span>
+          <span class="bold">x${item.quantity}</span>
+        </div>
+      `;
+    }).join('');
+
+    const content = `
+      <div class="header">
+        <div class="title">بون تسليم الدليفري</div>
+        <div class="subtitle">نسخة الطيار والعميل</div>
+        <div class="bold" style="font-size: 18px; margin-top: 2px;">أوردر #${safeOrderNum}</div>
+      </div>
+
+      <div class="section">
+        <div class="badge-box">الطيار: ${safePilot}</div>
+        <div class="flex"><span>العميل:</span> <span class="bold">${safeCustomer}</span></div>
+        <div class="flex"><span>الهاتف 1:</span> <span class="bold">${safePhone}</span></div>
+        ${safePhone2 ? `<div class="flex"><span>الهاتف 2:</span> <span class="bold">${safePhone2}</span></div>` : ''}
+        <div style="margin-top: 4px; border: 1px solid #000; padding: 4px; background: #fafafa;">
+          <strong>العنوان:</strong> ${safeArea}
+        </div>
+      </div>
+
+      <div class="solid-line"></div>
+      <div style="font-weight: 800; font-size: 12px; margin-bottom: 4px;">الأصناف المطلوبة:</div>
+      ${itemsHtml}
+
+      <div class="solid-line"></div>
+
+      <div class="section">
+        <div class="flex"><span>إجمالي الأوردر:</span> <span class="bold">${p.total} ج.م</span></div>
+        <div class="flex"><span>طريقة الدفع:</span> <span class="bold">${safePayment}</span></div>
+        ${p.paidNow > 0 ? `<div class="flex"><span>المدفوع مسبقاً:</span> <span class="bold">${p.paidNow} ج.م</span></div>` : ''}
+        <div class="badge-black" style="font-size: 16px; margin-top: 6px;">
+          المطلوب تحصيله: ${p.remainingAmount} ج.م
+        </div>
+      </div>
+
+      <div class="dashed-line"></div>
+      <div class="footer">
+        <div>توقيع المستلم: ..............................</div>
+      </div>
+    `;
+
+    const html = this.generateHtmlWrapper(`Delivery Slip #${safeOrderNum}`, content);
+    return await this.printReceiptHtml(html, p.orderNumber, 'delivery', forceReprint);
+  }
+
+  // ==========================================
+  // 4. DAILY REPORT (التقرير اليومي الشامل)
+  // ==========================================
   async printDailyReport(reportData) {
     const totalSales = Number(reportData.totalSales || 0);
     const totalOrders = Number(reportData.totalOrders || 0);
@@ -420,27 +684,33 @@ class PrinterService {
     const content = `
       <div class="header">
         <div class="title">التقرير اليومي الشامل</div>
-        <div class="subtitle">${new Date().toLocaleDateString('ar-EG')}</div>
+        <div class="subtitle">${new Date().toLocaleDateString('ar-EG')} - ${new Date().toLocaleTimeString('ar-EG')}</div>
       </div>
-      <div class="section" style="font-size:16px;">
+      <div class="section" style="font-size: 14px;">
         <div class="flex"><span>إجمالي المبيعات:</span> <span class="bold">${totalSales} ج.م</span></div>
         <div class="dashed-line"></div>
         <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${totalOrders}</span></div>
-        <div class="flex"><span>الطلبات المكتملة:</span> <span class="bold" style="color:#10b981;">${completedOrders}</span></div>
-        <div class="flex"><span>الطلبات الملغية:</span> <span class="bold" style="color:#ef4444;">${cancelledOrders}</span></div>
+        <div class="flex"><span>الطلبات المكتملة:</span> <span class="bold">${completedOrders}</span></div>
+        <div class="flex"><span>الطلبات الملغية:</span> <span class="bold">${cancelledOrders}</span></div>
         <div class="dashed-line"></div>
         <div class="flex"><span>إجمالي رسوم التوصيل:</span> <span class="bold">${totalDeliveryFees} ج.م</span></div>
-        <div class="flex"><span>إجمالي الكاش المحصل:</span> <span class="bold">${totalCash} ج.م</span></div>
+        <div class="solid-line"></div>
+        <div class="flex" style="font-size: 17px; font-weight: 900;">
+          <span>إجمالي الكاش المحصل:</span>
+          <span>${totalCash} ج.م</span>
+        </div>
       </div>
       <div class="solid-line"></div>
-      <div class="footer">تم إصدار التقرير بواسطة النظام الآلي</div>
+      <div class="footer">تم إصدار التقرير بواسطة نظام أبو خاطر الآلي</div>
     `;
 
     const html = this.generateHtmlWrapper(`Daily Report`, content);
     return await this.printReceiptHtml(html, `DAILY_${Date.now()}`, 'report', true);
   }
 
-  // 4. Driver Report (تقرير الطيار)
+  // ==========================================
+  // 5. DRIVER REPORT (تقرير وردية الطيار)
+  // ==========================================
   async printDriverReport(driverReport) {
     const safeDriverName = escapeHtml(driverReport.name || 'طيار');
     const ordersCount = Number(driverReport.ordersCount || 0);
@@ -454,19 +724,22 @@ class PrinterService {
         <div class="subtitle">الطيار: ${safeDriverName}</div>
         <div class="subtitle">التاريخ: ${new Date().toLocaleDateString('ar-EG')}</div>
       </div>
-      <div class="section" style="font-size:16px;">
-        <div class="flex"><span>إجمالي الطلبات:</span> <span class="bold">${ordersCount}</span></div>
-        <div class="flex"><span>الطلبات المسلمة:</span> <span class="bold" style="color:#10b981;">${deliveredCount}</span></div>
-        <div class="flex"><span>الطلبات المرتجعة:</span> <span class="bold" style="color:#ef4444;">${returnedCount}</span></div>
-        <div class="solid-line"></div>
-        <div class="flex" style="font-size:20px;"><span>إجمالي التحصيل:</span> <span class="bold">${totalCollected} ج.م</span></div>
+      <div class="section" style="font-size: 14px;">
+        <div class="flex"><span>إجمالي الطلبات المسندة:</span> <span class="bold">${ordersCount}</span></div>
+        <div class="flex"><span>الطلبات المسلمة بنجاح:</span> <span class="bold">${deliveredCount}</span></div>
+        <div class="flex"><span>الطلبات المرتجعة / الملغية:</span> <span class="bold">${returnedCount}</span></div>
+        <div class="double-line"></div>
+        <div class="flex" style="font-size: 17px; font-weight: 900;">
+          <span>إجمالي التحصيل:</span>
+          <span>${totalCollected} ج.م</span>
+        </div>
       </div>
       <div class="dashed-line"></div>
       <div class="footer">توقيع الطيار: ...........................</div>
     `;
 
     const html = this.generateHtmlWrapper(`Driver Report - ${safeDriverName}`, content);
-    return await this.printReceiptHtml(html, `DRIVER_${driverReport.id}_${Date.now()}`, 'report', true);
+    return await this.printReceiptHtml(html, `DRIVER_${driverReport.id || 'N'}_${Date.now()}`, 'report', true);
   }
 }
 

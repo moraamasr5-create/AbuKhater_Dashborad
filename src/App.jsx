@@ -12,6 +12,7 @@ import { useApp } from './context/AppContext';
 import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, AlertCircle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, ChevronDown, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2, Phone, Check, UserPlus, Copy, BarChart3 } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
 import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
+import { printerService } from './services/printerService';
 import { isPilotOnDelivery } from './utils/pilotState';
 
 export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
@@ -1101,103 +1102,25 @@ const ManualOrderForm = ({ onClose, initialData }) => {
 
   const printKitchenTicket = () => {
     if (!formData.receiptNo) return alert('أدخل رقم البون للطباعة');
-    const printWindow = window.open('', '_blank', 'width=400,height=600');
-    if (!printWindow) return;
+    const itemsList = Object.entries(selectedItems).map(([name, count]) => ({
+      name,
+      count: Number(count || 1)
+    }));
 
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html dir="rtl">
-      <head>
-        <meta charset="utf-8">
-        <title>Kitchen Ticket #${formData.receiptNo}</title>
-        <style>
-          @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@600;800;900&display=swap');
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
-          @media print {
-            html, body {
-              width: 80mm;
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #000;
-            }
-            body, html, .receipt-container {
-              height: auto !important;
-              min-height: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-            }
-            .header, .items, .footer {
-              page-break-inside: avoid !important;
-              break-inside: avoid !important;
-            }
-          }
-          * {
-            box-sizing: border-box;
-          }
-          body {
-            font-family: 'Cairo', sans-serif;
-            margin: 0;
-            padding: 2mm 4mm;
-            width: 72mm;
-            color: #000;
-            background: #fff;
-            font-size: 13px;
-            line-height: 1.4;
-          }
-          .header { text-align: center; border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 8px; }
-          .title { font-size: 18px; font-weight: 900; margin: 0; }
-          .subtitle { font-size: 12px; font-weight: 800; margin: 2px 0; }
-          .items { border-bottom: 2px dashed #000; padding-bottom: 8px; margin-bottom: 8px; text-align: right; }
-          .item-row { display: flex; justify-content: space-between; font-weight: bold; font-size: 14px; margin-bottom: 4px; }
-          .footer { text-align: center; font-size: 11px; font-weight: bold; margin-top: 10px; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <div class="title">بون المطبخ (DRAFT)</div>
-          <div class="subtitle">رقم الطلب: #${formData.receiptNo}</div>
-        </div>
-        <div style="font-size: 12px; margin-bottom: 8px; text-align: right;">
-          <div>اسم العميل: ${formData.customerName || 'عميل خارجي'}</div>
-          <div>رقم العميل: ${formData.phone || 'عميل خارجي'}</div>
-          <div>العنوان: ${formData.customArea || 'عنوان مجهول '}</div>
-          <div>الدفع : ${formData.paymentMethod || ' طريقه الدفع '}</div>
-          <div>إجمالي الطلب: ${formData.total || ' إجمالي '}</div>
-          <div> خدمة التوصيل: ${formData.deliveryFee || ' إجمالي '}</div>
-          <div> العناصر : ${formData.itemsDescription || ' إجمالي '}</div>
-          <div>التاريخ: ${new Date().toLocaleDateString('ar-EG')} | الوقت: ${new Date().toLocaleTimeString('ar-EG')}</div>
-        </div>
-        <div class="items">
-          ${Object.entries(selectedItems).map(([n, c]) => `
-            <div class="item-row">
-              <span>${n}</span>
-              <span>x${c}</span>
-            </div>
-          `).join('')}
-          ${formData.itemsDescription ? `<div style="font-size: 12px; font-style: italic; color: #555; margin-top: 4px; border-top: 1px dotted #ccc; padding-top: 4px;">ملاحظات: ${formData.itemsDescription}</div>` : ''}
-        </div>
-        <div class="footer">أبو خاطر للتوصيل • مسودة مطبخ</div>
-        <script>
-          window.addEventListener('DOMContentLoaded', () => {
-            window.addEventListener('load', () => {
-              setTimeout(() => {
-                window.print();
-                setTimeout(() => {
-                  window.close();
-                }, 500);
-              }, 300);
-            });
-          });
-        </script>
-      </body>
-      </html>
-    `;
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
+    const draftOrder = {
+      id: formData.receiptNo,
+      originalId: formData.receiptNo,
+      type: 'restaurant',
+      customerName: formData.customerName || "عميل مطعم",
+      phone: formData.phone || "غير مسجل",
+      area: formData.customArea || formData.area || "المطرية",
+      items: itemsList,
+      itemsDescription: formData.itemsDescription || '',
+      timestamp: new Date().toISOString(),
+      source: 'restaurant'
+    };
+
+    printerService.printKitchenReceipt(draftOrder, true);
   };
 
   const handleSubmit = (e) => {

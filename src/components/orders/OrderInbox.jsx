@@ -12,6 +12,7 @@ import { ReceiptThumbnail } from '../../services/storageService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isPilotOnDelivery } from '../../utils/pilotState';
 import { Disclosure, toast } from '../common/ui';
+import { parseItemCommercialDetails } from '../../utils/commercialItemParser';
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
 
@@ -345,9 +346,9 @@ const OrderInbox = ({ onReedit }) => {
   const rawInboxOrders = useMemo(() => {
     return orders.filter(o => {
       if (userRole === 'admin' || userRole === 'casher') {
-        return ['pending', 'pending_timer', 'preparing', 'waiting_driver', 'ready', 'driver_assigned'].includes(o.status);
+        return ['pending', 'pending_timer', 'preparing', 'waiting_driver', 'ready', 'driver_assigned', 'out_for_delivery', 'active'].includes(o.status);
       } else {
-        return ['driver_assigned'].includes(o.status);
+        return ['driver_assigned', 'out_for_delivery', 'active'].includes(o.status);
       }
     });
   }, [orders, userRole]);
@@ -357,7 +358,7 @@ const OrderInbox = ({ onReedit }) => {
     const pendingCount = rawInboxOrders.filter(o => ['pending', 'pending_timer'].includes(o.status)).length;
     const preparingCount = rawInboxOrders.filter(o => ['preparing', 'waiting_driver'].includes(o.status)).length;
     const readyPickupCount = rawInboxOrders.filter(o => o.status === 'ready').length;
-    const assignedCount = rawInboxOrders.filter(o => o.status === 'driver_assigned').length;
+    const assignedCount = rawInboxOrders.filter(o => ['driver_assigned', 'out_for_delivery', 'active'].includes(o.status)).length;
     const delayedCount = rawInboxOrders.filter(o => getElapsedMinutes(o.timestamp) >= 30).length;
     return {
       all: rawInboxOrders.length,
@@ -380,7 +381,7 @@ const OrderInbox = ({ onReedit }) => {
       } else if (statusTab === 'ready') {
         if (o.status !== 'ready') return false;
       } else if (statusTab === 'driver_assigned') {
-        if (o.status !== 'driver_assigned') return false;
+        if (!['driver_assigned', 'out_for_delivery', 'active'].includes(o.status)) return false;
       } else if (statusTab === 'delayed') {
         if (getElapsedMinutes(o.timestamp) < 30) return false;
       }
@@ -419,7 +420,7 @@ const OrderInbox = ({ onReedit }) => {
   const previewOrder = filteredOrders.find(o => o.id === selectedPreviewOrderId) || filteredOrders[0];
 
   // Active trips for pilot assignment section
-  const activeOrders = useMemo(() => orders.filter(o => o.status === 'active'), [orders]);
+  const activeOrders = useMemo(() => orders.filter(o => o.status === 'active' || o.status === 'out_for_delivery'), [orders]);
   const ordersByPilot = useMemo(() => {
     return activeOrders.reduce((acc, o) => {
       const key = String(o.pilotId || o.deliveryId);
@@ -561,7 +562,7 @@ const OrderInbox = ({ onReedit }) => {
             { id: 'pending', label: 'طلبات جديدة', count: stageCounts.pending, color: '#f59e0b', highlight: stageCounts.pending > 0 },
             { id: 'preparing', label: 'بالمطبخ / قيد التحضير', count: stageCounts.preparing, color: '#10b981' },
             { id: 'ready', label: 'جاهز للاستلام 🛍️', count: stageCounts.ready, color: '#8b5cf6', highlight: stageCounts.ready > 0 },
-            { id: 'driver_assigned', label: 'مع الطيار 🛵', count: stageCounts.driver_assigned, color: '#3b82f6' },
+            { id: 'driver_assigned', label: 'مع الطيار / بالتوصيل 🛵', count: stageCounts.driver_assigned, color: '#3b82f6' },
             { id: 'delayed', label: 'طلبات متأخرة', count: stageCounts.delayed, color: '#ef4444', highlight: stageCounts.delayed > 0 },
           ].map(tab => {
             const isActive = statusTab === tab.id;
@@ -825,16 +826,23 @@ const OrderInbox = ({ onReedit }) => {
                           </span>
                         </div>
 
-                        {order.status === 'driver_assigned' && (
+                        {(order.status === 'driver_assigned' || order.status === 'out_for_delivery' || order.status === 'active') && (
                           <div style={{
                             display: 'inline-flex', alignItems: 'center', gap: '6px',
                             padding: '4px 10px', borderRadius: '8px',
-                            background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)',
-                            fontSize: '0.82rem', color: '#93c5fd', fontWeight: 'bold'
+                            background: (order.status === 'out_for_delivery' || order.status === 'active') ? 'rgba(34, 197, 94, 0.12)' : 'rgba(59, 130, 246, 0.12)',
+                            border: `1px solid ${(order.status === 'out_for_delivery' || order.status === 'active') ? 'rgba(34, 197, 94, 0.3)' : 'rgba(59, 130, 246, 0.3)'}`,
+                            fontSize: '0.82rem',
+                            color: (order.status === 'out_for_delivery' || order.status === 'active') ? '#86efac' : '#93c5fd',
+                            fontWeight: 'bold'
                           }}>
                             <Bike size={14} />
                             <span>الطيار: {orderPilot?.name || order.pilotName || 'طيار'}</span>
-                            {showPilotOutBadge && <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(في الخارج)</span>}
+                            {(order.status === 'out_for_delivery' || order.status === 'active') ? (
+                              <span style={{ color: '#22c55e', fontSize: '0.75rem', fontWeight: '800' }}>(في الطريق 🚚)</span>
+                            ) : (
+                              showPilotOutBadge && <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(في الخارج)</span>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1296,37 +1304,98 @@ const OrderInbox = ({ onReedit }) => {
                           meta={`${order.total} ج.م`}
                           icon={<ShoppingCart size={15} color="var(--primary)" />}
                         >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
-                            {order.items.map((item, idx) => (
-                              <div
-                                key={idx}
-                                style={{
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                  background: 'rgba(255, 255, 255, 0.02)',
-                                  padding: '6px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '0.85rem'
-                                }}
-                              >
-                                <div>
-                                  <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>{item.name}</span>
-                                  {item.category && (
-                                    <span style={{ marginRight: '8px', fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 6px', borderRadius: '4px' }}>
-                                      {item.category}
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                            {order.items.map((item, idx) => {
+                              const details = parseItemCommercialDetails(item);
+                              const itemCount = Number(item.count || item.quantity || 1);
+                              const itemPrice = Number(item.price || item.unit_price || 0);
+                              const lineTotal = itemCount * itemPrice;
+
+                              return (
+                                <div
+                                  key={idx}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'flex-start',
+                                    background: 'rgba(255, 255, 255, 0.03)',
+                                    padding: '8px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '0.9rem',
+                                    border: '1px solid rgba(255, 255, 255, 0.05)'
+                                  }}
+                                >
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                                    {/* 1. Parent Product Name */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '0.96rem' }}>
+                                        {details.productName}
+                                      </span>
+                                      {details.category && (
+                                        <span style={{ fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>
+                                          {details.category}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {/* 2. Selected Variant (only if exists) */}
+                                    {details.variantName && (
+                                      <span style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        fontSize: '0.82rem',
+                                        color: '#38bdf8',
+                                        fontWeight: '700',
+                                        background: 'rgba(56, 189, 248, 0.12)',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px',
+                                        width: 'fit-content'
+                                      }}>
+                                        🔹 {details.variantName}
+                                      </span>
+                                    )}
+
+                                    {/* 3. Selected Options / Add-ons (only if exist) */}
+                                    {details.optionNames && details.optionNames.length > 0 && (
+                                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                                        {details.optionNames.map((opt, optIdx) => (
+                                          <span
+                                            key={optIdx}
+                                            style={{
+                                              fontSize: '0.78rem',
+                                              color: '#fbbf24',
+                                              fontWeight: '700',
+                                              background: 'rgba(251, 191, 36, 0.12)',
+                                              padding: '1px 7px',
+                                              borderRadius: '4px'
+                                            }}
+                                          >
+                                            + {opt}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* 4. Notes (if any) */}
+                                    {details.notes && (
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontStyle: 'italic', marginTop: '2px' }}>
+                                        📝 {details.notes}
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* 5. Quantity and Line Total */}
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px', paddingTop: '2px' }}>
+                                    <span style={{ color: 'var(--text-muted)', fontWeight: '700', fontSize: '0.88rem' }}>
+                                      {itemCount} × {itemPrice} ج
                                     </span>
-                                  )}
+                                    <span style={{ fontWeight: '900', color: 'var(--accent)', minWidth: '55px', textAlign: 'left', fontSize: '1rem' }}>
+                                      {lineTotal} ج
+                                    </span>
+                                  </div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                  <span style={{ color: 'var(--text-muted)' }}>{item.count || item.quantity || 1}x</span>
-                                  <span style={{ color: 'var(--text-muted)' }}>{item.price || item.unit_price || 0} ج</span>
-                                  <span style={{ fontWeight: '800', color: 'var(--accent)', minWidth: '45px', textAlign: 'left' }}>
-                                    {((item.count || item.quantity || 1) * (item.price || item.unit_price || 0))} ج
-                                  </span>
-                                </div>
-                              </div>
-                            ))}
+                              );
+                            })}
                           </div>
 
                           <div style={{
@@ -1372,15 +1441,24 @@ const OrderInbox = ({ onReedit }) => {
                     <div className="subtitle">إدارة وتوصيل الطلبات</div>
                     <div className="dashed-line"></div>
                     <div className="bold" style={{ fontSize: '15px' }}>فاتورة رقم #{previewOrder.originalId || previewOrder.id}</div>
+                    {previewOrder.type === 'pickup' ? (
+                      <div style={{ background: '#000', color: '#fff', padding: '3px 6px', textAlign: 'center', fontWeight: '900', fontSize: '11px', margin: '4px 0' }}>
+                        🛍️ استلام من الفرع (PICKUP)
+                      </div>
+                    ) : (
+                      <div style={{ border: '1px solid #000', padding: '3px 6px', textAlign: 'center', fontWeight: '900', fontSize: '11px', margin: '4px 0' }}>
+                        🚚 طلب توصيل (DELIVERY)
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ fontSize: '11px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
                     <div><strong>التاريخ:</strong> {new Date(previewOrder.timestamp || Date.now()).toLocaleString('ar-EG')}</div>
-                    <div><strong>العميل:</strong> {previewOrder.customerName || 'عميل'}</div>
+                    <div><strong>العميل:</strong> {previewOrder.customerName || (previewOrder.type === 'pickup' ? 'عميل استلام' : 'عميل')}</div>
                     <div><strong>الهاتف:</strong> {previewOrder.phone || 'غير مسجل'}</div>
-                    {previewOrder.area && <div><strong>العنوان:</strong> {previewOrder.area}</div>}
+                    {previewOrder.type !== 'pickup' && previewOrder.area && <div><strong>العنوان:</strong> {previewOrder.area}</div>}
                     <div><strong>الدفع:</strong> {previewOrder.paymentMethod || 'كاش'}</div>
-                    {previewOrder.pilotId && (
+                    {previewOrder.type !== 'pickup' && previewOrder.pilotId && (
                       <div><strong>الطيار:</strong> {pilots.find(p => String(p.id) === String(previewOrder.pilotId))?.name || 'غير معروف'}</div>
                     )}
                   </div>
@@ -1397,13 +1475,27 @@ const OrderInbox = ({ onReedit }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {previewOrder.items.map((item, idx) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                            <td>{item.name}</td>
-                            <td style={{ textAlign: 'center' }}>{item.count || item.quantity || 1}</td>
-                            <td style={{ textAlign: 'left' }}>{((item.count || item.quantity || 1) * (item.price || 0))} ج</td>
-                          </tr>
-                        ))}
+                        {previewOrder.items.map((item, idx) => {
+                          const d = parseItemCommercialDetails(item);
+                          const count = item.count || item.quantity || 1;
+                          const price = item.price || item.unit_price || 0;
+                          return (
+                            <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                              <td>
+                                <div style={{ fontWeight: 'bold' }}>{d.productName}</div>
+                                {d.variantName && <div style={{ fontSize: '10px', color: '#333' }}>- {d.variantName}</div>}
+                                {d.optionNames && d.optionNames.length > 0 && (
+                                  <div style={{ fontSize: '9px', color: '#555' }}>
+                                    + {d.optionNames.join(', ')}
+                                  </div>
+                                )}
+                                {d.notes && <div style={{ fontSize: '9px', fontStyle: 'italic', color: '#666' }}>({d.notes})</div>}
+                              </td>
+                              <td style={{ textAlign: 'center' }}>{count}</td>
+                              <td style={{ textAlign: 'left' }}>{(count * price)} ج</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   ) : (
@@ -1419,7 +1511,7 @@ const OrderInbox = ({ onReedit }) => {
                       <span>المجموع:</span>
                       <span>{previewOrder.subtotal || Math.max(0, previewOrder.total - (previewOrder.deliveryFee || 0))} ج.م</span>
                     </div>
-                    {previewOrder.deliveryFee > 0 && (
+                    {previewOrder.type !== 'pickup' && previewOrder.deliveryFee > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                         <span>التوصيل:</span>
                         <span>{previewOrder.deliveryFee} ج.م</span>
