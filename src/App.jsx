@@ -2368,7 +2368,7 @@ function App() {
 
           {/* 🔴 أزرار الطلبات اليدوية الثلاثة */}
           {(userRole === 'casher' || userRole === 'admin') && (
-            <div className="flex flex-wrap" style={{ marginBottom: '20px', gap: '12px' }}>
+            <div className="manual-orders-bar">
               <button
                 type="button"
                 onClick={() => {
@@ -2378,22 +2378,15 @@ function App() {
                   }
                   setActiveModal('manual');
                 }}
-                className="btn-primary hover-scale"
+                className="manual-order-btn hover-scale"
                 style={{
-                  flex: '1 1 180px',
-                  minHeight: '48px',
-                  justifyContent: 'center',
                   color: '#000',
                   background: '#22c55e',
                   boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)',
-                  fontWeight: '800',
-                  fontSize: '0.98rem',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
                   opacity: !isShiftOpen ? 0.6 : 1
                 }}
               >
-                <Plus size={20} />
+                <Plus size={18} />
                 <span>أوردر المطبخ</span>
               </button>
 
@@ -2406,22 +2399,15 @@ function App() {
                   }
                   setActiveModal('external');
                 }}
-                className="btn-primary hover-scale"
+                className="manual-order-btn hover-scale"
                 style={{
-                  flex: '1 1 180px',
-                  minHeight: '48px',
-                  justifyContent: 'center',
                   color: '#000',
                   background: '#f97316',
                   boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
-                  fontWeight: '800',
-                  fontSize: '0.98rem',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
                   opacity: !isShiftOpen ? 0.6 : 1
                 }}
               >
-                <Plus size={20} />
+                <Plus size={18} />
                 <span>أوردر خارجي</span>
               </button>
 
@@ -2434,22 +2420,15 @@ function App() {
                   }
                   setActiveModal('trip');
                 }}
-                className="btn-primary hover-scale"
+                className="manual-order-btn hover-scale"
                 style={{
-                  flex: '1 1 180px',
-                  minHeight: '48px',
-                  justifyContent: 'center',
                   color: '#000',
                   background: '#ef4444',
                   boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
-                  fontWeight: '800',
-                  fontSize: '0.98rem',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
                   opacity: !isShiftOpen ? 0.6 : 1
                 }}
               >
-                <Plus size={20} />
+                <Plus size={18} />
                 <span>مشوار خاص</span>
               </button>
             </div>

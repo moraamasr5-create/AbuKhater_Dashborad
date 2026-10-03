@@ -643,6 +643,64 @@ button.kpi-card:hover { border-color: var(--border-strong); background: var(--bg
   .order-actions .btn-primary { flex-basis: 100%; }
 }
 
+/* 🔴 Manual orders 3-action strip: always 3 in one row */
+.manual-orders-bar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.manual-order-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 0.98rem;
+  white-space: nowrap;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+@media (max-width: 767px) {
+  .manual-orders-bar {
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .manual-order-btn {
+    min-height: 44px;
+    padding: 8px 6px;
+    font-size: 0.84rem;
+    gap: 5px;
+    border-radius: 10px;
+  }
+  .manual-order-btn svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 390px) {
+  .manual-orders-bar {
+    gap: 6px;
+  }
+  .manual-order-btn {
+    padding: 7px 4px;
+    font-size: 0.76rem;
+    gap: 3px;
+  }
+  .manual-order-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+}
+
 .desktop-trip-table { display: table; width: 100%; }
 .mobile-trip-list { display: none; }
 
