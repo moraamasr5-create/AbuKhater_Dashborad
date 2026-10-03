@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
+import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 // 🟢 مصدر واحد لعناصر التنقل (يستخدمه الشريط الجانبي والشريط السفلي والعنوان العلوي)
@@ -19,7 +19,7 @@ export const NAV_ITEMS = [
 export const getActionCount = (orders) =>
     orders.filter(o => ['pending', 'pending_timer', 'waiting_driver'].includes(o.status)).length;
 
-const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenSecurity }) => {
+const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
     const { isShiftOpen, openShift, closeShift, orders, userRole, logoutStaff, currentStaff } = useApp();
     const [showCloseShiftConfirm, setShowCloseShiftConfirm] = useState(false);
 
@@ -56,7 +56,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         <img src="/logo.png" alt="Abu Khater" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     </div>
                     <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>توصيل أبو خاطر</div>
+                        <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>نظام أبو خاطر</div>
                         <div style={{ fontSize: '0.78rem', fontWeight: '700', color: 'var(--accent)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : (userRole === 'admin' ? ' • Admin 1' : '')}
                         </div>
@@ -162,8 +162,8 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                     </div>
                 )}
 
-                {/* Logout + Security */}
-                <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
+                {/* Logout */}
+                <div style={{ display: 'flex', width: '100%' }}>
                     <button
                         type="button"
                         onClick={async () => {
@@ -172,7 +172,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         }}
                         className="btn-secondary"
                         style={{
-                            flex: 1,
+                            width: '100%',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             gap: '6px', minHeight: '44px', fontSize: '0.88rem'
                         }}
@@ -180,26 +180,6 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         <LogOut size={16} />
                         <span>خروج</span>
                     </button>
-
-                    {userRole === 'admin' && (
-                        <button
-                            onClick={() => {
-                                onOpenSecurity();
-                                closeSidebar();
-                            }}
-                            className="icon-btn"
-                            style={{
-                                width: '44px',
-                                minHeight: '44px',
-                                padding: 0,
-                                flexShrink: 0
-                            }}
-                            title="إعدادات الأمان"
-                            aria-label="إعدادات الأمان"
-                        >
-                            <KeyRound size={17} color="var(--accent)" />
-                        </button>
-                    )}
                 </div>
             </div>
 

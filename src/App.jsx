@@ -1972,188 +1972,6 @@ const ExtraTripForm = ({ onClose, initialData }) => {
   );
 };
 
-const SecurityModal = ({ onClose }) => {
-  const { shiftConfig, updateShiftConfig } = useApp();
-  const [targetUser, setTargetUser] = useState('admin');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-
-  // 🕐 إعدادات أوقات تشغيل الورديات (المصدر: قاعدة البيانات)
-  const [openTime, setOpenTime] = useState(shiftConfig?.openTime || '06:00');
-  const [closeTime, setCloseTime] = useState(shiftConfig?.closeTime || '04:00');
-  const [shiftSaving, setShiftSaving] = useState(false);
-  const [shiftMsg, setShiftMsg] = useState('');
-
-  useEffect(() => {
-    setOpenTime(shiftConfig?.openTime || '06:00');
-    setCloseTime(shiftConfig?.closeTime || '04:00');
-  }, [shiftConfig?.openTime, shiftConfig?.closeTime]);
-
-  const handleSaveShiftTimes = async (e) => {
-    e.preventDefault();
-    setShiftMsg('');
-    setShiftSaving(true);
-    const result = await updateShiftConfig({ openTime, closeTime });
-    setShiftSaving(false);
-    if (result?.success) {
-      setShiftMsg('✅ تم حفظ أوقات التشغيل وتطبيقها فوراً على الجميع.');
-    } else {
-      setShiftMsg('❌ ' + (result?.error || 'تعذّر حفظ الأوقات'));
-    }
-  };
-
-  const handleSave = (e) => {
-    e.preventDefault();
-    setError('');
-    setSuccess('');
-    // Disabled saving plaintext passwords to localStorage for security
-    setError('⚠️ تم إيقاف تغيير كلمات المرور محلياً لدواعي أمنية.');
-    setTimeout(() => {
-      onClose();
-    }, 2000);
-  };
-
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.8)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 100000,
-        backdropFilter: 'blur(12px)'
-      }}
-    >
-      <div
-        className="glass-card"
-        onClick={e => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: '360px',
-          padding: '20px',
-          position: 'relative',
-          background: 'linear-gradient(180deg, #162035 0%, #111827 100%)',
-          border: '1px solid var(--border-strong)',
-          boxShadow: 'var(--highlight-top-strong), var(--elevation-5)',
-          borderRadius: '20px'
-        }}
-      >
-        <h3 className="flex" style={{ fontSize: '1.15rem', margin: '0 0 12px 0', borderBottom: '1px solid var(--border)', paddingBottom: '10px', color: 'white' }}>
-          <KeyRound size={18} color="var(--accent)" /> إعدادات الأمان
-        </h3>
-
-        {/* 🕐 حوكمة أوقات تشغيل الورديات (تُحفظ في قاعدة البيانات) */}
-        <form onSubmit={handleSaveShiftTimes} style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px', background: 'rgba(59,130,246,0.06)', border: '1px solid var(--border)', borderRadius: '10px', padding: '12px' }}>
-          <div className="flex" style={{ alignItems: 'center', gap: '8px', fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--accent)' }}>
-            <Clock size={16} /> أوقات تشغيل الورديات (بتوقيت القاهرة)
-          </div>
-          <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: 0 }}>
-            تُطبَّق فوراً على جميع المستخدمين. اليوم التشغيلي قد يمتد بعد منتصف الليل (مثال: 06:00 ← 04:00).
-          </p>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>بداية التشغيل (فتح)</label>
-              <input
-                type="time"
-                value={openTime}
-                onChange={e => setOpenTime(e.target.value)}
-                style={{ padding: '8px', textAlign: 'center' }}
-                required
-              />
-            </div>
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>نهاية التشغيل (إغلاق)</label>
-              <input
-                type="time"
-                value={closeTime}
-                onChange={e => setCloseTime(e.target.value)}
-                style={{ padding: '8px', textAlign: 'center' }}
-                required
-              />
-            </div>
-          </div>
-          {shiftMsg && <div style={{ fontSize: '0.78rem', fontWeight: 'bold', textAlign: 'center', color: shiftMsg.startsWith('✅') ? '#10b981' : '#ef4444' }}>{shiftMsg}</div>}
-          <button type="submit" disabled={shiftSaving} className="btn-primary" style={{ height: '36px', justifyContent: 'center', fontSize: '0.82rem', background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)', color: '#000', fontWeight: '800', opacity: shiftSaving ? 0.6 : 1 }}>
-            {shiftSaving ? 'جاري الحفظ...' : 'حفظ أوقات التشغيل'}
-          </button>
-        </form>
-
-        <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* User selector */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>المستخدم:</label>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button
-                type="button"
-                className={targetUser === 'admin' ? 'btn-primary' : 'btn-secondary'}
-                style={{ flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.8rem' }}
-                onClick={() => { setTargetUser('admin'); setError(''); setSuccess(''); }}
-              >
-                المشرف (Admin)
-              </button>
-              <button
-                type="button"
-                className={targetUser === 'casher' ? 'btn-primary' : 'btn-secondary'}
-                style={{
-                  flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.8rem',
-                  background: targetUser === 'casher' ? 'linear-gradient(180deg, #10b981 0%, #059669 100%)' : undefined,
-                  color: targetUser === 'casher' ? '#000' : undefined
-                }}
-                onClick={() => { setTargetUser('casher'); setError(''); setSuccess(''); }}
-              >
-                الكاشير (Casher)
-              </button>
-            </div>
-          </div>
-
-          {/* New PIN */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>كلمة المرور الجديدة:</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              style={{ padding: '10px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
-              value={newPin}
-              onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="••••"
-              required
-            />
-          </div>
-
-          {/* Confirm PIN */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>تأكيد كلمة المرور:</label>
-            <input
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              style={{ padding: '10px', fontSize: '1rem', letterSpacing: '2px', textAlign: 'center' }}
-              value={confirmPin}
-              onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-              placeholder="••••"
-              required
-            />
-          </div>
-
-          {error && <div style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 'bold', textAlign: 'center' }}>{error}</div>}
-          {success && <div style={{ color: '#10b981', fontSize: '0.8rem', fontWeight: 'bold', textAlign: 'center' }}>{success}</div>}
-
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button type="submit" className="btn-primary" style={{ flex: 1, height: '38px', justifyContent: 'center', fontSize: '0.85rem' }}>حفظ التعديل</button>
-            <button type="button" onClick={onClose} className="btn-secondary" style={{ flex: 0.5, height: '38px', fontSize: '0.85rem' }}>إلغاء</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-};
-
 // ➕ زر "طلب جديد" موحد بقائمة منسدلة (نفس النوافذ الثلاث السابقة)
 const CREATE_OPTIONS = [
   { id: 'manual', label: 'أوردر المطبخ', hint: 'طلب من منيو المطعم', color: '#22c55e' },
@@ -2347,7 +2165,6 @@ function App() {
         setActiveTab={setActiveTab}
         isSidebarOpen={isSidebarOpen}
         closeSidebar={closeSidebar}
-        onOpenSecurity={() => setActiveModal('security')}
       />
       <main className="main-content">
         {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
@@ -2383,7 +2200,6 @@ function App() {
           {activeModal === 'manual' && <ManualOrderForm onClose={handleCloseModal} initialData={reeditData} />}
           {activeModal === 'external' && <ExternalOrderForm onClose={handleCloseModal} initialData={reeditData} />}
           {activeModal === 'trip' && <ExtraTripForm onClose={handleCloseModal} initialData={reeditData} />}
-          {activeModal === 'security' && <SecurityModal onClose={handleCloseModal} />}
 
           <div style={{ position: 'relative' }}>
             {/* 🔐 تأمين الصفحات - الأدمن والكاشير */}
