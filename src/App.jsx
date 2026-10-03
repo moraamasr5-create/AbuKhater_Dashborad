@@ -8,8 +8,7 @@ import SettingsView from './components/settings/SettingsView';
 import Login from './components/auth/Login';
 import ConnectionBanner from './components/common/ConnectionBanner';
 import { StatusBadge, PageHeader, SectionHeader, Disclosure, EmptyState, MoreMenu, ToastHost, toast } from './components/common/ui';
-import { useApp } from './context/AppContext';
-import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, AlertCircle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, ChevronDown, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2, Phone, Check, UserPlus, Copy, BarChart3 } from 'lucide-react';
+import { Package, Bike, Clock, Plus, MapPin, AlertTriangle, AlertCircle, Receipt, Globe, Monitor, ChevronLeft, ChevronRight, ChevronDown, UtensilsCrossed, PlusCircle, Menu, Ruler, ShieldAlert, KeyRound, Trash2, Phone, Check, UserPlus, Copy, BarChart3, ArrowRight } from 'lucide-react';
 import { supabase } from './services/supabase/supabaseClient';
 import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
 import { isPilotOnDelivery } from './utils/pilotState';
@@ -2219,10 +2218,33 @@ const CreateOrderMenu = ({ onSelect, disabled }) => {
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [tabHistory, setTabHistory] = useState(['dashboard']);
   const [activeModal, setActiveModal] = useState('none');
   const [reeditData, setReeditData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const { isShiftOpen, deleteOrder, userRole, setUserRole, isAuthLoading, orders, currentShift } = useApp();
+
+  const navigateToTab = (tab) => {
+    if (!tab) return;
+    if (tab === activeTab) return;
+    setTabHistory(prev => (prev[prev.length - 1] === tab ? prev : [...prev, tab]));
+    setActiveTab(tab);
+  };
+
+  const handleGoBack = () => {
+    if (tabHistory.length > 1) {
+      const nextHistory = [...tabHistory];
+      nextHistory.pop();
+      const prevTab = nextHistory[nextHistory.length - 1] || 'dashboard';
+      setTabHistory(nextHistory);
+      setActiveTab(prevTab);
+    } else {
+      setActiveTab('dashboard');
+      setTabHistory(['dashboard']);
+    }
+  };
+
+  const canGoBack = (tabHistory.length > 1 || activeTab !== 'dashboard') && userRole !== 'driver';
 
   // 🟢 حماية لضمان الصلاحيات للأدوار المختلفة
   useEffect(() => {
@@ -2324,7 +2346,11 @@ function App() {
   }
 
   if (!userRole) {
-    return <Login onLoginSuccess={(role) => setActiveTab(role === 'admin' ? 'dashboard' : 'inbox')} />;
+    return <Login onLoginSuccess={(role) => {
+      const initial = role === 'admin' ? 'dashboard' : 'inbox';
+      setActiveTab(initial);
+      setTabHistory([initial]);
+    }} />;
   }
 
   const visibleNav = NAV_ITEMS.filter(item => item.roles.includes(userRole));
@@ -2339,32 +2365,31 @@ function App() {
         <div className="sidebar-overlay" onClick={closeSidebar}></div>
       )}
 
-      {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
-      <button
-        type="button"
-        className="floating-sidebar-toggle"
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleSidebar();
-        }}
-        aria-label="القائمة الجانبية"
-        aria-expanded={isSidebarOpen}
-        title="القائمة الجانبية 🗃"
-      >
-        <span style={{ fontSize: '1.35rem', lineHeight: 1 }}>🗃</span>
-      </button>
-
       <Sidebar
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={navigateToTab}
         isSidebarOpen={isSidebarOpen}
         closeSidebar={closeSidebar}
         onOpenSecurity={() => setActiveModal('security')}
       />
       <main className="main-content">
-        {/* 🧭 Top bar: أين أنا + حالة الوردية + إنشاء طلب */}
+        {/* 🧭 Top bar: رجوع + أين أنا + حالة الوردية + إنشاء طلب */}
         <div className="topbar no-print">
-          <h1 className="topbar-title">{currentNav?.label || ''}</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            {canGoBack && (
+              <button
+                type="button"
+                onClick={handleGoBack}
+                className="topbar-back-btn hover-scale"
+                aria-label="رجوع خطوة للخلف"
+                title="رجوع خطوة للخلف"
+              >
+                <ArrowRight size={18} />
+                <span>رجوع</span>
+              </button>
+            )}
+            <h1 className="topbar-title">{currentNav?.label || ''}</h1>
+          </div>
 
           {userRole !== 'driver' && (
             <span
@@ -2376,7 +2401,7 @@ function App() {
               title={isShiftOpen && currentShift?.date ? `الوردية: ${currentShift.date}` : undefined}
             >
               <span className="dot" aria-hidden="true" />
-              <span>{isShiftOpen ? ' ' : ' '}</span>
+              <span>{isShiftOpen ? 'الوردية مفتوحة' : 'الوردية مغلقة'}</span>
             </span>
           )}
 
@@ -2401,7 +2426,7 @@ function App() {
             {/* 🔐 تأمين الصفحات - الأدمن والكاشير */}
             {activeTab === 'dashboard' && (userRole === 'admin' || userRole === 'casher') && (
               <DashboardView
-                onNavigate={(tab) => setActiveTab(tab)}
+                onNavigate={(tab) => navigateToTab(tab)}
                 onOpenModal={(modal) => setActiveModal(modal)}
               />
             )}
@@ -2442,7 +2467,7 @@ function App() {
             type="button"
             className={activeTab === item.id ? 'is-active' : ''}
             aria-current={activeTab === item.id ? 'page' : undefined}
-            onClick={() => { setActiveTab(item.id); closeSidebar(); }}
+            onClick={() => { navigateToTab(item.id); closeSidebar(); }}
           >
             <item.icon size={22} />
             <span>{item.short}</span>
