@@ -2376,7 +2376,7 @@ function App() {
               title={isShiftOpen && currentShift?.date ? `الوردية: ${currentShift.date}` : undefined}
             >
               <span className="dot" aria-hidden="true" />
-              <span>{isShiftOpen ? 'الوردية مفتوحة' : 'الوردية مغلقة'}</span>
+              <span>{isShiftOpen ? '✅' : '❎'}</span>
             </span>
           )}
 
