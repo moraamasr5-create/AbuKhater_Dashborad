@@ -13,7 +13,10 @@ export const repairOrder = (order) => {
         name: item.name || "صنف غير معروف",
         count: Number(item.quantity || item.count || item.qty || 1) || 1,
         price: Number(item.price || item.unit_price || 0) || 0,
-        menuItemId: item.menuItemId || item.menu_item_id || null
+        menuItemId: item.product_id || item.menuItemId || item.menu_item_id || item.id || null,
+        selected_variant: item.selected_variant || null,
+        selected_options: item.selected_options || [],
+        notes: item.notes || null
     }));
 
     // 💰 معالجة الماليات (Financial Healing)

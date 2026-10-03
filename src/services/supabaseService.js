@@ -314,21 +314,30 @@ export const supabaseService = {
 
         // Order items: from order_items join OR raw_payload fallback
         const rawItems = (row.order_items && row.order_items.length > 0)
-          ? row.order_items.map(i => ({
-              name: i.product_name || 'صنف غير معروف',
-              count: Number(i.quantity || 1),
-              price: Number(i.unit_price || 0),
-              category: 'عام',
-              total: Number(i.total_price || 0),
-              menuItemId: i.item_id || i.menu_item_id || null
-            }))
+          ? row.order_items.map((i, idx) => {
+              const payloadItem = (rawPayload.items || [])[idx] || {};
+              return {
+                name: i.product_name || payloadItem.name || 'صنف غير معروف',
+                count: Number(i.quantity || payloadItem.quantity || payloadItem.count || 1),
+                price: Number(i.unit_price || payloadItem.price || payloadItem.unit_price || 0),
+                category: payloadItem.category || 'عام',
+                total: Number(i.total_price || (Number(i.unit_price || 0) * Number(i.quantity || 1))),
+                menuItemId: i.item_id || i.menu_item_id || payloadItem.product_id || payloadItem.menuItemId || null,
+                selected_variant: payloadItem.selected_variant || null,
+                selected_options: payloadItem.selected_options || [],
+                notes: i.notes || payloadItem.notes || null
+              };
+            })
           : (rawPayload.items || []).map(item => ({
               name: item.name || item.item_name || 'صنف غير معروف',
               count: Number(item.quantity || item.count || 1),
               price: Number(item.price || item.unit_price || 0),
               category: item.category || 'عام',
               total: Number(item.total || (Number(item.price || 0) * Number(item.quantity || 1))),
-              menuItemId: item.menuItemId || item.menu_item_id || null
+              menuItemId: item.product_id || item.menuItemId || item.menu_item_id || item.id || null,
+              selected_variant: item.selected_variant || null,
+              selected_options: item.selected_options || [],
+              notes: item.notes || null
             }));
 
         const itemsDescription = rawItems.length > 0
@@ -409,12 +418,25 @@ export const supabaseService = {
   // ─────────────────────────────────────────────────────────
   async createManualOrder(orderData, skipQueue = false) {
     return withOfflineSupport('createManualOrder', async () => {
-      const items = (orderData.items || []).map(item => ({
-        item_id: item.itemId || item.id || null,
-        name: item.name,
-        quantity: Number(item.count || item.quantity || 1),
-        price: Number(item.price || item.unit_price || 0)
-      }));
+      const items = (orderData.items || []).map(item => {
+        let formattedName = item.name || '';
+        if (item.selected_variant?.name && !formattedName.includes(item.selected_variant.name)) {
+          formattedName += ` (${item.selected_variant.name})`;
+        }
+        if (Array.isArray(item.selected_options) && item.selected_options.length > 0) {
+          const optNames = item.selected_options.map(o => o.option_name || o.name).filter(Boolean);
+          if (optNames.length > 0 && !formattedName.includes(optNames[0])) {
+            formattedName += ` + [${optNames.join(', ')}]`;
+          }
+        }
+
+        return {
+          item_id: item.itemId || item.id || item.product_id || item.menuItemId || null,
+          name: formattedName,
+          quantity: Number(item.count || item.quantity || 1),
+          price: Number(item.price || item.unit_price || 0)
+        };
+      });
 
       const mutationId = orderData.mutationId || newMutationId();
 
@@ -1160,17 +1182,25 @@ export const supabaseService = {
   },
 
   /**
-   * [Legacy Compatibility] يحدّث إتاحة عنصر بالاسم في menu_items
+   * [Legacy Compatibility] يحدّث إتاحة عنصر (باستخدام Canonical UUID أو اسم المنتج كخيار قديم)
    */
-  async updateMenuAvailability(itemName, isAvailable, skipQueue = false) {
+  async updateMenuAvailability(itemNameOrId, isAvailable, skipQueue = false) {
     return withOfflineSupport('updateMenuAvailability', async () => {
       const newStatus = isAvailable ? 'available' : 'out_of_stock';
+      
+      // If itemNameOrId is a UUID string, target by canonical ID to prevent updating duplicate named items across categories
+      const isUuid = typeof itemNameOrId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(itemNameOrId);
+      
+      if (isUuid) {
+        return await this.updateMenuItemStatus(itemNameOrId, newStatus, skipQueue);
+      }
+
       const { error } = await supabase
         .from('menu_items')
         .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('name', itemName);
+        .eq('name', itemNameOrId);
       if (error) throw error;
-    }, { itemName, isAvailable }, skipQueue);
+    }, { itemName: itemNameOrId, isAvailable }, skipQueue);
   },
 
   // ─────────────────────────────────────────────────────────
