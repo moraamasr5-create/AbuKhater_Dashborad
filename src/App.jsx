@@ -2331,16 +2331,16 @@ function App() {
       {/* 🗃 Floating Toggle Button for Mobile / Tablet Drawer */}
       <button
         type="button"
-        className="floating-sidebar-toggle no-print"
+        className="floating-sidebar-toggle"
         onClick={(e) => {
           e.stopPropagation();
           toggleSidebar();
         }}
         aria-label="القائمة الجانبية"
         aria-expanded={isSidebarOpen}
-        title="🗃"
+        title="القائمة الجانبية 🗃"
       >
-        <span style={{ fontSize: '1.3rem', lineHeight: 1 }}>🗃</span>
+        <span style={{ fontSize: '1.35rem', lineHeight: 1 }}>🗃</span>
       </button>
 
       <Sidebar

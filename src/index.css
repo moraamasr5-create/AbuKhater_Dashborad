@@ -818,17 +818,17 @@ button.kpi-card:hover { border-color: var(--border-strong); background: var(--bg
    🖨️ Thermal Print Specific Global Rules
    ========================================== */
 
-/* Utility to hide elements during printing */
-.no-print {
-  display: none !important;
-}
-
 @page {
   size: 80mm auto;
   margin: 0;
 }
 
 @media print {
+  /* Utility to hide elements during printing */
+  .no-print {
+    display: none !important;
+  }
+
   /* Hide main navigation, sidebars, dashboard layout and backgrounds */
   body {
     background: white !important;
