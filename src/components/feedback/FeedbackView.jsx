@@ -1,7 +1,7 @@
-// Developed & Owned by AmrMamdouh - 01038035884
 import React, { useState, useEffect } from 'react';
 import { supabaseService } from '../../services/supabaseService';
 import { MessageSquare, Trash2, Calendar, Phone, Search, Loader2, MessageCircle, AlertTriangle, AlertCircle, HelpCircle } from 'lucide-react';
+import { toast } from '../common/ui';
 
 const FeedbackView = () => {
   const [feedbacks, setFeedbacks] = useState([]);
@@ -31,12 +31,13 @@ const FeedbackView = () => {
         const success = await supabaseService.deleteFeedback(id);
         if (success) {
           setFeedbacks(prev => prev.filter(f => f.id !== id));
+          toast('تم حذف الرسالة بنجاح', 'success');
         } else {
-          alert('❌ حدث خطأ أثناء الحذف');
+          toast('حدث خطأ أثناء الحذف', 'error');
         }
       } catch (err) {
         console.error('Error deleting feedback:', err);
-        alert('❌ حدث خطأ أثناء الحذف');
+        toast('حدث خطأ أثناء الحذف', 'error');
       }
     }
   };
@@ -170,7 +171,7 @@ const FeedbackView = () => {
         </div>
 
         {/* Tab Filters */}
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        <div className="tab-strip" style={{ display: 'flex', gap: '8px' }}>
           {[
             { id: 'all', label: 'عرض الكل' },
             { id: 'complaint', label: '🚨 الشكاوى فقط' },
@@ -183,6 +184,8 @@ const FeedbackView = () => {
               className="glass-card"
               style={{
                 padding: '8px 16px',
+                minHeight: '44px',
+                whiteSpace: 'nowrap',
                 borderRadius: '8px',
                 border: typeFilter === tab.id ? '1px solid var(--primary)' : '1px solid var(--border)',
                 background: typeFilter === tab.id ? 'var(--primary)' : 'rgba(255,255,255,0.02)',

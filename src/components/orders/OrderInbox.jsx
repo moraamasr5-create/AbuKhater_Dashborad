@@ -11,6 +11,7 @@ import { printerService } from '../../services/printerService';
 import { ReceiptThumbnail } from '../../services/storageService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isPilotOnDelivery } from '../../utils/pilotState';
+import { Disclosure, toast } from '../common/ui';
 
 const RESTAURANT_COORDS = { lat: 30.126131, lng: 31.298350 };
 
@@ -536,7 +537,7 @@ const OrderInbox = ({ onReedit }) => {
       {/* 🧭 Stage Tabs & Search Toolbar */}
       <div className="glass-card" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
         {/* Stage Status Tabs */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
+        <div className="tab-strip" style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '14px' }}>
           {[
             { id: 'all', label: 'جميع المراحل', count: stageCounts.all, color: '#6366f1' },
             { id: 'pending', label: 'طلبات جديدة', count: stageCounts.pending, color: '#f59e0b', highlight: stageCounts.pending > 0 },
@@ -731,53 +732,49 @@ const OrderInbox = ({ onReedit }) => {
                       cursor: isThermalPrintMode ? 'pointer' : 'default',
                       display: 'flex',
                       flexDirection: 'column',
-                      gap: '16px'
                     }}
                   >
-                    {/* 🔝 1. Header Bar: Order # + Elapsed Timer + Status + Price */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                        {/* Order Number */}
-                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px' }}>
-                          <span style={{ fontSize: '1.4rem', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '0.5px' }}>
+                    {/* 🔝 المستوى الأول: ما الذي يحدث الآن؟ (رقم الطلب، الوقت، الحالة، المبلغ، العميل، والمنطقة) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '1.35rem', fontWeight: '900', color: 'var(--text-main)', letterSpacing: '0.5px' }}>
                             #{order.originalId || order.id}
                           </span>
                           {order.type === 'talabat' && (
-                            <span style={{ fontSize: '0.7rem', background: '#f97316', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>طلبات</span>
+                            <span style={{ fontSize: '0.72rem', background: '#f97316', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 'bold' }}>طلبات</span>
                           )}
                           {order.type === 'trip' && (
-                            <span style={{ fontSize: '0.7rem', background: '#8b5cf6', color: 'white', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>مشوار</span>
+                            <span style={{ fontSize: '0.72rem', background: '#8b5cf6', color: 'white', padding: '2px 7px', borderRadius: '4px', fontWeight: 'bold' }}>مشوار</span>
                           )}
                           {isOnline && (
-                            <span style={{ fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 'bold' }}>أونلاين</span>
+                            <span style={{ fontSize: '0.72rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 7px', borderRadius: '4px', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 'bold' }}>أونلاين</span>
                           )}
+
+                          {/* Live Elapsed Timer */}
+                          <LiveElapsedBadge
+                            timestamp={order.timestamp || order.created_at}
+                            startTime={order.startTime}
+                            isOut={order.status === 'active'}
+                          />
+
+                          {/* Order Status Badge */}
+                          <div style={{
+                            padding: '3px 10px',
+                            borderRadius: '20px',
+                            fontSize: '0.78rem',
+                            fontWeight: '800',
+                            background: `${statusColor}20`,
+                            color: statusColor,
+                            border: `1px solid ${statusColor}40`
+                          }}>
+                            {statusLabel}
+                          </div>
                         </div>
 
-                        {/* Live Elapsed Timer */}
-                        <LiveElapsedBadge
-                          timestamp={order.timestamp || order.created_at}
-                          startTime={order.startTime}
-                          isOut={order.status === 'active'}
-                        />
-
-                        {/* Order Status Badge */}
-                        <div style={{
-                          padding: '4px 10px',
-                          borderRadius: '20px',
-                          fontSize: '0.75rem',
-                          fontWeight: '800',
-                          background: `${statusColor}20`,
-                          color: statusColor,
-                          border: `1px solid ${statusColor}40`
-                        }}>
-                          {statusLabel}
-                        </div>
-                      </div>
-
-                      {/* Financial Total Highlight */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: 'auto' }}>
-                        <div style={{ textAlign: 'left' }}>
-                          <div style={{ fontSize: '1.25rem', fontWeight: '900', color: 'var(--accent)' }}>
+                        {/* Financial Total Highlight */}
+                        <div style={{ textAlign: 'left', marginRight: 'auto' }}>
+                          <div style={{ fontSize: '1.3rem', fontWeight: '900', color: 'var(--accent)' }}>
                             {order.total || 0} <span style={{ fontSize: '0.85rem' }}>ج.م</span>
                           </div>
                           {Number(order.remainingAmount) > 0 && (
@@ -787,243 +784,52 @@ const OrderInbox = ({ onReedit }) => {
                           )}
                         </div>
                       </div>
-                    </div>
 
-                    {/* 👤 2. Body Grid: Customer Info + Address + Location + Payment */}
-                    <div style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-                      gap: '16px',
-                      background: 'rgba(0, 0, 0, 0.22)',
-                      padding: '14px',
-                      borderRadius: '12px',
-                      border: '1px solid var(--border)'
-                    }}>
-                      {/* Customer Info */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span style={{ fontSize: '1.05rem', fontWeight: '800', color: 'var(--text-main)' }}>
-                            {order.customerName || 'عميل بدون اسم'}
+                      {/* Quick Operational Info: Customer Name + Area + Assigned Pilot */}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px', fontSize: '0.9rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                          <strong style={{ color: 'var(--text-main)', fontSize: '1.02rem' }}>{order.customerName || 'عميل بدون اسم'}</strong>
+                          <span style={{ color: 'var(--text-muted)', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                            <MapPin size={14} color="var(--primary)" />
+                            {order.area || 'استلام من المطعم'}
                           </span>
                         </div>
 
-                        {/* Clickable Phone Badges */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '2px' }}>
-                          {order.phone && (
-                            <a
-                              href={`tel:${order.phone}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                background: 'rgba(59, 130, 246, 0.12)',
-                                color: '#60a5fa',
-                                border: '1px solid rgba(59, 130, 246, 0.25)',
-                                padding: '4px 10px',
-                                borderRadius: '8px',
-                                fontSize: '0.85rem',
-                                fontWeight: '700',
-                                textDecoration: 'none',
-                                minHeight: '32px'
-                              }}
-                              title="اضغط للاتصال بالعميل"
-                            >
-                              <Phone size={13} />
-                              <span>{order.phone}</span>
-                            </a>
-                          )}
-                          {order.phone2 && (
-                            <a
-                              href={`tel:${order.phone2}`}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '6px',
-                                background: 'rgba(255, 255, 255, 0.05)',
-                                color: 'var(--text-muted)',
-                                border: '1px solid var(--border)',
-                                padding: '4px 10px',
-                                borderRadius: '8px',
-                                fontSize: '0.85rem',
-                                textDecoration: 'none',
-                                minHeight: '32px'
-                              }}
-                              title="رقم بديل"
-                            >
-                              <Phone size={13} />
-                              <span>{order.phone2}</span>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Delivery Address & Zone */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '6px' }}>
-                          <MapPin size={16} color="var(--primary)" style={{ flexShrink: 0, marginTop: '3px' }} />
-                          <p style={{
-                            margin: 0,
-                            fontSize: '0.9rem',
-                            color: 'var(--text-main)',
-                            lineHeight: '1.4',
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden'
-                          }} title={order.area}>
-                            {order.area || 'استلام من المطعم / بدون عنوان'}
-                          </p>
-                        </div>
-
-                        {/* Zone & Map button */}
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', marginTop: '2px' }}>
-                          {zoneCfg && (
-                            <div style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '5px',
-                              padding: '3px 8px',
-                              borderRadius: '8px',
-                              background: zoneCfg.bg,
-                              color: zoneCfg.color,
-                              fontSize: '0.75rem',
-                              fontWeight: 'bold',
-                              border: `1px solid ${zoneCfg.color}40`
-                            }}>
-                              <Navigation size={12} />
-                              <span>{zoneCfg.label} ({dist} كم)</span>
-                            </div>
-                          )}
-
-                          {lat && lng && (
-                            <button
-                              onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank')}
-                              style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                padding: '4px 10px',
-                                borderRadius: '8px',
-                                background: 'rgba(245, 158, 11, 0.15)',
-                                color: '#fbbf24',
-                                border: '1px solid rgba(245, 158, 11, 0.3)',
-                                fontSize: '0.75rem',
-                                fontWeight: '700',
-                                cursor: 'pointer',
-                                minHeight: '30px'
-                              }}
-                              title="فتح موقع العميل على خرائط Google"
-                            >
-                              📍 الخريطة
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Payment & Receipt Thumbnail */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)' }}>طريقة الدفع:</span>
+                        {order.status === 'driver_assigned' && (
                           <div style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            padding: '4px 10px',
-                            borderRadius: '8px',
-                            fontSize: '0.8rem',
-                            fontWeight: '700',
-                            background: isCash ? 'rgba(16, 185, 129, 0.12)' : isInsta ? 'rgba(59, 130, 246, 0.12)' : isVF ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.05)',
-                            color: isCash ? '#34d399' : isInsta ? '#60a5fa' : isVF ? '#f87171' : 'var(--text-muted)',
-                            border: '1px solid var(--border)'
+                            display: 'inline-flex', alignItems: 'center', gap: '6px',
+                            padding: '4px 10px', borderRadius: '8px',
+                            background: 'rgba(59, 130, 246, 0.12)', border: '1px solid rgba(59, 130, 246, 0.3)',
+                            fontSize: '0.82rem', color: '#93c5fd', fontWeight: 'bold'
                           }}>
-                            {isCash ? '💵 نقدي (Cash)' : isInsta ? '⚡ أنستاباي (InstaPay)' : isVF ? '📱 فودافون كاش' : `💳 ${order.paymentMethod || 'أخرى'}`}
+                            <Bike size={14} />
+                            <span>الطيار: {orderPilot?.name || order.pilotName || 'طيار'}</span>
+                            {showPilotOutBadge && <span style={{ color: '#fbbf24', fontSize: '0.75rem' }}>(في الخارج)</span>}
                           </div>
-                        </div>
-
-                        {/* Thumbnail */}
-                        {paymentScreenshot && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <ReceiptThumbnail
-                              src={paymentScreenshot}
-                              size={44}
-                              borderRadius={8}
-                              border="2px solid var(--border-strong)"
-                              onOpen={(url) => setPreviewImage(url)}
-                            />
-                            <button
-                              onClick={() => setPreviewImage(paymentScreenshot)}
-                              style={{
-                                background: 'transparent', border: 'none', color: 'var(--text-muted)',
-                                cursor: 'pointer', padding: '4px', display: 'flex', alignItems: 'center'
-                              }}
-                              title="تكبير الإيصال"
-                            >
-                              <Eye size={16} />
-                            </button>
-                          </div>
-                        )}
-
-                        {receiptUploadStatus === 'uploading' && (
-                          <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>⏳ جاري رفع الإيصال...</span>
-                        )}
-
-                        {receiptUploadStatus === 'failed' && (
-                          <button
-                            onClick={() => retryReceiptUpload(order.id)}
-                            style={{
-                              padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem',
-                              background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)',
-                              border: '1px solid var(--danger)', cursor: 'pointer'
-                            }}
-                          >
-                            🔄 إعادة رفع الإيصال
-                          </button>
                         )}
                       </div>
                     </div>
 
-                    {/* 🛵 3. Assigned Courier Alert (if assigned) */}
-                    {order.status === 'driver_assigned' && (
-                      <div style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        borderRadius: '10px',
-                        background: 'rgba(59, 130, 246, 0.1)',
-                        border: '1px solid rgba(59, 130, 246, 0.25)',
-                        flexWrap: 'wrap',
-                        gap: '8px'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Bike size={18} color="#60a5fa" />
-                          <span style={{ fontSize: '0.9rem', color: 'white' }}>
-                            الطيار المسند: <strong style={{ color: '#93c5fd' }}>{orderPilot?.name || order.pilotName || 'طيار'}</strong>
-                          </span>
-                        </div>
-                        {showPilotOutBadge && (
-                          <span style={{ fontSize: '0.75rem', background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)' }}>
-                            ⚠️ الطيار في الخارج حالياً — الطلب بانتظار بدء الرحلة
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    {/* ⚡ 4. Workflow Action Area (Tailored to current stage, min 44px touch targets) */}
+                    {/* ⚡ المستوى الثاني: ما الإجراء الذي يجب عليّ اتخاذه الآن؟ (إجراءات المرحلة الحالية بأول حقل) */}
                     <div style={{
                       display: 'flex',
                       flexWrap: 'wrap',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      gap: '12px',
-                      borderTop: '1px solid var(--border)',
-                      paddingTop: '14px'
+                      gap: '10px',
+                      background: 'rgba(255, 255, 255, 0.02)',
+                      padding: '12px',
+                      borderRadius: '10px',
+                      border: '1px solid var(--border)'
                     }}>
                       {/* Stage 1: Pending -> Confirm / Accept */}
                       {(order.status === 'pending' || order.status === 'pending_timer') && (userRole === 'admin' || userRole === 'casher') && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', width: '100%' }}>
                           <button
-                            onClick={() => confirmOrder(order.id)}
+                            onClick={() => {
+                              confirmOrder(order.id);
+                              toast(`تم تأكيد الطلب #${order.originalId || order.id} وإرساله للمطبخ ✅`);
+                            }}
                             className="btn-primary"
                             style={{
                               flex: '2 1 200px',
@@ -1075,7 +881,6 @@ const OrderInbox = ({ onReedit }) => {
                       {/* Stage 2: Waiting Driver -> Pilot Assignment */}
                       {(order.status === 'waiting_driver' || order.status === 'preparing') && (userRole === 'admin' || userRole === 'casher') && (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-                          {/* Suggested Pilot 1-Click Fast Assign Button */}
                           {suggestedPilot && (
                             <div style={{
                               display: 'flex',
@@ -1098,7 +903,7 @@ const OrderInbox = ({ onReedit }) => {
                                 style={{
                                   background: '#10b981',
                                   padding: '6px 14px',
-                                  minHeight: '36px',
+                                  minHeight: '38px',
                                   fontSize: '0.85rem'
                                 }}
                               >
@@ -1108,7 +913,6 @@ const OrderInbox = ({ onReedit }) => {
                             </div>
                           )}
 
-                          {/* Manual Pilot Select Dropdown */}
                           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                             <select
                               className="glass-card"
@@ -1193,7 +997,7 @@ const OrderInbox = ({ onReedit }) => {
                         </div>
                       )}
 
-                      {/* Stage 4: Active -> Complete / Fail (if visible) */}
+                      {/* Stage 4: Active -> Complete / Fail */}
                       {order.status === 'active' && (
                         <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                           <button
@@ -1221,97 +1025,211 @@ const OrderInbox = ({ onReedit }) => {
                       )}
                     </div>
 
-                    {/* 🛒 5. Expandable Cart Items Drawer */}
-                    {order.items && order.items.length > 0 && (
-                      <div style={{ borderTop: '1px dashed rgba(255, 255, 255, 0.08)', paddingTop: '10px' }}>
-                        <button
-                          onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: 'var(--primary)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '6px',
-                            cursor: 'pointer',
-                            fontSize: '0.85rem',
-                            fontWeight: '700',
-                            padding: '4px 0'
-                          }}
-                        >
-                          <ShoppingCart size={15} />
-                          <span>عرض تفاصيل المنتجات ({order.items.length} صنف)</span>
-                          {expandedOrderId === order.id ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                        </button>
+                    {/* 🔍 المستوى الثالث: ما الذي أحتاج معرفته عند الفحص؟ (إفصاح تدريجي عند النقر فقط) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {/* تفاصيل العميل، الهاتف، العنوان والدفع */}
+                      <Disclosure
+                        title="بيانات العميل، العنوان والدفع"
+                        meta={zoneCfg ? `${zoneCfg.label}` : (order.phone || '')}
+                      >
+                        <div style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+                          gap: '14px',
+                          fontSize: '0.85rem'
+                        }}>
+                          {/* Phones with tap to call & tap to copy */}
+                          <div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: '6px' }}>أرقام الهاتف:</div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {order.phone ? (
+                                <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                                  <a
+                                    href={`tel:${order.phone}`}
+                                    style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                      background: 'rgba(59, 130, 246, 0.12)', color: '#60a5fa',
+                                      padding: '4px 10px', borderRadius: '8px', textDecoration: 'none', fontWeight: 'bold'
+                                    }}
+                                  >
+                                    <Phone size={13} /> {order.phone}
+                                  </a>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(order.phone);
+                                      toast('تم نسخ رقم الهاتف بنجاح 📋');
+                                    }}
+                                    style={{ background: 'rgba(255,255,255,0.06)', border: 'none', padding: '4px 8px', borderRadius: '6px', color: 'var(--text-dim)', cursor: 'pointer', fontSize: '0.75rem' }}
+                                    title="نسخ الرقم"
+                                  >
+                                    نسخ
+                                  </button>
+                                </div>
+                              ) : (
+                                <span style={{ color: 'var(--text-dim)' }}>لا يوجد هاتف مسجل</span>
+                              )}
 
-                        <AnimatePresence>
-                          {expandedOrderId === order.id && (
-                            <motion.div
-                              initial={{ opacity: 0, height: 0 }}
-                              animate={{ opacity: 1, height: 'auto' }}
-                              exit={{ opacity: 0, height: 0 }}
-                              style={{ overflow: 'hidden', marginTop: '10px' }}
-                            >
+                              {order.phone2 && (
+                                <a
+                                  href={`tel:${order.phone2}`}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    background: 'rgba(255, 255, 255, 0.05)', color: 'var(--text-muted)',
+                                    padding: '4px 10px', borderRadius: '8px', textDecoration: 'none'
+                                  }}
+                                >
+                                  <Phone size={13} /> {order.phone2}
+                                </a>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Full address & coordinates */}
+                          <div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: '6px' }}>العنوان التفصيلي:</div>
+                            <p style={{ margin: '0 0 6px 0', color: 'var(--text-main)', lineHeight: '1.4' }}>
+                              {order.area || 'استلام من المطعم'}
+                            </p>
+                            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+                              {zoneCfg && (
+                                <span style={{ fontSize: '0.75rem', background: zoneCfg.bg, color: zoneCfg.color, padding: '2px 8px', borderRadius: '6px', fontWeight: 'bold', border: `1px solid ${zoneCfg.color}40` }}>
+                                  {zoneCfg.label} ({dist} كم)
+                                </span>
+                              )}
+                              {lat && lng && (
+                                <button
+                                  onClick={() => window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank')}
+                                  style={{
+                                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                                    padding: '3px 8px', borderRadius: '6px',
+                                    background: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24',
+                                    border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.75rem',
+                                    cursor: 'pointer'
+                                  }}
+                                >
+                                  📍 الخريطة
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Payment details & Screenshot thumbnail */}
+                          <div>
+                            <div style={{ color: 'var(--text-dim)', fontSize: '0.75rem', marginBottom: '6px' }}>طريقة الدفع والإيصال:</div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                               <div style={{
-                                background: 'rgba(0, 0, 0, 0.35)',
-                                borderRadius: '10px',
-                                padding: '14px',
+                                display: 'inline-flex', alignItems: 'center', gap: '6px',
+                                padding: '4px 10px', borderRadius: '8px', fontSize: '0.8rem', fontWeight: '700',
+                                background: isCash ? 'rgba(16, 185, 129, 0.12)' : isInsta ? 'rgba(59, 130, 246, 0.12)' : isVF ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.05)',
+                                color: isCash ? '#34d399' : isInsta ? '#60a5fa' : isVF ? '#f87171' : 'var(--text-muted)',
                                 border: '1px solid var(--border)'
                               }}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                  {order.items.map((item, idx) => (
-                                    <div
-                                      key={idx}
-                                      style={{
-                                        display: 'flex',
-                                        justifyContent: 'space-between',
-                                        alignItems: 'center',
-                                        background: 'rgba(255, 255, 255, 0.02)',
-                                        padding: '8px 12px',
-                                        borderRadius: '6px',
-                                        fontSize: '0.85rem'
-                                      }}
-                                    >
-                                      <div>
-                                        <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>{item.name}</span>
-                                        {item.category && (
-                                          <span style={{ marginRight: '8px', fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 6px', borderRadius: '4px' }}>
-                                            {item.category}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-                                        <span style={{ color: 'var(--text-muted)' }}>{item.count || item.quantity || 1}x</span>
-                                        <span style={{ color: 'var(--text-muted)' }}>{item.price || item.unit_price || 0} ج</span>
-                                        <span style={{ fontWeight: '800', color: 'var(--accent)', minWidth: '50px', textAlign: 'left' }}>
-                                          {((item.count || item.quantity || 1) * (item.price || item.unit_price || 0))} ج
-                                        </span>
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
+                                {isCash ? '💵 نقدي (Cash)' : isInsta ? '⚡ أنستاباي (InstaPay)' : isVF ? '📱 فودافون كاش' : `💳 ${order.paymentMethod || 'أخرى'}`}
+                              </div>
 
-                                <div style={{
-                                  marginTop: '12px',
-                                  paddingTop: '10px',
-                                  borderTop: '1px dashed var(--border)',
+                              {paymentScreenshot && (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  <ReceiptThumbnail
+                                    src={paymentScreenshot}
+                                    size={40}
+                                    borderRadius={8}
+                                    border="2px solid var(--border-strong)"
+                                    onOpen={(url) => setPreviewImage(url)}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setPreviewImage(paymentScreenshot)}
+                                    style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}
+                                    title="تكبير الإيصال"
+                                  >
+                                    <Eye size={16} />
+                                  </button>
+                                </div>
+                              )}
+
+                              {receiptUploadStatus === 'uploading' && (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--accent)' }}>⏳ جاري رفع الإيصال...</span>
+                              )}
+                              {receiptUploadStatus === 'failed' && (
+                                <button
+                                  onClick={() => retryReceiptUpload(order.id)}
+                                  style={{
+                                    padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem',
+                                    background: 'rgba(239, 68, 68, 0.15)', color: 'var(--danger)',
+                                    border: '1px solid var(--danger)', cursor: 'pointer'
+                                  }}
+                                >
+                                  🔄 إعادة رفع الإيصال
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </Disclosure>
+
+                      {/* تفاصيل الأصناف (إذا كانت مسجلة) */}
+                      {order.items && order.items.length > 0 ? (
+                        <Disclosure
+                          title={`تفاصيل الأصناف (${order.items.length} صنف)`}
+                          meta={`${order.total} ج.م`}
+                          icon={<ShoppingCart size={15} color="var(--primary)" />}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
+                            {order.items.map((item, idx) => (
+                              <div
+                                key={idx}
+                                style={{
                                   display: 'flex',
-                                  flexDirection: 'column',
-                                  gap: '4px',
-                                  alignItems: 'flex-end',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  background: 'rgba(255, 255, 255, 0.02)',
+                                  padding: '6px 10px',
+                                  borderRadius: '6px',
                                   fontSize: '0.85rem'
-                                }}>
-                                  <div style={{ color: 'var(--text-muted)' }}>قيمة الأصناف: <strong style={{ color: 'var(--text-main)' }}>{order.subtotal || Math.max(0, (order.total || 0) - (order.deliveryFee || 0))} ج.م</strong></div>
-                                  <div style={{ color: 'var(--text-muted)' }}>خدمة التوصيل: <strong style={{ color: 'var(--text-main)' }}>{order.deliveryFee || 0} ج.م</strong></div>
-                                  {Number(order.serviceFee) > 0 && <div style={{ color: 'var(--text-muted)' }}>رسوم الخدمة: <strong style={{ color: 'var(--text-main)' }}>{order.serviceFee} ج.م</strong></div>}
-                                  <div style={{ color: 'var(--accent)', fontSize: '1.05rem', fontWeight: '900', marginTop: '2px' }}>الإجمالي الكلي: {order.total} ج.م</div>
+                                }}
+                              >
+                                <div>
+                                  <span style={{ fontWeight: '700', color: 'var(--text-main)' }}>{item.name}</span>
+                                  {item.category && (
+                                    <span style={{ marginRight: '8px', fontSize: '0.7rem', background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', padding: '2px 6px', borderRadius: '4px' }}>
+                                      {item.category}
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                  <span style={{ color: 'var(--text-muted)' }}>{item.count || item.quantity || 1}x</span>
+                                  <span style={{ color: 'var(--text-muted)' }}>{item.price || item.unit_price || 0} ج</span>
+                                  <span style={{ fontWeight: '800', color: 'var(--accent)', minWidth: '45px', textAlign: 'left' }}>
+                                    {((item.count || item.quantity || 1) * (item.price || item.unit_price || 0))} ج
+                                  </span>
                                 </div>
                               </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    )}
+                            ))}
+                          </div>
+
+                          <div style={{
+                            marginTop: '8px',
+                            paddingTop: '8px',
+                            borderTop: '1px dashed var(--border)',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '4px',
+                            alignItems: 'flex-end',
+                            fontSize: '0.82rem'
+                          }}>
+                            <div style={{ color: 'var(--text-muted)' }}>قيمة الأصناف: <strong style={{ color: 'var(--text-main)' }}>{order.subtotal || Math.max(0, (order.total || 0) - (order.deliveryFee || 0))} ج.م</strong></div>
+                            <div style={{ color: 'var(--text-muted)' }}>خدمة التوصيل: <strong style={{ color: 'var(--text-main)' }}>{order.deliveryFee || 0} ج.م</strong></div>
+                            {Number(order.serviceFee) > 0 && <div style={{ color: 'var(--text-muted)' }}>رسوم الخدمة: <strong style={{ color: 'var(--text-main)' }}>{order.serviceFee} ج.م</strong></div>}
+                            <div style={{ color: 'var(--accent)', fontSize: '1rem', fontWeight: '900', marginTop: '2px' }}>الإجمالي الكلي: {order.total} ج.م</div>
+                          </div>
+                        </Disclosure>
+                      ) : order.itemsDescription ? (
+                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '8px' }}>
+                          <strong>تفاصيل الطلب:</strong> {order.itemsDescription}
+                        </div>
+                      ) : null}
+                    </div>
                   </motion.div>
                 );
               })}
@@ -1488,63 +1406,130 @@ const OrderInbox = ({ onReedit }) => {
             {/* Orders Table Side */}
             <div style={{ flex: 1, minWidth: '300px', padding: '16px', overflowX: 'auto' }}>
               {viewPilotId && ordersByPilot[viewPilotId] ? (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-                  <thead>
-                    <tr style={{ textAlign: 'right', color: 'var(--text-muted)', borderBottom: '2px solid var(--border)' }}>
-                      <th style={{ padding: '10px 8px' }}>بون #</th>
-                      <th style={{ padding: '10px 8px' }}>العميل</th>
-                      <th style={{ padding: '10px 8px' }}>المنطقة</th>
-                      <th style={{ padding: '10px 8px' }}>الوقت بالخارج</th>
-                      <th style={{ padding: '10px 8px', textAlign: 'center' }}>إجراء</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <>
+                  {/* Desktop Table View */}
+                  <table className="desktop-trip-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <thead>
+                      <tr style={{ textAlign: 'right', color: 'var(--text-muted)', borderBottom: '2px solid var(--border)' }}>
+                        <th style={{ padding: '10px 8px' }}>بون #</th>
+                        <th style={{ padding: '10px 8px' }}>العميل</th>
+                        <th style={{ padding: '10px 8px' }}>المنطقة</th>
+                        <th style={{ padding: '10px 8px' }}>الوقت بالخارج</th>
+                        <th style={{ padding: '10px 8px', textAlign: 'center' }}>إجراء</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ordersByPilot[viewPilotId].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(order => {
+                        const elapsed = getElapsedMinutes(order.startTime || order.timestamp);
+                        const isDelayed = elapsed >= 40;
+
+                        return (
+                          <tr key={order.id} style={{ borderBottom: '1px solid var(--border)', background: isDelayed ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
+                            <td style={{ padding: '12px 8px' }}>
+                              <span style={{ fontWeight: '800', color: 'var(--primary)' }}>#{order.originalId || order.id}</span>
+                              <button onClick={() => onReedit(order)} style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', marginRight: '4px', opacity: 0.6 }} title="تعديل">✏️</button>
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <p style={{ fontWeight: 'bold', margin: '0 0 2px 0' }}>{order.customerName}</p>
+                              <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{order.total > 0 ? `${order.total} ج.م` : ''}</p>
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>{order.area}</td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <LiveElapsedBadge startTime={order.startTime} timestamp={order.timestamp} isOut={true} />
+                            </td>
+                            <td style={{ padding: '12px 8px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
+                                <button
+                                  onClick={() => completeOrder(order.id)}
+                                  style={{
+                                    padding: '6px 14px', background: 'var(--success)', border: 'none',
+                                    color: 'white', fontSize: '0.85rem', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer'
+                                  }}
+                                >
+                                  تسليم
+                                </button>
+                                <button
+                                  onClick={() => setFailModalOrder(order)}
+                                  style={{
+                                    padding: '6px 10px', background: 'transparent', border: '1px solid var(--danger)',
+                                    color: 'var(--danger)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
+                                  }}
+                                  title="تعذر التوصيل"
+                                >
+                                  ❌
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  {/* Mobile Trips Cards View (Visible on phones without horizontal scroll) */}
+                  <div className="mobile-trip-list">
                     {ordersByPilot[viewPilotId].sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp)).map(order => {
                       const elapsed = getElapsedMinutes(order.startTime || order.timestamp);
                       const isDelayed = elapsed >= 40;
-
                       return (
-                        <tr key={order.id} style={{ borderBottom: '1px solid var(--border)', background: isDelayed ? 'rgba(239, 68, 68, 0.06)' : 'transparent' }}>
-                          <td style={{ padding: '12px 8px' }}>
-                            <span style={{ fontWeight: '800', color: 'var(--primary)' }}>#{order.originalId || order.id}</span>
-                            <button onClick={() => onReedit(order)} style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', marginRight: '4px', opacity: 0.6 }} title="تعديل">✏️</button>
-                          </td>
-                          <td style={{ padding: '12px 8px' }}>
-                            <p style={{ fontWeight: 'bold', margin: '0 0 2px 0' }}>{order.customerName}</p>
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: 0 }}>{order.total > 0 ? `${order.total} ج.م` : ''}</p>
-                          </td>
-                          <td style={{ padding: '12px 8px' }}>{order.area}</td>
-                          <td style={{ padding: '12px 8px' }}>
-                            <LiveElapsedBadge startTime={order.startTime} timestamp={order.timestamp} isOut={true} />
-                          </td>
-                          <td style={{ padding: '12px 8px' }}>
-                            <div style={{ display: 'flex', justifyContent: 'center', gap: '6px' }}>
-                              <button
-                                onClick={() => completeOrder(order.id)}
-                                style={{
-                                  padding: '6px 14px', background: 'var(--success)', border: 'none',
-                                  color: 'white', fontSize: '0.85rem', fontWeight: 'bold', borderRadius: '8px', cursor: 'pointer'
-                                }}
-                              >
-                                تسليم
-                              </button>
-                              <button
-                                onClick={() => setFailModalOrder(order)}
-                                style={{
-                                  padding: '6px 10px', background: 'transparent', border: '1px solid var(--danger)',
-                                  color: 'var(--danger)', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold'
-                                }}
-                                title="تعذر التوصيل"
-                              >
-                                ❌
-                              </button>
+                        <div
+                          key={order.id}
+                          className="glass-card"
+                          style={{
+                            padding: '14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            background: isDelayed ? 'rgba(239, 68, 68, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                            borderRight: `4px solid ${isDelayed ? '#ef4444' : 'var(--primary)'}`
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span style={{ fontWeight: '900', color: 'var(--primary)', fontSize: '1.1rem' }}>
+                                #{order.originalId || order.id}
+                              </span>
+                              <button onClick={() => onReedit(order)} style={{ background: 'none', border: 'none', padding: '4px', cursor: 'pointer', opacity: 0.7 }} title="تعديل">✏️</button>
                             </div>
-                          </td>
-                        </tr>
+                            <LiveElapsedBadge startTime={order.startTime} timestamp={order.timestamp} isOut={true} />
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                            <div>
+                              <div style={{ fontWeight: '800', color: 'var(--text-main)', fontSize: '0.95rem' }}>{order.customerName}</div>
+                              <div style={{ color: 'var(--text-muted)', fontSize: '0.82rem', marginTop: '2px' }}>{order.area}</div>
+                            </div>
+                            {order.total > 0 && (
+                              <div style={{ fontWeight: '900', color: 'var(--accent)', fontSize: '1.05rem', whiteSpace: 'nowrap' }}>
+                                {order.total} ج.م
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                            <button
+                              onClick={() => completeOrder(order.id)}
+                              className="btn-primary"
+                              style={{ flex: 1, minHeight: '44px', background: 'var(--success)', fontWeight: '800' }}
+                            >
+                              <Check size={16} />
+                              <span>تم التسليم</span>
+                            </button>
+                            <button
+                              onClick={() => setFailModalOrder(order)}
+                              className="btn-danger-outline"
+                              style={{ minHeight: '44px', padding: '0 16px', fontWeight: 'bold' }}
+                              title="تعذر التوصيل"
+                            >
+                              <X size={16} />
+                              <span>تعذر</span>
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
-                  </tbody>
-                </table>
+                  </div>
+                </>
               ) : (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
                   {pilotsWithOrders.length > 0 ? 'الرجاء اختيار طيار لعرض طلباته النشطة' : 'لا توجد رحلات نشطة حالياً'}

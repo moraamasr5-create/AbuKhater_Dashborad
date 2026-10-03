@@ -474,7 +474,7 @@ const SettingsView = () => {
       </div>
 
       {/* Sub Tab Navigation */}
-      <div style={{ 
+      <div className="tab-strip" style={{ 
         display: 'flex', 
         gap: '8px', 
         marginBottom: '20px', 

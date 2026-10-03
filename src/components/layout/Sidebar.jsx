@@ -1,8 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Inbox, Users, BarChart3, Settings, Play, Square, PlusCircle, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Home, Inbox, Users, BarChart3, Settings, Play, Square, UtensilsCrossed, KeyRound, LogOut, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { safeGetItem } from '../../utils/safeStorage';
 
+// 🟢 مصدر واحد لعناصر التنقل (يستخدمه الشريط الجانبي والشريط السفلي والعنوان العلوي)
+// group: يحدد قسم العنصر في القائمة حسب النموذج الذهني للمستخدم
+export const NAV_ITEMS = [
+    { id: 'dashboard', label: 'الرئيسية', short: 'الرئيسية', icon: Home, roles: ['admin', 'casher'], group: null },
+    { id: 'inbox', label: 'الطلبات', short: 'الطلبات', icon: Inbox, roles: ['admin', 'casher', 'driver'], group: 'التشغيل' },
+    { id: 'pilots', label: 'الطيارين والورديات', short: 'الطيارين', icon: Users, roles: ['admin', 'casher'], group: 'التشغيل' },
+    { id: 'reservations', label: 'حجز مطعم / كافيه', short: 'الحجوزات', icon: UtensilsCrossed, roles: ['casher'], group: 'الإدارة' },
+    { id: 'feedback', label: 'الشكاوى والمقترحات', short: 'الشكاوى', icon: MessageSquare, roles: ['admin'], group: 'الإدارة' },
+    { id: 'reports', label: 'التقارير والأرباح', short: 'التقارير', icon: BarChart3, roles: ['admin'], group: 'التقارير' },
+    { id: 'settings', label: 'الإعدادات والأسعار', short: 'الإعدادات', icon: Settings, roles: ['admin'], group: 'النظام' },
+];
+
+// عدد الطلبات التي تحتاج إجراء (نفس المنطق السابق لشارة صندوق الوارد)
+export const getActionCount = (orders) =>
+    orders.filter(o => ['pending', 'pending_timer', 'waiting_driver'].includes(o.status)).length;
 
 const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenSecurity }) => {
     const { isShiftOpen, openShift, closeShift, orders, userRole, logoutStaff, currentStaff } = useApp();
@@ -21,129 +36,70 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
         };
     }, []);
 
-    const pendingCount = orders.filter(o => ['pending', 'pending_timer', 'waiting_driver'].includes(o.status)).length;
+    const pendingCount = getActionCount(orders);
 
     // 🟢 تصفية القائمة بناءً على صلاحيات المستخدم
-    const allMenuItems = [
-        { id: 'dashboard', label: 'الرئيسية', icon: Home, roles: ['admin', 'casher'] },
-        { id: 'inbox', label: 'صندوق الوارد', icon: Inbox, roles: ['admin', 'casher', 'driver'] },
-        { id: 'pilots', label: 'إدارة الطيارين', icon: Users, roles: ['admin', 'casher'] },
-        { id: 'reservations', label: 'حجز مطعم / كافيه', icon: UtensilsCrossed, roles: ['casher'], special: true },
-        { id: 'feedback', label: 'الشكاوى والمقترحات', icon: MessageSquare, roles: ['admin'] },
-        { id: 'reports', label: 'التقارير والأرباح', icon: BarChart3, roles: ['admin'] },
-        { id: 'settings', label: 'الإعدادات والأسعار', icon: Settings, roles: ['admin'] },
-    ];
+    const menuItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
+    let lastGroup = null;
 
-    const menuItems = allMenuItems.filter(item => item.roles.includes(userRole));
+    const roleLabel = userRole === 'admin' ? 'مشرف النظام' : userRole === 'driver' ? 'كابتن التوصيل' : 'الكاشير';
 
     return (
-        <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
-            {/* Header Brand */}
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '24px', textAlign: 'center' }}>
+        <nav className={`sidebar ${isSidebarOpen ? 'open' : ''}`} aria-label="القائمة الرئيسية">
+            {/* Header Brand — مضغوط */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px', padding: '0 4px' }}>
                 <div style={{
-                    width: '74px', height: '74px', borderRadius: '50%', overflow: 'hidden',
-                    border: `2px solid ${userRole === 'admin' ? '#6366f1' : '#10b981'}`,
-                    background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.3)'
+                    width: '44px', height: '44px', borderRadius: '50%', overflow: 'hidden', flexShrink: 0,
+                    background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'
                 }}>
                     <img src="/logo.png" alt="Abu Khater" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                 </div>
-                <h2 style={{ fontSize: '1.15rem', fontWeight: '900', margin: 0, color: 'var(--text-main)' }}>نظام توصيل أبو خاطر</h2>
-
-                {/* Staff Role Pill */}
-                <div
-                    style={{
-                        background: userRole === 'admin' ? 'rgba(99, 102, 241, 0.12)' : userRole === 'driver' ? 'rgba(245, 158, 11, 0.12)' : 'rgba(16, 185, 129, 0.12)',
-                        color: userRole === 'admin' ? '#818cf8' : userRole === 'driver' ? '#fbbf24' : '#34d399',
-                        border: `1px solid ${userRole === 'admin' ? '#6366f1' : userRole === 'driver' ? '#f59e0b' : '#10b981'}40`,
-                        padding: '4px 14px',
-                        borderRadius: '20px',
-                        fontSize: '0.78rem',
-                        fontWeight: '800',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '2px'
-                    }}
-                >
-                    <span>
-                        {userRole === 'admin' ? '👑 مشرف النظام (Admin)' : userRole === 'driver' ? '🛵 كابتن التوصيل (Driver)' : '👤 الكاشير (Casher)'}
-                    </span>
-                    {currentStaff?.display_name && (
-                        <span style={{ fontSize: '0.7rem', opacity: 0.85, fontWeight: 'normal' }}>
-                            {currentStaff.display_name}
-                        </span>
-                    )}
+                <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '0.95rem', fontWeight: '900', color: 'var(--text-main)' }}>توصيل أبو خاطر</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {roleLabel}{currentStaff?.display_name ? ` • ${currentStaff.display_name}` : ''}
+                    </div>
                 </div>
             </div>
 
-            {/* Navigation Menu */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+            {/* Navigation Menu — مقسمة لمجموعات */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
                 {menuItems.map(item => {
                     const isActive = activeTab === item.id;
+                    const showGroup = item.group && item.group !== lastGroup;
+                    lastGroup = item.group;
                     return (
-                        <button
-                            key={item.id}
-                            onClick={() => {
-                                setActiveTab(item.id);
-                                closeSidebar();
-                            }}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '12px',
-                                padding: '12px 14px',
-                                borderRadius: '10px',
-                                border: isActive ? '1px solid rgba(255,255,255,0.15)' : '1px solid transparent',
-                                background: isActive ? 'var(--primary)' : 'transparent',
-                                color: isActive ? '#fff' : 'var(--text-muted)',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                                textAlign: 'right',
-                                fontWeight: isActive ? '800' : '600',
-                                fontSize: '0.9rem',
-                                minHeight: '44px',
-                                boxShadow: isActive ? '0 4px 14px rgba(99, 102, 241, 0.35)' : 'none'
-                            }}
-                        >
-                            <item.icon size={19} />
-                            <span style={{ flex: 1 }}>{item.label}</span>
-                            {item.id === 'inbox' && pendingCount > 0 && (
-                                <div style={{
-                                    background: '#ef4444',
-                                    color: 'white',
-                                    fontSize: '0.72rem',
-                                    fontWeight: '900',
-                                    padding: '2px 8px',
-                                    borderRadius: '10px',
-                                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.4)'
-                                }}>
-                                    {pendingCount}
-                                </div>
-                            )}
-                            {item.special && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#8b5cf6' }}></div>}
-                        </button>
+                        <React.Fragment key={item.id}>
+                            {showGroup && <div className="nav-group-label">{item.group}</div>}
+                            <button
+                                type="button"
+                                aria-current={isActive ? 'page' : undefined}
+                                className={`nav-item ${isActive ? 'is-active' : ''}`}
+                                onClick={() => {
+                                    setActiveTab(item.id);
+                                    closeSidebar();
+                                }}
+                            >
+                                <item.icon size={19} />
+                                <span style={{ flex: 1 }}>{item.label}</span>
+                                {item.id === 'inbox' && pendingCount > 0 && (
+                                    <span className="nav-count" aria-label={`${pendingCount} طلب يحتاج إجراء`}>{pendingCount}</span>
+                                )}
+                            </button>
+                        </React.Fragment>
                     );
                 })}
             </div>
 
-            {/* 🌐 Network Status Indicator */}
+            {/* 🌐 Network Status Indicator — مضغوط */}
             <div style={{
                 display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '8px 12px', borderRadius: '10px',
-                background: isOnline ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)',
-                border: `1px solid ${isOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}`,
-                fontSize: '0.78rem', fontWeight: '700',
+                padding: '6px 12px', fontSize: '0.78rem', fontWeight: '700',
                 color: isOnline ? '#34d399' : '#f87171',
-                margin: '12px 0 8px 0'
+                margin: '12px 0 4px 0'
             }}>
                 {isOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
                 <span>{isOnline ? 'متصل بالإنترنت' : 'وضع بدون إنترنت'}</span>
-                <div style={{
-                    marginRight: 'auto', width: '7px', height: '7px', borderRadius: '50%',
-                    background: isOnline ? '#10b981' : '#ef4444',
-                    boxShadow: isOnline ? '0 0 6px #10b981' : '0 0 6px #ef4444'
-                }} />
             </div>
 
             {/* Shift & Bottom Actions */}
@@ -212,6 +168,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                                 flexShrink: 0
                             }}
                             title="إعدادات الأمان"
+                            aria-label="إعدادات الأمان"
                         >
                             <KeyRound size={17} color="var(--accent)" />
                         </button>
@@ -220,7 +177,7 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
             </div>
 
             {/* In-App Close Shift Confirmation Modal */}
-            {showCloseShiftConfirm && (
+            {showCloseShiftConfirm && createPortal((
                 <div style={{
                     position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -258,8 +215,8 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar, onOpenS
                         </div>
                     </div>
                 </div>
-            )}
-        </div>
+            ), document.body)}
+        </nav>
     );
 };
 
