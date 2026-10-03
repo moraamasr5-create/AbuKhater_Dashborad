@@ -2190,7 +2190,7 @@ const CreateOrderMenu = ({ onSelect, disabled }) => {
         }}
       >
         <Plus size={18} />
-        <span className="create-label">طلب جديد</span>
+        <span className="create-label">طلب محلي</span>
         <ChevronDown size={16} />
       </button>
       {open && (
@@ -2376,7 +2376,7 @@ function App() {
               title={isShiftOpen && currentShift?.date ? `الوردية: ${currentShift.date}` : undefined}
             >
               <span className="dot" aria-hidden="true" />
-              <span>{isShiftOpen ? '✅' : '❎'}</span>
+              <span>{isShiftOpen ? ' ' : ' '}</span>
             </span>
           )}
 
