@@ -2357,14 +2357,103 @@ function App() {
             </span>
           )}
 
-          {/* 🔴 إنشاء طلب - مسموح للكاشير فقط أثناء الوردية */}
-          {isShiftOpen && userRole === 'casher' && (
+          {/* 🔴 إنشاء طلب - مسموح للكاشير والأدمن أثناء الوردية */}
+          {isShiftOpen && (userRole === 'casher' || userRole === 'admin') && (
             <CreateOrderMenu onSelect={(modal) => setActiveModal(modal)} />
           )}
         </div>
 
         <div className="app-container">
           <ConnectionBanner />
+
+          {/* 🔴 أزرار الطلبات اليدوية الثلاثة */}
+          {(userRole === 'casher' || userRole === 'admin') && (
+            <div className="flex flex-wrap" style={{ marginBottom: '20px', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isShiftOpen) {
+                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
+                    return;
+                  }
+                  setActiveModal('manual');
+                }}
+                className="btn-primary hover-scale"
+                style={{
+                  flex: '1 1 180px',
+                  minHeight: '48px',
+                  justifyContent: 'center',
+                  color: '#000',
+                  background: '#22c55e',
+                  boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)',
+                  fontWeight: '800',
+                  fontSize: '0.98rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  opacity: !isShiftOpen ? 0.6 : 1
+                }}
+              >
+                <Plus size={20} />
+                <span>أوردر المطبخ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isShiftOpen) {
+                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
+                    return;
+                  }
+                  setActiveModal('external');
+                }}
+                className="btn-primary hover-scale"
+                style={{
+                  flex: '1 1 180px',
+                  minHeight: '48px',
+                  justifyContent: 'center',
+                  color: '#000',
+                  background: '#f97316',
+                  boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
+                  fontWeight: '800',
+                  fontSize: '0.98rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  opacity: !isShiftOpen ? 0.6 : 1
+                }}
+              >
+                <Plus size={20} />
+                <span>أوردر خارجي</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isShiftOpen) {
+                    toast('يرجى فتح الوردية أولاً لإنشاء طلبات', 'warning');
+                    return;
+                  }
+                  setActiveModal('trip');
+                }}
+                className="btn-primary hover-scale"
+                style={{
+                  flex: '1 1 180px',
+                  minHeight: '48px',
+                  justifyContent: 'center',
+                  color: '#000',
+                  background: '#ef4444',
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.35)',
+                  fontWeight: '800',
+                  fontSize: '0.98rem',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  opacity: !isShiftOpen ? 0.6 : 1
+                }}
+              >
+                <Plus size={20} />
+                <span>مشوار خاص</span>
+              </button>
+            </div>
+          )}
 
           {activeModal === 'manual' && <ManualOrderForm onClose={handleCloseModal} initialData={reeditData} />}
           {activeModal === 'external' && <ExternalOrderForm onClose={handleCloseModal} initialData={reeditData} />}
