@@ -1677,81 +1677,185 @@ const ReservationCard = ({ res, onConfirm, onDelete, onPreviewProof }) => {
   const existingProof = res.paymentProof || res.payment_proof_url;
   const { signedUrl } = useSignedReceiptUrl(existingProof);
   const displayProof = (existingProof && existingProof.startsWith('data:')) ? existingProof : signedUrl;
+  const isConfirmed = res.status === 'confirmed';
 
   return (
-    <div className="glass-card" style={{ borderTop: `4px solid ${res.status === 'confirmed' ? '#10b981' : '#8b5cf6'}` }}>
-      <div className="flex" style={{ justifyContent: 'space-between', marginBottom: '12px' }}>
-        <span style={{ fontSize: '0.8rem', opacity: 0.6 }}>{res.id}</span>
-        <span style={{ padding: '4px 10px', borderRadius: '12px', fontSize: '0.8rem', fontWeight: 'bold', background: res.status === 'confirmed' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(245, 158, 11, 0.2)', color: res.status === 'confirmed' ? '#10b981' : '#f59e0b' }}>
-          {res.status === 'confirmed' ? 'مؤكد' : 'معلق'}
-        </span>
-      </div>
-      <h3 style={{ margin: '0 0 4px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {res.customerName}
-        <span style={{ fontSize: '0.7rem', background: 'var(--primary)', color: 'white', padding: '2px 6px', borderRadius: '4px' }}>
-          {res.locationType === 'cafe' ? 'كافيه' : 'مطعم'}
-        </span>
-      </h3>
-      <p style={{ color: 'var(--accent)', fontWeight: 'bold', margin: '0 0 12px 0' }}>{res.phone}</p>
-
-      <div className="grid-2" style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '12px', marginBottom: '12px', gap: '8px' }}>
-        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>التاريخ</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.date}</div></div>
-        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الوقت</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.time}</div></div>
-        <div><label style={{ fontSize: '0.7rem', opacity: 0.6 }}>الأفراد</label><div style={{ fontSize: '0.9rem', fontWeight: 'bold' }}>{res.guests}</div></div>
-      </div>
-
-      {res.notes && (
-        <div style={{ background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '12px' }}>
-          <strong>ملاحظات:</strong> {res.notes}
+    <div
+      className="glass-card hover-scale"
+      style={{
+        padding: '18px 20px',
+        borderTop: `4px solid ${isConfirmed ? '#10b981' : '#8b5cf6'}`,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+        gap: '12px',
+        width: '100%',
+        boxSizing: 'border-box'
+      }}
+    >
+      <div>
+        {/* Header: ID + Status Pill */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontWeight: 'bold' }}>#{res.id}</span>
+          <StatusBadge tone={isConfirmed ? 'success' : 'warning'}>
+            {isConfirmed ? 'مؤكد ✅' : 'معلق ⏳'}
+          </StatusBadge>
         </div>
-      )}
 
-      {existingProof && (
-        <div style={{ marginBottom: '12px', border: '1px dashed var(--border)', padding: '8px', borderRadius: '8px', textAlign: 'center', background: 'rgba(255,255,255,0.02)' }}>
-          {displayProof ? (
-            <img
-              src={displayProof}
-              alt="إثبات الدفع"
-              style={{ width: '100%', height: '90px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
-              onClick={() => onPreviewProof(displayProof)}
-            />
-          ) : (
-            <div style={{ height: '90px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
-              ⏳ جاري تجهيز رابط الإيصال الآمن...
-            </div>
-          )}
-          <div
-            style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '6px', cursor: displayProof ? 'pointer' : 'default' }}
-            onClick={() => displayProof && onPreviewProof(displayProof)}
+        {/* Customer & Location */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '6px' }}>
+          <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: '800', color: 'var(--text-main)' }}>
+            {res.customerName}
+          </h3>
+          <span style={{
+            fontSize: '0.72rem',
+            background: 'rgba(99, 102, 241, 0.15)',
+            color: '#a5b4fc',
+            border: '1px solid rgba(99, 102, 241, 0.3)',
+            padding: '2px 8px',
+            borderRadius: '6px',
+            fontWeight: 'bold'
+          }}>
+            {res.locationType === 'cafe' ? 'كافيه ☕' : 'مطعم 🍽️'}
+          </span>
+        </div>
+
+        {/* Direct Phone */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+          <a
+            href={`tel:${res.phone}`}
+            style={{
+              color: '#60a5fa',
+              fontSize: '0.84rem',
+              fontWeight: 'bold',
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              background: 'rgba(59, 130, 246, 0.1)',
+              padding: '3px 8px',
+              borderRadius: '6px'
+            }}
+            title="اتصال بالعميل"
           >
-            🔍 انقر لتكبير صورة التحويل
+            <Phone size={13} />
+            <span>{res.phone}</span>
+          </a>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(res.phone);
+              toast('تم نسخ رقم هاتف الحجز بنجاح 📋');
+            }}
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: 'none',
+              cursor: 'pointer',
+              padding: '3px 8px',
+              borderRadius: '6px',
+              fontSize: '0.75rem',
+              color: 'var(--text-dim)'
+            }}
+            title="نسخ الرقم"
+          >
+            نسخ
+          </button>
+        </div>
+
+        {/* Reservation Metadata (3 Balanced Columns) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          background: 'rgba(0, 0, 0, 0.25)',
+          padding: '10px',
+          borderRadius: '10px',
+          marginBottom: '10px',
+          gap: '6px',
+          textAlign: 'center',
+          border: '1px solid var(--border)'
+        }}>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: 'var(--text-dim)', display: 'block' }}>التاريخ</label>
+            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>{res.date}</div>
+          </div>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: 'var(--text-dim)', display: 'block' }}>الوقت</label>
+            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--text-main)', marginTop: '2px' }}>{res.time}</div>
+          </div>
+          <div>
+            <label style={{ fontSize: '0.7rem', color: 'var(--text-dim)', display: 'block' }}>الأفراد</label>
+            <div style={{ fontSize: '0.85rem', fontWeight: '800', color: 'var(--accent)', marginTop: '2px' }}>{res.guests} فرد</div>
           </div>
         </div>
-      )}
 
-      <div className="flex" style={{ gap: '10px', marginTop: '16px' }}>
+        {/* Deposit info if available */}
+        {Number(res.deposit) > 0 && (
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: '0.82rem',
+            padding: '6px 10px',
+            background: 'rgba(16, 185, 129, 0.08)',
+            border: '1px solid rgba(16, 185, 129, 0.2)',
+            borderRadius: '8px',
+            marginBottom: '10px'
+          }}>
+            <span style={{ color: 'var(--text-muted)' }}>قيمة العربون:</span>
+            <strong style={{ color: '#34d399' }}>{res.deposit} ج.م</strong>
+          </div>
+        )}
+
+        {/* Notes */}
+        {res.notes && (
+          <div style={{ background: 'rgba(255,255,255,0.03)', padding: '8px 10px', borderRadius: '8px', fontSize: '0.82rem', color: 'var(--text-muted)', marginBottom: '10px' }}>
+            <strong style={{ color: 'var(--text-main)' }}>ملاحظات:</strong> {res.notes}
+          </div>
+        )}
+
+        {/* Payment Proof Thumbnail */}
+        {existingProof && (
+          <div style={{ marginBottom: '10px', border: '1px dashed var(--border)', padding: '8px', borderRadius: '8px', textAlign: 'center', background: 'rgba(0,0,0,0.2)' }}>
+            {displayProof ? (
+              <img
+                src={displayProof}
+                alt="إثبات الدفع"
+                style={{ width: '100%', height: '80px', objectFit: 'cover', borderRadius: '6px', cursor: 'pointer', border: '1px solid rgba(255,255,255,0.1)' }}
+                onClick={() => onPreviewProof(displayProof)}
+              />
+            ) : (
+              <div style={{ height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '0.8rem' }}>
+                ⏳ جاري تجهيز رابط الإيصال...
+              </div>
+            )}
+            <div
+              style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', cursor: displayProof ? 'pointer' : 'default' }}
+              onClick={() => displayProof && onPreviewProof(displayProof)}
+            >
+              🔍 انقر لتكبير صورة التحويل
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
         {res.status === 'pending' && (
           <button
             onClick={() => onConfirm(res)}
-            className="btn-primary"
-            style={{ flex: 1, minHeight: '44px', background: 'var(--success)', justifyContent: 'center' }}
+            className="btn-success"
+            style={{ flex: 1, minHeight: '40px', justifyContent: 'center' }}
           >
-            تأكيد
+            تأكيد الحجز
           </button>
         )}
         <button
-          onClick={() => { if (window.confirm('هل أنت متأكد من حذف الحجز؟')) onDelete(res.id); }}
+          onClick={() => { if (window.confirm('هل أنت متأكد من حذف هذا الحجز نهائياً؟')) onDelete(res.id); }}
+          className="btn-danger-outline"
           style={{
-            flex: res.status === 'pending' ? 1 : 'none',
-            width: res.status === 'pending' ? 'auto' : '100%',
-            minHeight: '44px',
-            background: 'rgba(239, 68, 68, 0.1)',
-            color: 'var(--danger)',
-            border: '1px solid var(--danger)',
-            padding: '10px',
-            borderRadius: '12px',
-            fontWeight: 'bold',
-            cursor: 'pointer'
+            flex: res.status === 'pending' ? 0.6 : 1,
+            minHeight: '40px',
+            justifyContent: 'center'
           }}
         >
           حذف
@@ -1768,7 +1872,7 @@ const ReservationView = () => {
   const [previewProofUrl, setPreviewProofUrl] = useState(null);
 
   return (
-    <div className="grid" style={{ gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {showModal && <ReservationModal onClose={() => setShowModal(false)} />}
       {confirmingRes && <ConfirmPaymentModal res={confirmingRes} onClose={() => setConfirmingRes(null)} />}
 
@@ -1830,8 +1934,8 @@ const ReservationView = () => {
       )}
 
       <PageHeader
-        title="الحجوزات"
-        subtitle="إدارة طاولات المطعم وتأكيد العربون"
+        title="حجوزات المطعم والكافيه"
+        subtitle="إدارة طاولات المطعم وتأكيد العربون وإيصالات التحويل"
         actions={
           <button
             onClick={() => setShowModal(true)}
@@ -1846,21 +1950,26 @@ const ReservationView = () => {
 
       {reservations.length === 0 ? (
         <EmptyState
-          icon={UtensilsCrossed}
+          icon={<UtensilsCrossed size={48} />}
           title="لا توجد أي حجوزات مسجلة"
-          description="يمكنك إنشاء حجز جديد أو متابعة طلبات الحجز القادمة من موقع المطعم."
+          hint="يمكنك إنشاء حجز جديد أو متابعة طلبات الحجز القادمة من موقع المطعم."
           action={
             <button
               onClick={() => setShowModal(true)}
               className="btn-primary"
-              style={{ minHeight: '44px', padding: '10px 18px', background: '#8b5cf6' }}
+              style={{ minHeight: '44px', padding: '10px 18px', background: '#8b5cf6', marginTop: '12px' }}
             >
               <PlusCircle size={18} /> حجز طاولة جديد
             </button>
           }
         />
       ) : (
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 360px))',
+          gap: '16px',
+          alignItems: 'start'
+        }}>
           {reservations.map(res => (
             <ReservationCard
               key={res.id}
