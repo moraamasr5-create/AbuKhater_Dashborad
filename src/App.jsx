@@ -524,18 +524,14 @@ const PilotManagement = () => {
                 <button
                   type="button"
                   onClick={() => handleToggleShiftClick(pilot)}
-                  className="btn-primary"
+                  className={isOpen ? 'btn-danger-outline' : 'btn-success'}
                   style={{
                     width: '100%',
                     minHeight: '44px',
-                    justifyContent: 'center',
-                    background: isOpen ? 'rgba(239, 68, 68, 0.15)' : 'var(--accent)',
-                    color: isOpen ? 'var(--danger)' : '#000',
-                    border: `1px solid ${isOpen ? 'rgba(239, 68, 68, 0.3)' : 'var(--accent)'}`,
-                    fontWeight: '800'
+                    justifyContent: 'center'
                   }}
                 >
-                  {isOpen ? 'إغلاق الشيفت' : 'فتح الشيفت 🟢'}
+                  {isOpen ? 'إغلاق الوردية' : 'فتح الوردية 🟢'}
                 </button>
 
                 {/* Level 3: Details & Governance via Disclosure */}
@@ -801,56 +797,101 @@ const DashboardView = ({ onNavigate }) => {
   const completedCount = useMemo(() => orders.filter(o => o.status === 'completed' || o.status === 'delivered').length, [orders]);
   const cancelledCount = useMemo(() => orders.filter(o => o.status === 'cancelled' || o.status === 'failed_delivery').length, [orders]);
 
-  // صفوف "يحتاج انتباهك" — كل صف: ماذا يحدث + الإجراء التالي (Memoized)
+  // صفوف "يحتاج انتباهك" — كل صف: ماذا يحدث + الإجراء التالي مع أولوية بصرية محددة (Memoized)
   const attentionRows = useMemo(() => [
-    pendingOrders.length > 0 && {
-      key: 'pending', tone: 'warning', icon: <AlertCircle size={20} />,
-      title: `${pendingOrders.length} طلب جديد بانتظار القبول`,
-      hint: 'راجع الطلب ثم أرسله للمطبخ',
-      action: 'مراجعة الطلبات', actionIcon: <Check size={18} />
-    },
     delayedOrders.length > 0 && {
-      key: 'delayed', tone: 'danger', icon: <Clock size={20} />,
+      key: 'delayed', priority: 'P0', tone: 'danger', icon: <Clock size={20} />,
       title: `${delayedOrders.length} طلب متأخر (أكثر من 30 دقيقة)`,
       hint: `${delayedOrders.map(o => `#${o.originalId || o.id}`).slice(0, 4).join('، ')}${delayedOrders.length > 4 ? ' …' : ''}`,
-      action: 'متابعة المتأخر', actionIcon: <Clock size={18} />
+      action: 'متابعة المتأخر', actionIcon: <Clock size={18} />,
+      btnClass: 'btn-danger'
+    },
+    pendingOrders.length > 0 && {
+      key: 'pending', priority: 'P1', tone: 'warning', icon: <AlertCircle size={20} />,
+      title: `${pendingOrders.length} طلب جديد بانتظار القبول`,
+      hint: 'راجع تفاصيل الطلب ثم أرسله للمطبخ فوراً',
+      action: 'مراجعة الطلبات', actionIcon: <Check size={18} />,
+      btnClass: 'btn-warning'
     },
     waitingOrders.length > 0 && {
-      key: 'waiting', tone: 'info', icon: <UserPlus size={20} />,
-      title: `${waitingOrders.length} طلب جاهز بانتظار طيار`,
+      key: 'waiting', priority: 'P1', tone: 'info', icon: <UserPlus size={20} />,
+      title: `${waitingOrders.length} طلب جاهز بانتظار إسناد طيار`,
       hint: suggestedPilot
-        ? `المقترح بالدور: ${suggestedPilot.name}`
-        : 'لا يوجد طيار متاح — افتح وردية طيار أو انتظر عودة طيار',
-      action: 'إسناد طيار', actionIcon: <UserPlus size={18} />
+        ? `الطيار المقترح بالدور: ${suggestedPilot.name}`
+        : 'لا يوجد طيار متاح — افتح وردية طيار أو انتظر عودة طيار بالخارج',
+      action: 'إسناد طيار', actionIcon: <UserPlus size={18} />,
+      btnClass: 'btn-primary'
     },
     readyPickupOrders.length > 0 && {
-      key: 'ready_pickup', tone: 'info', icon: <Package size={20} />,
-      title: `${readyPickupOrders.length} طلب جاهز للاستلام بالفرع`,
-      hint: 'العميل يمكنه استلام طلبه الآن من المطعم',
-      action: 'تسليم العميل', actionIcon: <Check size={18} />
+      key: 'ready_pickup', priority: 'P1', tone: 'success', icon: <Package size={20} />,
+      title: `${readyPickupOrders.length} طلب جاهز للاستلام بالصالة`,
+      hint: 'طلب تيك أواي جاهز بالمطعم بانتظار تسليمه للعميل',
+      action: 'تسليم العميل', actionIcon: <Check size={18} />,
+      btnClass: 'btn-success'
     }
-  ].filter(Boolean), [pendingOrders, delayedOrders, waitingOrders, readyPickupOrders, suggestedPilot]);
+  ].filter(Boolean), [delayedOrders, pendingOrders, waitingOrders, readyPickupOrders, suggestedPilot]);
 
-  const toneColor = { warning: '#f59e0b', danger: '#ef4444', info: '#3b82f6' };
+  const toneBorderColor = {
+    danger: 'rgba(239, 68, 68, 0.8)',
+    warning: 'rgba(245, 158, 11, 0.8)',
+    info: 'rgba(59, 130, 246, 0.8)',
+    success: 'rgba(16, 185, 129, 0.8)'
+  };
 
   const kpis = useMemo(() => [
-    { id: 'action', label: 'تحتاج إجراء', value: pendingOrders.length + waitingOrders.length + readyPickupOrders.length, color: (pendingOrders.length + waitingOrders.length + readyPickupOrders.length) > 0 ? '#fbbf24' : 'var(--text-main)', icon: <AlertCircle size={15} />, nav: 'inbox' },
-    { id: 'active', label: 'في الطريق', value: activeOrders.length, color: '#93c5fd', icon: <MapPin size={15} />, nav: 'inbox' },
-    { id: 'pilots', label: 'طيار متاح', value: availablePilots.length, color: availablePilots.length > 0 ? '#34d399' : '#f87171', icon: <Bike size={15} />, nav: 'pilots' },
-    { id: 'today', label: 'طلبات اليوم', value: orders.length, color: 'var(--text-main)', icon: <Package size={15} />, nav: null },
+    {
+      id: 'action',
+      label: 'تحتاج إجراء',
+      value: pendingOrders.length + waitingOrders.length + readyPickupOrders.length,
+      color: (pendingOrders.length + waitingOrders.length + readyPickupOrders.length) > 0 ? '#fbbf24' : 'var(--text-main)',
+      icon: <AlertCircle size={16} />,
+      nav: 'inbox'
+    },
+    {
+      id: 'active',
+      label: 'في الطريق',
+      value: activeOrders.length,
+      color: '#93c5fd',
+      icon: <MapPin size={16} />,
+      nav: 'inbox'
+    },
+    {
+      id: 'pilots',
+      label: 'طيار متاح',
+      value: availablePilots.length,
+      color: availablePilots.length > 0 ? '#34d399' : '#f87171',
+      icon: <Bike size={16} />,
+      nav: 'pilots'
+    },
+    {
+      id: 'today',
+      label: 'طلبات اليوم',
+      value: orders.length,
+      color: 'var(--text-main)',
+      icon: <Package size={16} />,
+      nav: null
+    },
   ], [pendingOrders.length, waitingOrders.length, readyPickupOrders.length, activeOrders.length, availablePilots.length, orders.length]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* 🟥 الوردية مغلقة: الإجراء الأول الواضح */}
+      {/* 🟥 تنبيه الوردية مغلقة (P0 Action) */}
       {!isShiftOpen && (userRole === 'admin' || userRole === 'casher') && (
-        <div className="glass-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap', borderRight: '4px solid var(--danger)' }}>
+        <div className="glass-card" style={{
+          padding: '16px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '14px',
+          flexWrap: 'wrap',
+          borderRight: '4px solid var(--danger)',
+          background: 'rgba(239, 68, 68, 0.06)'
+        }}>
           <AlertTriangle size={22} color="#f87171" />
           <div style={{ flex: '1 1 220px' }}>
-            <div style={{ fontWeight: 800 }}>الوردية مغلقة</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>افتح الوردية لبدء استقبال الطلبات وإسنادها.</div>
+            <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>الوردية مغلقة حالياً</div>
+            <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)' }}>افتح الوردية لبدء استقبال الطلبات وتوزيعها على الطيارين.</div>
           </div>
-          <button onClick={() => openShift()} className="btn-primary" style={{ background: 'var(--accent)', color: '#000', fontWeight: 800 }}>
+          <button onClick={() => openShift()} className="btn-success">
             <span>فتح وردية جديدة</span>
           </button>
         </div>
@@ -866,27 +907,32 @@ const DashboardView = ({ onNavigate }) => {
         />
 
         {hasUrgentIssues ? (
-          <div className="glass-card" style={{ padding: '4px 0', overflow: 'hidden' }}>
+          <div className="glass-card" style={{ padding: '0', overflow: 'hidden' }}>
             {attentionRows.map((row, idx) => (
               <div
                 key={row.key}
                 className={row.key === 'delayed' ? 'pulse-urgent' : ''}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap',
-                  padding: '14px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  flexWrap: 'wrap',
+                  padding: '14px 20px',
                   borderTop: idx > 0 ? '1px solid var(--border)' : 'none',
-                  borderRight: `4px solid ${toneColor[row.tone]}`
+                  borderRight: `4px solid ${toneBorderColor[row.tone] || 'var(--border)'}`,
+                  background: row.key === 'delayed' ? 'rgba(239, 68, 68, 0.04)' : 'transparent'
                 }}
               >
-                <span style={{ color: toneColor[row.tone], display: 'flex' }}>{row.icon}</span>
+                <span style={{ color: toneBorderColor[row.tone] || 'var(--text-main)', display: 'flex', flexShrink: 0 }}>
+                  {row.icon}
+                </span>
                 <div style={{ flex: '1 1 200px', minWidth: 0 }}>
-                  <div style={{ fontWeight: 800, fontSize: '0.98rem' }}>{row.title}</div>
-                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>{row.hint}</div>
+                  <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--text-main)' }}>{row.title}</div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>{row.hint}</div>
                 </div>
                 <button
                   onClick={() => onNavigate && onNavigate('inbox')}
-                  className="btn-primary"
-                  style={{ background: toneColor[row.tone], color: row.tone === 'warning' ? '#000' : '#fff', fontWeight: 800 }}
+                  className={row.btnClass || 'btn-primary'}
                 >
                   {row.actionIcon}
                   <span>{row.action}</span>
@@ -895,27 +941,37 @@ const DashboardView = ({ onNavigate }) => {
             ))}
           </div>
         ) : (
-          /* Calm Empty State */
+          /* Calm Empty State (عندما لا توجد مشكلة) */
           <div className="glass-card" style={{ padding: '18px 20px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <span style={{ width: '40px', height: '40px', borderRadius: '12px', background: 'var(--accent-light)', color: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <span style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: 'var(--accent-light)',
+              color: 'var(--accent)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
               <Check size={22} />
             </span>
             <div style={{ flex: '1 1 220px' }}>
-              <div style={{ fontWeight: 800, color: '#34d399' }}>كـل شـيئ بخـير لا يوجد طلب مهمل.</div>
-              <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>  لا يوجد ما يحتاج إجراء الآن .</div>
+              <div style={{ fontWeight: 800, color: '#34d399', fontSize: '0.98rem' }}>كل شيء يعمل بانتظام — لا توجد طلبات مهملة</div>
+              <div style={{ fontSize: '0.84rem', color: 'var(--text-muted)', marginTop: '2px' }}>جميع العمليات والطلبات مسندة ومحدثة بالكامل.</div>
             </div>
             <button onClick={() => onNavigate && onNavigate('inbox')} className="btn-secondary">
-              عرض الطلبات
+              عرض صندوق الطلبات
             </button>
           </div>
         )}
       </section>
 
       {/* ============================================================ */}
-      {/* 📊 المستوى الثاني: ماذا يحدث الآن؟ (4 مؤشرات فقط)            */}
+      {/* 📊 المستوى الثاني: ماذا يحدث الآن؟ (4 مؤشرات تشغيلية)          */}
       {/* ============================================================ */}
       <section aria-label="الوضع التشغيلي">
-        <SectionHeader icon={<Bike size={20} color="var(--primary)" />} title="الوضع الحالي" />
+        <SectionHeader icon={<Bike size={20} color="var(--primary)" />} title="الوضع التشغيلي اللحظي" />
         <div className="kpi-grid">
           {kpis.map(k => {
             const content = (
@@ -937,19 +993,19 @@ const DashboardView = ({ onNavigate }) => {
         {/* 📈 المستوى الثالث: تفاصيل عند الطلب */}
         <Disclosure
           className="glass-card"
-          title="اخر الاخبار"
+          title="ملخص النشاط وحالة التشغيل"
           icon={<BarChart3 size={16} color="var(--text-muted)" />}
         >
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px', marginTop: '4px' }}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.95rem' }}>نظام الطيارين</div>
-              <div className="kv-row"><span>متاح بالمطعم</span><strong>{availablePilots.length}</strong></div>
-              <div className="kv-row"><span>في رحلات توصيل</span><strong>{onDeliveryPilots.length}</strong></div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)' }}>حالة أسطول الطيارين</div>
+              <div className="kv-row"><span>متاح بالمطعم</span><strong style={{ color: '#34d399' }}>{availablePilots.length}</strong></div>
+              <div className="kv-row"><span>في رحلات توصيل</span><strong style={{ color: '#93c5fd' }}>{onDeliveryPilots.length}</strong></div>
               <div className="kv-row"><span>غير متصلين (شيفت مغلق)</span><strong>{pilots.length - activePilots.length}</strong></div>
-              <div className="kv-row"><span>التالي بالدور</span><strong>{suggestedPilot ? suggestedPilot.name : 'لا يوجد'}</strong></div>
+              <div className="kv-row"><span>التالي بالدور العادل</span><strong>{suggestedPilot ? suggestedPilot.name : 'لا يوجد'}</strong></div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>الطلبات بالخارج</div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)' }}>الطلبات بالخارج حالياً</div>
               {pilotsWithOrders.length > 0 ? (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                   {pilotsWithOrders.map(p => (
@@ -957,17 +1013,17 @@ const DashboardView = ({ onNavigate }) => {
                   ))}
                 </div>
               ) : (
-                <span style={{ fontSize: '0.85rem', color: 'var(--text-dim)' }}>لا توجد رحلات نشطة حالياً</span>
+                <span style={{ fontSize: '0.84rem', color: 'var(--text-dim)' }}>لا توجد رحلات توصيل نشطة حالياً</span>
               )}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ fontWeight: 800, fontSize: '0.85rem' }}>طلبات اليوم</div>
-              <div className="kv-row"><span>مكتمل</span><strong style={{ color: '#34d399' }}>{completedCount}</strong></div>
-              <div className="kv-row"><span>ملغي / فشل</span><strong style={{ color: '#f87171' }}>{cancelledCount}</strong></div>
+              <div style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-main)' }}>إجمالي طلبات اليوم</div>
+              <div className="kv-row"><span>مكتمل بنجاح</span><strong style={{ color: '#34d399' }}>{completedCount}</strong></div>
+              <div className="kv-row"><span>ملغي / متعثر</span><strong style={{ color: '#f87171' }}>{cancelledCount}</strong></div>
               {isShiftOpen && currentShift?.date && (
                 <div className="kv-row"><span>تاريخ الوردية</span><strong>{currentShift.date}</strong></div>
               )}
-              <div style={{ fontSize: '0.35rem', color: 'var(--text-dim)' }}>تحديث لحظي وتلقائي</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '4px' }}>تحديث لحظي ومستمر عبر Realtime</div>
             </div>
           </div>
         </Disclosure>

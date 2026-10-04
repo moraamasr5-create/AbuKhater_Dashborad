@@ -127,14 +127,11 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
                                     openShift();
                                     closeSidebar();
                                 }}
-                                className="btn-primary"
+                                className="btn-success"
                                 style={{
                                     width: '100%',
-                                    background: 'linear-gradient(180deg, #10b981 0%, #059669 100%)',
-                                    color: '#000',
-                                    fontWeight: '900',
-                                    minHeight: '44px',
-                                    boxShadow: 'var(--bevel-btn), 0 4px 14px var(--accent-glow)'
+                                    justifyContent: 'center',
+                                    minHeight: '44px'
                                 }}
                             >
                                 <Play size={18} />
@@ -146,12 +143,8 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
                                 className="btn-danger-outline"
                                 style={{
                                     width: '100%',
-                                    background: 'linear-gradient(180deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.08) 100%)',
-                                    color: '#f87171',
-                                    border: '1px solid rgba(239, 68, 68, 0.4)',
-                                    fontWeight: '800',
-                                    minHeight: '44px',
-                                    boxShadow: 'var(--bevel-btn-secondary), 0 2px 8px rgba(239, 68, 68, 0.25)'
+                                    justifyContent: 'center',
+                                    minHeight: '44px'
                                 }}
                             >
                                 <Square size={16} />

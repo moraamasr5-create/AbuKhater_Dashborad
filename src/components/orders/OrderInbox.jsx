@@ -867,11 +867,9 @@ const OrderInbox = ({ onReedit }) => {
                               confirmOrder(order.id);
                               toast(`تم تأكيد الطلب #${order.originalId || order.id} وإرساله للمطبخ ✅`);
                             }}
-                            className="btn-primary"
+                            className="btn-warning"
                             style={{
-                              flex: '2 1 200px',
-                              background: '#10b981',
-                              boxShadow: '0 4px 14px rgba(16, 185, 129, 0.35)'
+                              flex: '2 1 200px'
                             }}
                           >
                             <Check size={18} />
@@ -881,20 +879,9 @@ const OrderInbox = ({ onReedit }) => {
                           {isInGracePeriod && (
                             <button
                               onClick={() => onReedit(order)}
+                              className="btn-secondary"
                               style={{
-                                flex: '1 1 120px',
-                                background: '#f59e0b',
-                                color: '#000',
-                                border: 'none',
-                                borderRadius: '10px',
-                                fontWeight: '800',
-                                fontSize: '0.85rem',
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '6px',
-                                minHeight: '44px',
-                                cursor: 'pointer'
+                                flex: '1 1 120px'
                               }}
                               title="تعديل تفاصيل الطلب خلال مهلة المراجعة"
                             >
@@ -927,9 +914,7 @@ const OrderInbox = ({ onReedit }) => {
                               }}
                               className="btn-primary"
                               style={{
-                                flex: '2 1 200px',
-                                background: '#8b5cf6',
-                                boxShadow: '0 4px 14px rgba(139, 92, 246, 0.35)'
+                                flex: '2 1 200px'
                               }}
                             >
                               <Package size={18} />
@@ -938,11 +923,8 @@ const OrderInbox = ({ onReedit }) => {
 
                             <button
                               onClick={() => handlePrint(order)}
-                              className="btn-primary"
+                              className="btn-secondary"
                               style={{
-                                background: 'var(--bg-surface)',
-                                border: '1px solid var(--border-strong)',
-                                color: 'var(--text-main)',
                                 flex: '1 1 120px'
                               }}
                               title="طباعة بون المطبخ"
@@ -968,8 +950,8 @@ const OrderInbox = ({ onReedit }) => {
                                 display: 'flex',
                                 alignItems: 'center',
                                 justifyContent: 'space-between',
-                                background: 'rgba(16, 185, 129, 0.1)',
-                                border: '1px solid rgba(16, 185, 129, 0.3)',
+                                background: 'rgba(16, 185, 129, 0.08)',
+                                border: '1px solid rgba(16, 185, 129, 0.25)',
                                 padding: '8px 12px',
                                 borderRadius: '10px',
                                 flexWrap: 'wrap',
@@ -981,9 +963,8 @@ const OrderInbox = ({ onReedit }) => {
                                 </div>
                                 <button
                                   onClick={() => handleAssignAndPrint(order.id, suggestedPilot.id)}
-                                  className="btn-primary"
+                                  className="btn-success"
                                   style={{
-                                    background: '#10b981',
                                     padding: '6px 14px',
                                     minHeight: '38px',
                                     fontSize: '0.85rem'
@@ -1024,7 +1005,6 @@ const OrderInbox = ({ onReedit }) => {
                                 disabled={!selectedPilot[order.id] && !suggestedPilot}
                                 className="btn-primary"
                                 style={{
-                                  background: 'var(--primary)',
                                   minHeight: '44px',
                                   padding: '10px 18px'
                                 }}
@@ -1055,11 +1035,9 @@ const OrderInbox = ({ onReedit }) => {
                               completeOrder(order.id);
                               toast(`تم تسليم الطلب #${order.originalId || order.id} للعميل بنجاح ✅`);
                             }}
-                            className="btn-primary"
+                            className="btn-success"
                             style={{
-                              flex: '2 1 200px',
-                              background: '#22c55e',
-                              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)'
+                              flex: '2 1 200px'
                             }}
                           >
                             <Check size={18} />
@@ -1068,11 +1046,8 @@ const OrderInbox = ({ onReedit }) => {
 
                           <button
                             onClick={() => handlePrint(order)}
-                            className="btn-primary"
+                            className="btn-secondary"
                             style={{
-                              background: 'var(--bg-surface)',
-                              border: '1px solid var(--border-strong)',
-                              color: 'var(--text-main)',
                               flex: '1 1 120px'
                             }}
                             title="طباعة بون"
@@ -1097,11 +1072,9 @@ const OrderInbox = ({ onReedit }) => {
                         <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => startDelivery(order.id)}
-                            className="btn-primary"
+                            className="btn-success"
                             style={{
-                              flex: '2 1 200px',
-                              background: '#22c55e',
-                              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)'
+                              flex: '2 1 200px'
                             }}
                           >
                             <Bike size={18} />
@@ -1110,11 +1083,8 @@ const OrderInbox = ({ onReedit }) => {
 
                           <button
                             onClick={() => handlePrint(order)}
-                            className="btn-primary"
+                            className="btn-secondary"
                             style={{
-                              background: 'var(--bg-surface)',
-                              border: '1px solid var(--border-strong)',
-                              color: 'var(--text-main)',
                               flex: '1 1 120px'
                             }}
                             title="طباعة نسخة إضافية من البون"
@@ -1130,11 +1100,9 @@ const OrderInbox = ({ onReedit }) => {
                         <div style={{ display: 'flex', gap: '10px', width: '100%', flexWrap: 'wrap' }}>
                           <button
                             onClick={() => completeOrder(order.id)}
-                            className="btn-primary"
+                            className="btn-success"
                             style={{
-                              flex: '2 1 180px',
-                              background: '#22c55e',
-                              boxShadow: '0 4px 14px rgba(34, 197, 94, 0.35)'
+                              flex: '2 1 180px'
                             }}
                           >
                             <Check size={18} />
@@ -1302,6 +1270,7 @@ const OrderInbox = ({ onReedit }) => {
                           title={`تفاصيل الأصناف (${order.items.length} صنف)`}
                           meta={`${order.total} ج.م`}
                           icon={<ShoppingCart size={15} color="var(--primary)" />}
+                          defaultOpen={['pending', 'pending_timer', 'waiting_driver', 'preparing'].includes(order.status)}
                         >
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
                             {order.items.map((item, idx) => {
