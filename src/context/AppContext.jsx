@@ -13,6 +13,7 @@ import {
 import { attachReceiptToOrder } from '../services/storageService';
 import { printerService } from '../services/printerService';
 import { safeGetItem, safeSetItem } from '../utils/safeStorage';
+import { telegramAlertService } from '../services/telegramAlertService';
 
 const AppContext = createContext();
 
@@ -761,6 +762,14 @@ export const AppProvider = ({ children }) => {
 
       logAction('SHIFT_CLOSE', `Shift closed. Orders: ${stats.totalOrders}.`, 'Manager');
 
+      // 📊 Telegram Alert: Shift Closed
+      telegramAlertService.notifyShiftClosed({
+        actor: currentStaff || currentUser || { name: 'المسؤول', role: userRole || 'admin' },
+        totalOrders: stats.totalOrders,
+        totalSales: stats.totalSales,
+        isAuto: Boolean(isAuto)
+      });
+
       // Bulk reset all pilots in the Supabase delivery table
       const allPilotIds = pilots.map(p => p.id);
       if (allPilotIds.length > 0) {
@@ -994,6 +1003,16 @@ export const AppProvider = ({ children }) => {
         : o
     ));
     logAction('ORDER_CANCEL', `Order #${orderId} cancelled. Reason: ${reason}`, 'Supervisor');
+
+    // 🟠 Telegram Alert: Order Cancelled
+    telegramAlertService.notifyOrderCancelled({
+      actor: currentStaff || currentUser || { name: 'المسؤول', role: userRole || 'casher' },
+      orderNumber: order.originalId || order.id,
+      reason: reason,
+      total: order.total,
+      customerName: order.customerName
+    });
+
     if (order.supabaseId) {
       updateExternalOrderStatus(order.supabaseId, 'cancelled', reason);
     }

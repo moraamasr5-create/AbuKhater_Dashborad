@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Settings, Save, RefreshCw, Power, DollarSign, MapPin, 
   CreditCard, Clock, AlertCircle, CheckCircle2, Shield, Plus, Trash2,
@@ -7,6 +7,8 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { MenuManagementView } from './MenuManagementView';
+import { useApp } from '../../context/AppContext';
+import { telegramAlertService } from '../../services/telegramAlertService';
 
 const DEFAULT_AREAS = [
   { name: 'المطرية الرئيسي', lat: 30.126, lng: 31.298, zone: 1, fee: 20 },
@@ -28,6 +30,9 @@ const DEFAULT_AREAS = [
 ];
 
 const SettingsView = () => {
+  const { userRole, currentStaff, currentUser } = useApp() || {};
+  const currentActor = currentStaff || currentUser || { name: 'مدير النظام', role: userRole || 'admin' };
+
   const [activeSubTab, setActiveSubTab] = useState('general'); // 'general' | 'menu_items'
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -70,12 +75,17 @@ const SettingsView = () => {
   const [newAreaFee, setNewAreaFee] = useState(30);
   const [newAreaZone, setNewAreaZone] = useState(1);
 
+  // Snapshot of initial settings to detect changes
+  const initialSettingsRef = useRef({});
+
   // Load settings from Supabase
   const loadSettings = async () => {
     try {
       setLoading(true);
       const settings = await supabaseService.fetchRestaurantSettings();
       if (settings) {
+        initialSettingsRef.current = { ...settings };
+
         if (settings.is_restaurant_open !== undefined) {
           setIsOpen(settings.is_restaurant_open === 'true' || settings.is_restaurant_open === true);
         }
@@ -151,34 +161,60 @@ const SettingsView = () => {
     try {
       setSaving(true);
       const updates = [
-        { key: 'is_restaurant_open', value: isOpen ? 'true' : 'false' },
-        { key: 'require_active_shift_for_orders', value: requireActiveShift ? 'true' : 'false' },
-        { key: 'delivery_enabled', value: deliveryEnabled ? 'true' : 'false' },
-        { key: 'shift_open_time', value: shiftOpenTime },
-        { key: 'shift_close_time', value: shiftCloseTime },
-        { key: 'delivery_base_fee', value: String(baseDeliveryFee) },
-        { key: 'min_delivery_fee', value: String(baseDeliveryFee) },
-        { key: 'delivery_base_distance_km', value: String(baseDistanceKm) },
-        { key: 'delivery_per_km_rate', value: String(deliveryPerKmRate) },
-        { key: 'max_delivery_distance_km', value: String(maxDeliveryDistance) },
-        { key: 'delivery_rounding_step', value: String(deliveryRoundingStep) },
-        { key: 'min_order_amount', value: String(minOrderAmount) },
-        { key: 'payment_service_fee_enabled', value: serviceFeeEnabled ? 'true' : 'false' },
-        { key: 'payment_service_fee_chunk', value: String(serviceFeeChunk) },
-        { key: 'payment_service_fee_per_chunk', value: String(serviceFeePerChunk) },
-        { key: 'reservation_deposit_amount', value: String(depositAmount) },
-        { key: 'reservation_service_fee', value: String(reservationFee) },
-        { key: 'payment_instapay_ipa', value: instapayIpa },
-        { key: 'payment_wallet_number', value: walletNumber },
-        { key: 'payment_account_name', value: accountName },
-        { key: 'fixed_delivery_zones', value: JSON.stringify(areas) }
+        { key: 'is_restaurant_open', value: isOpen ? 'true' : 'false', label: 'حالة فتح المطعم' },
+        { key: 'require_active_shift_for_orders', value: requireActiveShift ? 'true' : 'false', label: 'إلزامية الوردية' },
+        { key: 'delivery_enabled', value: deliveryEnabled ? 'true' : 'false', label: 'تفعيل التوصيل' },
+        { key: 'shift_open_time', value: shiftOpenTime, label: 'وقت فتح الوردية' },
+        { key: 'shift_close_time', value: shiftCloseTime, label: 'وقت إغلاق الوردية' },
+        { key: 'delivery_base_fee', value: String(baseDeliveryFee), label: 'سعر التوصيل الأساسي' },
+        { key: 'min_delivery_fee', value: String(baseDeliveryFee), label: 'الحد الأدنى للتوصيل' },
+        { key: 'delivery_base_distance_km', value: String(baseDistanceKm), label: 'مسافة التوصيل الأساسية (كم)' },
+        { key: 'delivery_per_km_rate', value: String(deliveryPerKmRate), label: 'سعر الكيلو الإضافي' },
+        { key: 'max_delivery_distance_km', value: String(maxDeliveryDistance), label: 'أقصى مسافة توصيل (كم)' },
+        { key: 'delivery_rounding_step', value: String(deliveryRoundingStep), label: 'تقريب سعر التوصيل' },
+        { key: 'min_order_amount', value: String(minOrderAmount), label: 'الحد الأدنى للطلب' },
+        { key: 'payment_service_fee_enabled', value: serviceFeeEnabled ? 'true' : 'false', label: 'رسوم خدمة الدفع' },
+        { key: 'payment_service_fee_chunk', value: String(serviceFeeChunk), label: 'شريحة الدفع الإلكتروني' },
+        { key: 'payment_service_fee_per_chunk', value: String(serviceFeePerChunk), label: 'رسوم الشريحة' },
+        { key: 'reservation_deposit_amount', value: String(depositAmount), label: 'عربون الحجز' },
+        { key: 'reservation_service_fee', value: String(reservationFee), label: 'رسوم خدمة الحجز' },
+        { key: 'payment_instapay_ipa', value: instapayIpa, label: 'عنوان إنستاباي' },
+        { key: 'payment_wallet_number', value: walletNumber, label: 'رقم محفظة كاش' },
+        { key: 'payment_account_name', value: accountName, label: 'اسم صاحب الحساب' },
+        { key: 'fixed_delivery_zones', value: JSON.stringify(areas), label: 'المناطق الثابتة' }
       ];
+
+      // Identify changed settings
+      const changedItems = [];
+      const prev = initialSettingsRef.current || {};
+
+      for (const item of updates) {
+        const oldVal = prev[item.key];
+        if (oldVal !== undefined && String(oldVal) !== String(item.value)) {
+          changedItems.push({
+            label: item.label,
+            oldVal: String(oldVal),
+            newVal: String(item.value)
+          });
+        }
+      }
 
       for (const item of updates) {
         await supabaseService.updateRestaurantSetting(item.key, item.value);
       }
 
       showFeedback('success', 'تم حفظ وتطبيق جميع الإعدادات وقواعد التسعير بنجاح');
+
+      // 🟠 Telegram Alert if sensitive settings changed
+      if (changedItems.length > 0) {
+        telegramAlertService.notifySettingsChanged({
+          actor: currentActor,
+          changedItems
+        });
+      }
+
+      // Update initial snapshot
+      await loadSettings();
     } catch (err) {
       console.error('Failed to save settings:', err);
       showFeedback('error', 'حدث خطأ أثناء حفظ الإعدادات');

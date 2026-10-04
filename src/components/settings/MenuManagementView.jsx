@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { supabaseService } from '../../services/supabaseService';
 import { useApp } from '../../context/AppContext';
+import { telegramAlertService } from '../../services/telegramAlertService';
 
 /**
  * Converts Google Drive / CDN / Storage URLs to displayable image URLs
@@ -27,8 +28,9 @@ export const getDisplayImageUrl = (url) => {
 };
 
 export const MenuManagementView = () => {
-  const { userRole } = useApp() || {};
+  const { userRole, currentStaff, currentUser } = useApp() || {};
   const isAdmin = userRole === 'admin';
+  const currentActor = currentStaff || currentUser || { name: 'مسؤول المنيو', role: userRole || 'admin' };
 
   // ─────────────────────────────────────────────────────────
   // State Management
@@ -174,15 +176,36 @@ export const MenuManagementView = () => {
   // Quick Price Update (Helper)
   // ─────────────────────────────────────────────────────────
   const _handleQuickPriceChange = async (item, newPriceStr) => {
+    if (!isAdmin) {
+      telegramAlertService.notifySecurityFailure({
+        actor: currentActor,
+        action: 'محاولة تعديل سعر صنف',
+        target: item.name,
+        reason: 'المستخدم لا يملك صلاحية مدير (Admin Required)'
+      });
+      showStatus('تعديل السعر مخصص للمدير فقط', 'error');
+      return;
+    }
+
     const newPrice = parseFloat(newPriceStr);
     if (isNaN(newPrice) || newPrice < 0 || newPrice === item.price) return;
 
     const previousItems = [...items];
+    const oldPrice = item.price;
     setItems(prev => prev.map(i => i.id === item.id ? { ...i, price: newPrice } : i));
 
     try {
       await supabaseService.updateMenuItem(item.id, { price: newPrice });
       showStatus(`تم تعديل سعر "${item.name}" إلى ${newPrice} ج.م`);
+
+      // 🔔 Telegram Alert: Price changed
+      telegramAlertService.notifyPriceChange({
+        actor: currentActor,
+        itemName: item.name,
+        oldPrice: oldPrice,
+        newPrice: newPrice,
+        categoryName: item.categoryName
+      });
     } catch (err) {
       console.error('[MenuManagement] Price update failed:', err);
       setItems(previousItems);
@@ -323,8 +346,23 @@ export const MenuManagementView = () => {
       return;
     }
 
+    // Security check: non-admin cannot alter prices
+    if (editingItem && priceNum !== editingItem.price && !isAdmin) {
+      telegramAlertService.notifySecurityFailure({
+        actor: currentActor,
+        action: 'محاولة تعديل سعر صنف عبر النموذج',
+        target: itemForm.name,
+        reason: 'المستخدم لا يملك صلاحية مدير (Admin Required)'
+      });
+      showStatus('تعديل السعر متاح فقط للمدير (Admin)', 'error');
+      return;
+    }
+
     try {
       setActionLoading(true);
+
+      const targetCategory = categories.find(c => c.id === itemForm.category_id);
+      const categoryName = targetCategory?.name || '';
 
       const payload = {
         name: itemForm.name.trim(),
@@ -340,11 +378,31 @@ export const MenuManagementView = () => {
       };
 
       if (editingItem) {
+        const oldPrice = editingItem.price;
         await supabaseService.updateMenuItem(editingItem.id, payload);
         showStatus(`تم تعديل الصنف "${payload.name}" بنجاح ✅`);
+
+        // 🔔 Telegram Alert if price changed
+        if (oldPrice !== priceNum) {
+          telegramAlertService.notifyPriceChange({
+            actor: currentActor,
+            itemName: payload.name,
+            oldPrice: oldPrice,
+            newPrice: priceNum,
+            categoryName: categoryName || editingItem.categoryName
+          });
+        }
       } else {
         await supabaseService.createMenuItem(payload);
         showStatus(`تمت إضافة الصنف "${payload.name}" إلى المنيو بنجاح ✅`);
+
+        // 🔔 Telegram Alert on new product creation
+        telegramAlertService.notifyProductCreated({
+          actor: currentActor,
+          itemName: payload.name,
+          price: priceNum,
+          categoryName: categoryName
+        });
       }
 
       setIsItemDrawerOpen(false);
@@ -365,6 +423,15 @@ export const MenuManagementView = () => {
       setActionLoading(true);
       await supabaseService.deleteMenuItem(item.id);
       showStatus(`تم حذف الصنف "${item.name}" بنجاح`);
+
+      // 🔴 Critical Alert: Product deleted permanently
+      telegramAlertService.notifyProductDeleted({
+        actor: currentActor,
+        itemName: item.name,
+        price: item.price,
+        categoryName: item.categoryName
+      });
+
       setDeleteConfirm(null);
       setIsItemDrawerOpen(false);
       await loadData();
@@ -464,6 +531,13 @@ export const MenuManagementView = () => {
       setActionLoading(true);
       await supabaseService.deleteCategory(category.id);
       showStatus(`تم حذف قسم "${category.name}" بنجاح`);
+
+      // 🔴 Critical Alert: Category deleted permanently
+      telegramAlertService.notifyCategoryDeleted({
+        actor: currentActor,
+        categoryName: category.name
+      });
+
       setDeleteConfirm(null);
       await loadData();
     } catch (err) {
