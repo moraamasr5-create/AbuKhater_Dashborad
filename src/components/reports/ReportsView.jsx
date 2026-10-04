@@ -20,8 +20,16 @@ const displayDate = (dateStr) => {
 const ReportsView = () => {
   const { currentShift, dailyReports, activeStats, openShift, isShiftOpen, orders, reservations, userRole } = useApp();
   const [selectedPilotDetails, setSelectedPilotDetails] = React.useState(null);
-  const [showDues, _setShowDues] = React.useState(false);
+  const [showDues, setShowDues] = React.useState(false);
   const [showArchives, setShowArchives] = React.useState(false);
+
+  const handleToggleDues = () => {
+    if (userRole === 'admin' || !userRole) {
+      setShowDues(prev => !prev);
+    } else {
+      alert('⚠️ عرض تفاصيل المستحقات والأرباح متاح للمشرف (Admin) فقط.');
+    }
+  };
   const [previewProofUrl, setPreviewProofUrl] = React.useState(null);
   const [hiddenReservationIds, setHiddenReservationIds] = React.useState(() => {
     try {
@@ -497,16 +505,67 @@ const ReportsView = () => {
               <h4 style={{ fontSize: '1.5rem', fontWeight: '700', color: activeStats.averageDelay > 40 ? 'var(--danger)' : 'white' }}>{activeStats.averageDelay} دقيقة</h4>
             </div>
             <div style={{ padding: '20px', borderRadius: '16px', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
-              <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginBottom: '8px' }}>إيرادات الحجازات (عربون)</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0 }}>إيرادات الحجازات (عربون)</p>
+                {showDues && (
+                  <button
+                    type="button"
+                    onClick={handleToggleDues}
+                    title="قفل بيانات المشرف"
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid var(--border)',
+                      borderRadius: '6px',
+                      padding: '2px 8px',
+                      cursor: 'pointer',
+                      color: 'var(--text-muted)',
+                      fontSize: '0.72rem',
+                    }}
+                  >
+                    🔒 إخفاء
+                  </button>
+                )}
+              </div>
               {showDues ? (
-                <h4 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#8b5cf6' }}>
+                <h4 style={{ fontSize: '1.5rem', fontWeight: '700', color: '#8b5cf6', margin: 0 }}>
                   {activeStats.reservationStats?.totalDeposits || 0} ج.م
                   <small style={{ fontSize: '0.8rem', fontWeight: 'normal', color: 'var(--text-muted)', marginRight: '8px' }}>
                     ({activeStats.reservationStats?.count || 0} إجمالي الحجوزات)
                   </small>
                 </h4>
               ) : (
-                <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '8px', borderRadius: '4px', textAlign: 'center' }}>🔒 مغلق للمشرف</div>
+                <button
+                  type="button"
+                  onClick={handleToggleDues}
+                  style={{
+                    width: '100%',
+                    fontSize: '0.85rem',
+                    fontWeight: '600',
+                    color: '#c4b5fd',
+                    background: 'rgba(139, 92, 246, 0.12)',
+                    border: '1px dashed rgba(139, 92, 246, 0.4)',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '6px',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.22)';
+                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.6)';
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = 'rgba(139, 92, 246, 0.12)';
+                    e.currentTarget.style.borderColor = 'rgba(139, 92, 246, 0.4)';
+                  }}
+                >
+                  <span>🔒</span>
+                  <span>عرض للمشرف</span>
+                </button>
               )}
             </div>
           </div>
@@ -763,9 +822,26 @@ const ReportsView = () => {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.82rem', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
-                          🔒 تفاصيل المستحقات المالية مخفية
-                        </div>
+                        <button
+                          type="button"
+                          onClick={handleToggleDues}
+                          style={{
+                            width: '100%',
+                            padding: '10px',
+                            textAlign: 'center',
+                            color: 'var(--text-muted)',
+                            fontSize: '0.82rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px dashed var(--border)',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                          onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+                        >
+                          🔒 تفاصيل المستحقات المالية مخفية (اضغط للعرض للمشرف)
+                        </button>
                       )}
 
                       {/* Action Buttons */}
