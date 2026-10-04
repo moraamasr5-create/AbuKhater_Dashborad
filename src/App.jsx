@@ -1,5 +1,5 @@
 // Developed & Owned by AmrMamdouh - 01038035884
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar, { NAV_ITEMS, getActionCount } from './components/layout/Sidebar';
 import OrderInbox from './components/orders/OrderInbox';
 import ReportsView from './components/reports/ReportsView';
@@ -14,8 +14,9 @@ import { supabase } from './services/supabase/supabaseClient';
 import { uploadReservationReceipt, useSignedReceiptUrl } from './services/storageService';
 import { printerService } from './services/printerService';
 import { isPilotOnDelivery } from './utils/pilotState';
+import { calculateDelayMinutes } from './utils/shiftLogic';
 
-export const processImageUpload = async (file, bucketName = 'payment-screenshots', folderPath = 'reservations') => {
+export const processImageUpload = async (file, _bucketName = 'payment-screenshots', folderPath = 'reservations') => {
   if (file.size > 5 * 1024 * 1024) {
     alert("حجم الصورة كبير جداً (أقصى حجم 5MB).");
     return null;
@@ -759,14 +760,13 @@ const EditOrderModal = ({ order, onClose }) => {
   );
 };
 
-const DashboardView = ({ onNavigate, onOpenModal }) => {
+const DashboardView = ({ onNavigate }) => {
   const { orders, pilots, currentShift, isShiftOpen, getSuggestedPilot, userRole, openShift } = useApp();
 
   // Helper to calculate elapsed minutes
   const getElapsedMinutes = (timestamp) => {
     if (!timestamp) return 0;
-    const diffMs = Date.now() - new Date(timestamp).getTime();
-    return Math.max(0, Math.floor(diffMs / 60000));
+    return calculateDelayMinutes(timestamp);
   };
 
   // 1. Level A: Needs Attention Now (يحتاج انتباهي الآن - Memoized)
@@ -994,7 +994,7 @@ const getDeliveryFee = typeof window.getDeliveryFee === 'function' ? window.getD
 
 const ManualOrderForm = ({ onClose, initialData }) => {
   const { addOrder } = useApp();
-  const [isCompressing, setIsCompressing] = useState(false);
+  const [isCompressing, _setIsCompressing] = useState(false);
   const [formData, setFormData] = useState(initialData?.formData || {
     receiptNo: '', customerName: '', phone: '', area: '',
     lat: null, lng: null, zone: null, distance: 0,
@@ -1089,16 +1089,7 @@ const ManualOrderForm = ({ onClose, initialData }) => {
 
   const isOutsideRadius = formData.distance > 15;
 
-  const deliveryFees = Array.from({ length: 17 }, (_, i) => 20 + i * 5);
-
   const handleAddItem = (item) => setSelectedItems(prev => ({ ...prev, [item]: (prev[item] || 0) + 1 }));
-  const handleRemoveItem = (item) => {
-    setSelectedItems(prev => {
-      const active = { ...prev };
-      if (active[item] > 1) active[item] -= 1; else delete active[item];
-      return active;
-    });
-  };
 
   const printKitchenTicket = () => {
     if (!formData.receiptNo) return alert('أدخل رقم البون للطباعة');
@@ -1977,7 +1968,7 @@ function App() {
   const [activeModal, setActiveModal] = useState('none');
   const [reeditData, setReeditData] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const { isShiftOpen, deleteOrder, userRole, setUserRole, isAuthLoading, orders, currentShift } = useApp();
+  const { isShiftOpen, deleteOrder, userRole, isAuthLoading, orders, currentShift } = useApp();
 
   // 🟢 حماية لضمان الصلاحيات للأدوار المختلفة
   useEffect(() => {

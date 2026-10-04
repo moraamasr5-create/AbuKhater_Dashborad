@@ -60,7 +60,7 @@ export const calculateDelayMinutes = (startTime, endTime = null) => {
     // Prevent negative latency race conditions
     const diffMs = Math.max(0, end - start);
     return Math.floor(diffMs / (1000 * 60));
-  } catch(e) {
+  } catch (_e) {
     return 0;
   }
 };

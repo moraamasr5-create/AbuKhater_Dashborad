@@ -40,7 +40,6 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
 
     // 🟢 تصفية القائمة بناءً على صلاحيات المستخدم
     const menuItems = NAV_ITEMS.filter(item => item.roles.includes(userRole));
-    let lastGroup = null;
 
     const roleLabel = userRole === 'admin' ? 'مشرف النظام' : userRole === 'driver' ? 'كابتن التوصيل' : 'الكاشير';
 
@@ -75,10 +74,10 @@ const Sidebar = ({ activeTab, setActiveTab, isSidebarOpen, closeSidebar }) => {
 
             {/* Navigation Menu — مقسمة لمجموعات */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
-                {menuItems.map(item => {
+                {menuItems.map((item, index) => {
                     const isActive = activeTab === item.id;
-                    const showGroup = item.group && item.group !== lastGroup;
-                    lastGroup = item.group;
+                    const prevItem = index > 0 ? menuItems[index - 1] : null;
+                    const showGroup = item.group && item.group !== prevItem?.group;
                     return (
                         <React.Fragment key={item.id}>
                             {showGroup && <div className="nav-group-label">{item.group}</div>}

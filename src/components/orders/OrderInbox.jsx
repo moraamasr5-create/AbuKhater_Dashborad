@@ -314,7 +314,7 @@ const FailDeliveryModal = ({ isOpen, onClose, onConfirm, orderNumber }) => {
 
 const OrderInbox = ({ onReedit }) => {
   const {
-    orders, pilots, confirmOrder, readyOrder, deleteOrder, cancelOrder, isShiftOpen,
+    orders, pilots, confirmOrder, readyOrder, cancelOrder, isShiftOpen,
     assignPilot, startDelivery, completeOrder, failDelivery, getSuggestedPilot,
     syncExternalOrders, userRole, isThermalPrintMode, retryReceiptUpload
   } = useApp();
@@ -327,7 +327,6 @@ const OrderInbox = ({ onReedit }) => {
   const [auditTimers, setAuditTimers] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [previewImage, setPreviewImage] = useState(null);
-  const [expandedOrderId, setExpandedOrderId] = useState(null);
   const [selectedPreviewOrderId, setSelectedPreviewOrderId] = useState(null);
   const [cancelModalOrder, setCancelModalOrder] = useState(null);
   const [failModalOrder, setFailModalOrder] = useState(null);

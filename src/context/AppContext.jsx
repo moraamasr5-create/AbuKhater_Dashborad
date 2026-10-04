@@ -5,8 +5,6 @@ import { supabase } from '../services/supabase/supabaseClient';
 import {
   supabaseService,
   processPendingSync,
-  getPendingQueue,
-  savePendingQueue,
   getFailedQueue,
   clearFailedQueue,
   retryFailedQueue,
@@ -37,7 +35,6 @@ import {
   DEFAULT_SHIFT_OPEN_TIME,
   DEFAULT_SHIFT_CLOSE_TIME
 } from '../utils/shiftGovernance';
-import { safeParseOrder } from '../utils/safeOrderParser';
 
 const mergePilots = (prevPilots, fetchedPilots, pendingPilotIds = new Set()) => {
   // حقول تُزامَن من Supabase — لا نُبقي النسخة المحلية إلا أثناء تحديث معلّق
@@ -305,7 +302,6 @@ export const AppProvider = ({ children }) => {
   }, [currentShift]);
 
   // 🔥 3. Real-time Dashboard & Offline Resilience (Supabase Live System)
-  const retryRef = useRef(0);
   const pendingUpdatesRef = useRef(new Set()); // Set of supabaseIds being updated
   const pendingPilotUpdatesRef = useRef(new Set()); // pilot ids with in-flight DB writes
   const pendingReceiptFilesRef = useRef(new Map()); // localOrderId -> File (awaiting upload after DB insert)
@@ -1436,7 +1432,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const addNewPilot = async (pilotData) => {
-    const { name, phone, start_shift, end_shift, number_id, number_motor } = pilotData;
+    const { name, phone, start_shift, end_shift } = pilotData;
 
     if (pilots.some(p => p.name === name)) {
       return { success: false, error: 'اسم الطيار موجود بالفعل!' };

@@ -274,7 +274,7 @@ const withOfflineSupport = async (actionName, promiseFn, queuePayload, skipQueue
  * Converts a 24-h time string ("HH:MM:SS" or "HH:MM") → 12-h short format
  * e.g. "08:00:00" → "8:00A"  |  "22:00:00" → "10:00P"
  */
-const formatTime = (t) => {
+const _formatTime = (t) => {
   if (!t) return null;
   const [hourStr, minuteStr] = t.split(':');
   let hour = parseInt(hourStr, 10);
@@ -1298,7 +1298,7 @@ export const supabaseService = {
         await supabase
           .from('restaurant_settings')
           .upsert({ key, value: valStr, updated_at: now }, { onConflict: 'key' });
-      } catch (e) {
+      } catch (_e) {
         // Silently catch if RLS restricts restaurant_settings table
       }
     }, { key, value }, skipQueue);
@@ -1425,7 +1425,9 @@ export const supabaseService = {
             }
           });
         }
-      } catch {}
+      } catch (_e) {
+        // ignore localStorage errors
+      }
     }
   },
 

@@ -171,9 +171,9 @@ export const MenuManagementView = () => {
   };
 
   // ─────────────────────────────────────────────────────────
-  // Quick Price Update
+  // Quick Price Update (Helper)
   // ─────────────────────────────────────────────────────────
-  const handleQuickPriceChange = async (item, newPriceStr) => {
+  const _handleQuickPriceChange = async (item, newPriceStr) => {
     const newPrice = parseFloat(newPriceStr);
     if (isNaN(newPrice) || newPrice < 0 || newPrice === item.price) return;
 

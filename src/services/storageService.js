@@ -113,16 +113,13 @@ export const getSignedReceiptUrl = async (urlOrPath, expiresIn = 3600, bucketNam
  */
 export const useSignedReceiptUrl = (urlOrPath, expiresIn = 3600) => {
   const [signedUrl, setSignedUrl] = useState(null);
-  const [isLoading, setIsLoading] = useState(Boolean(urlOrPath));
+  const [isLoading, setIsLoading] = useState(() => Boolean(urlOrPath));
   const [error, setError] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
 
     if (!urlOrPath) {
-      setSignedUrl(null);
-      setIsLoading(false);
-      setError(null);
       return;
     }
 
@@ -253,7 +250,7 @@ export const attachReceiptToOrder = async (orderSupabaseId, file, skipQueue = fa
 /**
  * Compress + upload for reservations (no order row update).
  */
-export const uploadReservationReceipt = async (file, skipQueue = false) => {
+export const uploadReservationReceipt = async (file) => {
   const blob = await compressImageFile(file);
   if (!blob) return null;
   return uploadPaymentImage(blob, { folderPath: 'reservations' });

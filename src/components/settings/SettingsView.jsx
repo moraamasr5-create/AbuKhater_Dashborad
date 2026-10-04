@@ -37,14 +37,6 @@ const SettingsView = () => {
   const [isAreasOpen, setIsAreasOpen] = useState(false);
   const [areaSearch, setAreaSearch] = useState('');
 
-  // Menu items states
-  const [menuItems, setMenuItems] = useState([]);
-  const [loadingMenu, setLoadingMenu] = useState(false);
-  const [menuSearch, setMenuSearch] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [updatingItemId, setUpdatingItemId] = useState(null);
-
   // Form states - General & Shift
   const [isOpen, setIsOpen] = useState(true);
   const [requireActiveShift, setRequireActiveShift] = useState(true);
@@ -221,70 +213,6 @@ const SettingsView = () => {
     setNewAreaZone(1);
   };
 
-  const loadMenuItems = async () => {
-    try {
-      setLoadingMenu(true);
-      const items = await supabaseService.fetchMenuItemsAdmin();
-      setMenuItems(items || []);
-    } catch (err) {
-      console.error('Failed to load menu items:', err);
-      showFeedback('error', 'حدث خطأ أثناء تحميل أصناف المنيو');
-    } finally {
-      setLoadingMenu(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeSubTab === 'menu_items') {
-      loadMenuItems();
-    }
-  }, [activeSubTab]);
-
-  const handleToggleItemAvailability = async (item) => {
-    try {
-      setUpdatingItemId(item.id);
-      const isCurrentlyAvailable = (item.status === 'available');
-      const newStatus = isCurrentlyAvailable ? 'out_of_stock' : 'available';
-      // Optimistic update
-      setMenuItems(prev => prev.map(it => it.id === item.id ? { ...it, status: newStatus, isAvailable: (newStatus === 'available') } : it));
-      await supabaseService.toggleMenuItemAvailability(item.id, !isCurrentlyAvailable);
-      showFeedback('success', `تم تغيير حالة الصنف "${item.name}" إلى ${!isCurrentlyAvailable ? 'متاح' : 'نفذت الكمية'} بنجاح`);
-    } catch (err) {
-      console.error('Failed to toggle item availability:', err);
-      showFeedback('error', `فشل تحديث حالة الصنف: ${err.message}`);
-      loadMenuItems(); // rollback
-    } finally {
-      setUpdatingItemId(null);
-    }
-  };
-
-  const handleUpdateItemStatus = async (itemId, newStatus) => {
-    try {
-      setUpdatingItemId(itemId);
-      setMenuItems(prev => prev.map(it => it.id === itemId ? { ...it, status: newStatus, isAvailable: (newStatus === 'available') } : it));
-      await supabaseService.updateMenuItemStatus(itemId, newStatus);
-      showFeedback('success', 'تم تحديث حالة الصنف بنجاح');
-    } catch (err) {
-      console.error('Failed to update status:', err);
-      showFeedback('error', `فشل تحديث الحالة: ${err.message}`);
-      loadMenuItems();
-    } finally {
-      setUpdatingItemId(null);
-    }
-  };
-
-  // Filtered menu items
-  const filteredMenuItems = menuItems.filter(item => {
-    const matchesSearch = !menuSearch || (item.name && item.name.toLowerCase().includes(menuSearch.toLowerCase())) || (item.description && item.description.toLowerCase().includes(menuSearch.toLowerCase()));
-    const matchesCategory = selectedCategory === 'all' || item.categoryId === selectedCategory || item.categorySlug === selectedCategory || item.categoryName === selectedCategory;
-    const matchesStatus = statusFilter === 'all' || (statusFilter === 'available' && item.status === 'available') || (statusFilter === 'out_of_stock' && item.status === 'out_of_stock') || (statusFilter === 'paused' && item.status === 'paused') || (statusFilter === 'hidden' && item.status === 'hidden');
-    return matchesSearch && matchesCategory && matchesStatus;
-  });
-
-  const categoriesList = Array.from(
-    new Map(menuItems.filter(i => i.categoryId).map(i => [i.categoryId, { id: i.categoryId, name: i.categoryName || 'عام', slug: i.categorySlug }])).values()
-  );
-
   // Filtered areas for compact list
   const filteredAreas = areas.filter(a => 
     !areaSearch || a.name.toLowerCase().includes(areaSearch.toLowerCase()) || String(a.zone).includes(areaSearch)
@@ -339,7 +267,7 @@ const SettingsView = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {activeSubTab === 'general' ? (
+          {activeSubTab === 'general' && (
             <button
               onClick={handleSaveAll}
               disabled={saving}
@@ -361,29 +289,6 @@ const SettingsView = () => {
             >
               {saving ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
               <span>{saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}</span>
-            </button>
-          ) : (
-            <button
-              onClick={loadMenuItems}
-              disabled={loadingMenu}
-              className="btn-primary"
-              style={{
-                background: 'rgba(255, 255, 255, 0.08)',
-                color: 'white',
-                minHeight: '44px',
-                padding: '10px 18px',
-                fontSize: '0.9rem',
-                fontWeight: 'bold',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                borderRadius: '12px',
-                border: '1px solid var(--border)',
-                cursor: loadingMenu ? 'wait' : 'pointer'
-              }}
-            >
-              <RefreshCw className={loadingMenu ? 'animate-spin' : ''} size={18} />
-              <span>تحديث الأصناف</span>
             </button>
           )}
         </div>
@@ -510,10 +415,7 @@ const SettingsView = () => {
 
         <button
           type="button"
-          onClick={() => {
-            setActiveSubTab('menu_items');
-            loadMenuItems();
-          }}
+          onClick={() => setActiveSubTab('menu_items')}
           style={{
             flex: '1',
             minHeight: '44px',
@@ -534,17 +436,6 @@ const SettingsView = () => {
         >
           <UtensilsCrossed size={18} />
           <span>إدارة إتاحة أصناف المنيو</span>
-          {menuItems.length > 0 && (
-            <span style={{
-              background: activeSubTab === 'menu_items' ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.1)',
-              padding: '2px 8px',
-              borderRadius: '10px',
-              fontSize: '0.75rem',
-              fontWeight: '800'
-            }}>
-              {menuItems.filter(i => i.status === 'available').length}/{menuItems.length}
-            </span>
-          )}
         </button>
       </div>
 

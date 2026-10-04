@@ -11,22 +11,22 @@ const displayDate = (dateStr) => {
     const d = new Date(cleanDate);
     if (isNaN(d.getTime())) return dateStr;
     return d.toLocaleDateString('ar-EG');
-  } catch (e) {
+  } catch (_e) {
     return dateStr;
   }
 };
 
 const ReportsView = () => {
-  const { currentShift, dailyReports, activeStats, closeShift, openShift, isShiftOpen, orders, reservations, userRole } = useApp();
+  const { currentShift, dailyReports, activeStats, openShift, isShiftOpen, orders, reservations, userRole } = useApp();
   const [selectedPilotDetails, setSelectedPilotDetails] = React.useState(null);
-  const [showDues, setShowDues] = React.useState(false);
+  const [showDues, _setShowDues] = React.useState(false);
   const [showArchives, setShowArchives] = React.useState(false);
   const [previewProofUrl, setPreviewProofUrl] = React.useState(null);
   const [hiddenReservationIds, setHiddenReservationIds] = React.useState(() => {
     try {
       const saved = sessionStorage.getItem('hidden_report_reservations');
       return saved ? JSON.parse(saved) : [];
-    } catch (e) {
+    } catch (_e) {
       return [];
     }
   });
@@ -36,7 +36,9 @@ const ReportsView = () => {
       const updated = [...prev, id];
       try {
         sessionStorage.setItem('hidden_report_reservations', JSON.stringify(updated));
-      } catch (e) {}
+      } catch (_e) {
+        // storage quota fallback
+      }
       return updated;
     });
   };
@@ -180,12 +182,6 @@ const ReportsView = () => {
       window.removeEventListener('keydown', handleEsc);
     };
   }, []);
-
-  const handleCloseShift = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في إغلاق الوردية الحالية؟')) {
-      closeShift(false);
-    }
-  };
 
   const handleOpenShift = () => {
     openShift();
@@ -552,7 +548,9 @@ const ReportsView = () => {
                   type="button"
                   onClick={() => {
                     setHiddenReservationIds([]);
-                    try { sessionStorage.removeItem('hidden_report_reservations'); } catch (e) {}
+                    try { sessionStorage.removeItem('hidden_report_reservations'); } catch (_e) {
+                      // ignore
+                    }
                   }}
                   style={{
                     background: 'transparent',
@@ -827,12 +825,7 @@ const ReportsView = () => {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                       <p style={{ fontWeight: '700', color: 'var(--warning)', fontSize: '1.1rem' }}>{report.totalPilotDues} ج.م</p>
                       <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                        {(() => {
-                          const restaurantDues = (report.archivedOrders || []).filter(o => o.type === 'restaurant').reduce((sum, o) => sum + (o.deliveryFee / 2), 0);
-                          const talabatDues = (report.archivedOrders || []).filter(o => o.type === 'talabat' || o.type === 'external').reduce((sum, o) => sum + (o.deliveryFee / 2), 0);
-                          const tripDues = (report.archivedOrders || []).filter(o => o.type === 'trip').reduce((sum, o) => sum + o.deliveryFee, 0);
-
-                          return (
+                        {(() => (
                             <>
                               <span>🏠 مطعم: {(report.archivedOrders || []).filter(o => o.source === 'manual').reduce((sum, o) => sum + (o.deliveryFee / 2), 0)}</span>
                               <span style={{ color: '#a78bfa' }}>🟣 أونلاين: {(report.archivedOrders || []).filter(o => o.source === 'online').reduce((sum, o) => sum + (o.deliveryFee / 2), 0)}</span>
@@ -840,8 +833,7 @@ const ReportsView = () => {
                               <span>🏍️ مشاوير: {(report.archivedOrders || []).filter(o => o.source === 'external').reduce((sum, o) => sum + o.deliveryFee, 0)}</span>
                               <span>🕒 حضور: {report.totalAttendancePay}</span>
                             </>
-                          );
-                        })()}
+                        ))()}
                       </div>
                     </div>
                   </div>
