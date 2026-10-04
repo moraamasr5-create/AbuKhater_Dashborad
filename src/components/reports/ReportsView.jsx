@@ -1,8 +1,9 @@
 import React, { useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FileText, Download, Trash2, Calendar, Clock, DollarSign, Bike, TrendingUp, Home, Globe, Printer, UtensilsCrossed } from 'lucide-react';
+import { FileText, Download, Trash2, Calendar, Clock, DollarSign, Bike, TrendingUp, Home, Globe, Printer, UtensilsCrossed, ChevronDown } from 'lucide-react';
 import { calculateOrderPilotShare, isOrderAssignedToPilot } from '../../utils/pilotCalculations';
 import { ReceiptThumbnail } from '../../services/storageService';
+import { Disclosure } from '../common/ui';
 
 const displayDate = (dateStr) => {
   if (!dateStr) return '';
@@ -643,118 +644,163 @@ const ReportsView = () => {
             </div>
           </section>
 
-          <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bike size={18} /> تفصيل مستحقات الطيارين
-          </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', fontSize: '1.15rem' }}>
+              <Bike size={20} color="var(--primary)" /> تفصيل مستحقات الطيارين
+            </h4>
+            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              إجمالي {activeStats.pilotPerformance.length} طيار بالوردية (انقر على الطيار لعرض التفاصيل)
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))', gap: '10px' }}>
             {activeStats.pilotPerformance
               .sort((a, b) => {
                 // 🟢 1. الترتيب حسب الحالة (مفتوح أولاً)
                 if (a.shiftStatus === 'open' && b.shiftStatus === 'closed') return -1;
                 if (a.shiftStatus === 'closed' && b.shiftStatus === 'open') return 1;
 
-                // 🏆 2. داخل الأونلاين: الترتيب حسب الأكثر طلباً (مطعم + طلبات + مشاوير)
+                // 🏆 2. داخل الأونلاين: الترتيب حسب الأكثر طلباً
                 if (a.shiftStatus === 'open' && b.shiftStatus === 'open') {
-                  const aTotal = (a.restaurantOrdersCount || 0) + (a.talabatOrdersCount || 0) + (a.tripsCount || 0);
-                  const bTotal = (b.restaurantOrdersCount || 0) + (b.talabatOrdersCount || 0) + (b.tripsCount || 0);
+                  const aTotal = (a.restaurantOrdersCount || 0) + (a.onlineOrdersCount || 0) + (a.talabatOrdersCount || 0) + (a.tripsCount || 0);
+                  const bTotal = (b.restaurantOrdersCount || 0) + (b.onlineOrdersCount || 0) + (b.talabatOrdersCount || 0) + (b.tripsCount || 0);
                   return bTotal - aTotal;
                 }
                 return 0;
               })
-              .map(pilot => (
-                <div key={pilot.id} style={{ padding: '20px', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', position: 'relative', opacity: pilot.shiftStatus === 'closed' ? 0.7 : 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', align_items: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: pilot.shiftStatus === 'open' ? '#10b981' : '#ef4444', boxShadow: pilot.shiftStatus === 'open' ? '0 0 10px #10b981' : 'none' }}></div>
-                      <span style={{ fontWeight: '800', fontSize: '1.2rem', color: 'var(--primary)' }}>{pilot.name}</span>
-                    </div>
-                    {showDues ? (
-                      <span style={{ color: 'var(--success)', fontWeight: 'bold', fontSize: '1.2rem', background: 'rgba(16, 185, 129, 0.1)', padding: '4px 12px', borderRadius: '8px' }}>
-                        {Math.floor(pilot.totalEarnings)} ج.م
-                      </span>
-                    ) : (
-                      <span style={{ color: 'var(--text-muted)' }}>****</span>
-                    )}
+              .map(pilot => {
+                const totalOrders = (pilot.restaurantOrdersCount || 0) + (pilot.onlineOrdersCount || 0) + (pilot.talabatOrdersCount || 0) + (pilot.tripsCount || 0);
+                const isOpen = pilot.shiftStatus === 'open';
+
+                const titleElement = (
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                    <span style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      background: isOpen ? '#10b981' : '#ef4444',
+                      boxShadow: isOpen ? '0 0 8px #10b981' : 'none',
+                      flexShrink: 0
+                    }} />
+                    <strong style={{ fontSize: '0.98rem', color: 'var(--text-main)' }}>{pilot.name}</strong>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      ({totalOrders} طلب • {(pilot.totalMinutes / 60).toFixed(1)}س)
+                    </span>
                   </div>
+                );
 
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                const metaElement = showDues ? (
+                  <span style={{
+                    color: '#34d399',
+                    fontWeight: '800',
+                    fontSize: '0.92rem',
+                    background: 'rgba(16, 185, 129, 0.12)',
+                    padding: '2px 8px',
+                    borderRadius: '6px'
+                  }}>
+                    {Math.floor(pilot.totalEarnings)} ج.م
+                  </span>
+                ) : (
+                  <span style={{ color: 'var(--text-dim)', fontSize: '0.8rem' }}>🔒 مخفي</span>
+                );
 
-                    {/* Workload Stats */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-                      <span>🏠 مطعم: <strong>{pilot.restaurantOrdersCount || 0}</strong></span>
-                      <span style={{ color: '#a78bfa' }}>🟣 أونلاين: <strong>{pilot.onlineOrdersCount || 0}</strong></span>
-                      <span>🌐 طلبات: <strong>{pilot.talabatOrdersCount || 0}</strong></span>
-                      <span>🏍️ مشاوير: <strong>{pilot.tripsCount || 0}</strong></span>
-                      <span>🕒 عمل: <strong>{(pilot.totalMinutes / 60).toFixed(1)} س</strong></span>
-                    </div>
+                return (
+                  <Disclosure
+                    key={pilot.id}
+                    title={titleElement}
+                    meta={metaElement}
+                    className="glass-card hover-scale"
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', paddingTop: '4px' }}>
+                      {/* Workload Stats */}
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                        gap: '6px',
+                        background: 'rgba(0, 0, 0, 0.2)',
+                        padding: '10px',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        color: 'var(--text-muted)',
+                        border: '1px solid var(--border)'
+                      }}>
+                        <div>🏠 مطعم: <strong style={{ color: 'var(--text-main)' }}>{pilot.restaurantOrdersCount || 0}</strong></div>
+                        <div style={{ color: '#a78bfa' }}>🟣 أونلاين: <strong>{pilot.onlineOrdersCount || 0}</strong></div>
+                        <div>🌐 طلبات: <strong style={{ color: 'var(--text-main)' }}>{pilot.talabatOrdersCount || 0}</strong></div>
+                        <div>🏍️ مشاوير: <strong style={{ color: 'var(--text-main)' }}>{pilot.tripsCount || 0}</strong></div>
+                        <div>🕒 عمل: <strong style={{ color: 'var(--text-main)' }}>{(pilot.totalMinutes / 60).toFixed(1)} س</strong></div>
+                      </div>
 
-                    {showDues && (
-                      <div style={{ background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px', border: '1px dashed var(--border)' }}>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>تفاصيل الأرباح:</p>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', fontSize: '0.9rem' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Home size={14} /> مطعم:</span>
-                            <span style={{ fontWeight: 'bold' }}>{pilot.restaurantEarnings}</span>
+                      {/* Earnings Breakdown */}
+                      {showDues ? (
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 12px', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0 0 6px 0', borderBottom: '1px solid var(--border)', paddingBottom: '4px' }}>تفاصيل المستحقات:</p>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 16px', fontSize: '0.85rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Home size={13} /> مطعم:</span>
+                              <strong style={{ color: 'var(--text-main)' }}>{pilot.restaurantEarnings}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a78bfa' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Globe size={13} /> أونلاين:</span>
+                              <strong>{pilot.onlineEarnings}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><UtensilsCrossed size={13} /> طلبات:</span>
+                              <strong style={{ color: 'var(--text-main)' }}>{pilot.talabatEarnings}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Bike size={13} /> مشاوير:</span>
+                              <strong style={{ color: 'var(--text-main)' }}>{pilot.tripEarnings}</strong>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent)' }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}><Clock size={13} /> حضور:</span>
+                              <strong>{pilot.attendancePay}</strong>
+                            </div>
                           </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#a78bfa' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Globe size={14} /> أونلاين:</span>
-                            <span style={{ fontWeight: 'bold' }}>{pilot.onlineEarnings}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><UtensilsCrossed size={14} /> طلبات:</span>
-                            <span style={{ fontWeight: 'bold' }}>{pilot.talabatEarnings}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Bike size={14} /> مشاوير:</span>
-                            <span style={{ fontWeight: 'bold' }}>{pilot.tripEarnings}</span>
-                          </div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--accent)' }}>
-                            <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}><Clock size={14} /> حضور:</span>
-                            <span style={{ fontWeight: 'bold' }}>{pilot.attendancePay}</span>
+                          <div style={{ marginTop: '8px', paddingTop: '6px', borderTop: '1px dashed var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                            <span>إجمالي نصيب التوصيل:</span>
+                            <strong style={{ color: '#34d399' }}>{pilot.feeEarnings} ج.م</strong>
                           </div>
                         </div>
-
-                        <div style={{ marginTop: '10px', paddingTop: '8px', borderTop: '1px dashed var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                          <span>إجمالي التوصيل:</span>
-                          <strong>{pilot.feeEarnings} ج.م</strong>
+                      ) : (
+                        <div style={{ padding: '12px', textAlign: 'center', color: 'var(--text-dim)', fontSize: '0.82rem', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
+                          🔒 تفاصيل المستحقات المالية مخفية
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {!showDues && (
-                      <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.9rem', background: 'rgba(0,0,0,0.1)', borderRadius: '8px' }}>
-                        تفاصيل المستحقات مخفية 🔒
+                      {/* Action Buttons */}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '2px' }}>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPilotDetails(pilot)}
+                          className="btn-secondary"
+                          style={{ flex: 1, minHeight: '38px', padding: '6px 12px', fontSize: '0.82rem' }}
+                        >
+                          <FileText size={15} /> <span>كشف تفصيلي</span>
+                        </button>
+                        {showDues && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const element = document.createElement("a");
+                              const file = new Blob([JSON.stringify(pilot, null, 2)], { type: 'application/json' });
+                              element.href = URL.createObjectURL(file);
+                              element.download = `Pilot_${pilot.name.replace(/\s+/g, '_')}_Report.json`;
+                              document.body.appendChild(element);
+                              element.click();
+                            }}
+                            className="btn-secondary"
+                            title="تصدير كـ JSON"
+                            style={{ minHeight: '38px', padding: '6px 12px', color: 'var(--warning)' }}
+                          >
+                            <Download size={15} />
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                    <button
-                      onClick={() => setSelectedPilotDetails(pilot)}
-                      style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--border)', color: 'white', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', transition: 'background 0.2s' }}
-                    >
-                      <FileText size={16} /> كشف تفصيلي
-                    </button>
-                    {showDues && (
-                      <button
-                        onClick={() => {
-                          const element = document.createElement("a");
-                          const file = new Blob([JSON.stringify(pilot, null, 2)], { type: 'application/json' });
-                          element.href = URL.createObjectURL(file);
-                          element.download = `Pilot_${pilot.name.replace(/\s+/g, '_')}_Report.json`;
-                          document.body.appendChild(element);
-                          element.click();
-                        }}
-                        title="حفظ الملف"
-                        style={{ padding: '0 16px', borderRadius: '8px', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid var(--warning)', color: 'var(--warning)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        <Download size={18} />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
+                    </div>
+                  </Disclosure>
+                );
+              })}
           </div>
         </div>
       ) : (
